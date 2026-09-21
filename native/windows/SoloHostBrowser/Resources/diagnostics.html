@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Diagnostics</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; background: #0c0d10; color: #eeebe6; font-family: "Segoe UI", system-ui, sans-serif; padding: 40px 24px; }
+    h1 { font-weight: 400; font-size: 20px; letter-spacing: .08em; text-transform: uppercase; color: #8a8680; }
+    ul { list-style: none; padding: 0; max-width: 520px; }
+    li { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #222; font-size: 14px; }
+    .ok { color: #6fbf8a; } .fail { color: #c77a72; } .wait { color: #8a8680; }
+  </style>
+<style>.paf-made-by{position:fixed;right:8px;bottom:8px;width:min(72px,12vw);max-width:12vw;height:auto;object-fit:contain;opacity:.5;background:transparent;padding:0;border:0;box-shadow:none;filter:none;pointer-events:none;z-index:30}</style></head>
+<body>
+  <h1>Diagnostics</h1>
+  <ul id="list"></ul>
+  <script>
+    const rows = [
+      ['Engine', 'WebView2 / Chromium', 'ok'],
+      ['JavaScript', 'this page', 'ok'],
+      ['Storage', '', 'wait'],
+      ['HTTPS', 'https://example.com/', 'wait'],
+      ['DNS image', 'https://www.google.com/favicon.ico', 'wait']
+    ];
+    const list = document.getElementById('list');
+    function paint() {
+      list.innerHTML = rows.map(([k, d, s]) =>
+        `<li><span>${k}</span><span class="${s}">${s.toUpperCase()}${d ? ' · ' + d : ''}</span></li>`).join('');
+    }
+    paint();
+    try { localStorage.setItem('_t', '1'); localStorage.removeItem('_t'); rows[2][2] = 'ok'; }
+    catch { rows[2][2] = 'fail'; }
+    paint();
+    fetch('https://example.com/', { mode: 'no-cors' }).then(() => { rows[3][2] = 'ok'; paint(); })
+      .catch(() => { rows[3][2] = 'fail'; paint(); });
+    const img = new Image();
+    img.onload = () => { rows[4][2] = 'ok'; paint(); };
+    img.onerror = () => { rows[4][2] = 'fail'; paint(); };
+    img.src = rows[4][1] + '?t=' + Date.now();
+  </script>
+<img class="paf-made-by" src="public/made-by.png" alt="Made with App Builder — Pi SoloHost"></body>
+</html>

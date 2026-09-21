@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SoloHost</title>
+  <style>
+    :root { color-scheme: dark; }
+    html, body { height: 100%; margin: 0; background: #0c0d10; color: #eeebe6;
+      font-family: "Segoe UI", Inter, system-ui, sans-serif; }
+    body { display: grid; place-items: center; }
+    main { text-align: center; }
+    .brand { letter-spacing: .34em; text-transform: uppercase; color: #8a8680; font-size: 12px; }
+    h1 { font-weight: 330; font-size: 36px; margin: 14px 0 28px; }
+    p { color: #8a8680; font-size: 14px; }
+  </style>
+<style>.paf-made-by{position:fixed;right:8px;bottom:8px;width:min(72px,12vw);max-width:12vw;height:auto;object-fit:contain;opacity:.5;background:transparent;padding:0;border:0;box-shadow:none;filter:none;pointer-events:none;z-index:30}</style></head>
+<body>
+  <main>
+    <div class="brand">SoloHost</div>
+    <h1 id="g">Good day</h1>
+    <p>Search or enter a website above.</p>
+  </main>
+  <script>
+    const h = new Date().getHours();
+    document.getElementById('g').textContent =
+      h < 5 ? 'Good night' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+  </script>
+<img class="paf-made-by" src="public/made-by.png" alt="Made with App Builder — Pi SoloHost"></body>
+</html>

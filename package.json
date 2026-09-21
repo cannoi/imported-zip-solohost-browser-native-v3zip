@@ -1,0 +1,11 @@
+{
+  "name": "solohost-browser-hub",
+  "version": "2.2.0",
+  "description": "SoloHost Browser — lightweight freeform app hub and local web gateway",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js && node tests/browser/architecture.test.js"
+  },
+  "dependencies": {}
+}

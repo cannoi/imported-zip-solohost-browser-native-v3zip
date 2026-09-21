@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0c0d10">
+  <meta name="color-scheme" content="dark">
+  <title>SoloHost</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    .paf-made-by{position:fixed;right:10px;bottom:10px;width:min(64px,11vw);max-width:11vw;height:auto;object-fit:contain;opacity:.42;background:transparent;padding:0;border:0;box-shadow:none;filter:none;pointer-events:none;z-index:40}
+  </style>
+<style>.paf-made-by{position:fixed;right:8px;bottom:8px;width:min(72px,12vw);max-width:12vw;height:auto;object-fit:contain;opacity:.5;background:transparent;padding:0;border:0;box-shadow:none;filter:none;pointer-events:none;z-index:30}</style></head>
+<body>
+  <div class="atmosphere" aria-hidden="true">
+    <div class="wash"></div>
+    <div class="radial"></div>
+    <div class="grain"></div>
+    <div class="pointer-glow" id="pointer-glow"></div>
+  </div>
+
+  <a class="skip" href="#search-input">Skip to search</a>
+
+  <header class="chrome" id="chrome">
+    <div class="nav-float" role="toolbar" aria-label="Navigation">
+      <button type="button" id="btn-back" title="Back" aria-label="Back">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="M15.4 5.3 8.7 12l6.7 6.7 1.2-1.2L11.1 12l5.5-5.5z"/></svg>
+      </button>
+      <button type="button" id="btn-forward" title="Forward" aria-label="Forward">
+        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="currentColor" d="m8.6 5.3 6.7 6.7-6.7 6.7-1.2-1.2L13.9 12 7.4 6.5z"/></svg>
+      </button>
+      <button type="button" id="btn-reload" title="Reload" aria-label="Reload">
+        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path fill="currentColor" d="M12 6V3L8 7l4 4V8a4 4 0 1 1-3.5 5.8l-1.4.9A5.7 5.7 0 1 0 12 6z"/></svg>
+      </button>
+    </div>
+
+    <div class="tabs-float" id="tabs" role="tablist" aria-label="Open surfaces"></div>
+
+    <button type="button" id="btn-new" class="orb-btn" title="New tab" aria-label="New tab">＋</button>
+  </header>
+
+  <main class="stage" id="stage">
+    <section class="view home" id="view-home" data-view="home">
+      <div class="home-column">
+        <p class="brand" id="brand">SoloHost</p>
+        <h1 class="greeting" id="greeting">Good evening</h1>
+
+        <form class="search-surface" id="search-form" role="search" autocomplete="off">
+          <button type="submit" class="search-orb" aria-label="Search">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+              <circle cx="11" cy="11" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/>
+              <path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+            </svg>
+          </button>
+          <label class="sr-only" for="search-input">Search or enter website</label>
+          <input
+            id="search-input"
+            name="q"
+            type="text"
+            placeholder="Search the Web"
+            spellcheck="false"
+            enterkeyhint="go"
+          >
+        </form>
+        <div class="suggest" id="suggest" hidden></div>
+      </div>
+
+      <div class="sky" id="sky">
+        <div class="constellation" id="constellation" aria-label="My Apps"></div>
+      </div>
+
+      <p class="status-line" id="status-line">
+        <span>SoloHost</span>
+        <span class="sep">•</span>
+        <span id="status-text">Online</span>
+      </p>
+    </section>
+
+    <section class="view browser" id="view-browser" hidden>
+      <iframe
+        id="browser-iframe"
+        title="Page"
+        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-orientation-lock"
+        allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media"
+        allowfullscreen
+      ></iframe>
+      <div class="browser-error" id="browser-error" hidden role="alert">
+        <svg class="browser-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
+          <path d="M4.9 15.5a10 10 0 0 1 14.2 0M1.4 11.9a15 15 0 0 1 21.2 0M8.5 19a5 5 0 0 1 7 0M12 20h.01"/>
+          <line x1="2.5" y1="2.5" x2="21.5" y2="21.5"/>
+        </svg>
+        <p class="browser-error-title" id="browser-error-title">Page unavailable</p>
+        <p class="browser-error-desc" id="browser-error-desc">This address could not be opened.</p>
+        <button type="button" class="browser-error-retry" id="browser-error-retry">Retry</button>
+      </div>
+      <div class="findbar" id="findbar" hidden role="search" aria-label="Find in page">
+        <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><circle cx="11" cy="11" r="6.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+        <label class="sr-only" for="find-input">Find in page</label>
+        <input id="find-input" type="text" placeholder="Find on page" autocomplete="off" spellcheck="false" enterkeyhint="search">
+        <span class="find-status" id="find-status" aria-live="polite"></span>
+        <button type="button" id="find-prev" title="Previous match" aria-label="Previous match">
+          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M12 8 6 14h12z"/></svg>
+        </button>
+        <button type="button" id="find-next" title="Next match" aria-label="Next match">
+          <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path fill="currentColor" d="M12 16 6 10h12z"/></svg>
+        </button>
+        <button type="button" id="find-close" title="Close" aria-label="Close find bar">
+          <svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" d="M5 5l14 14M19 5 5 19"/></svg>
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  
+  <script src="app.js?v=3"></script>
+<img class="paf-made-by" src="/made-by.png" alt="Made with App Builder — Pi SoloHost"></body>
+</html>
