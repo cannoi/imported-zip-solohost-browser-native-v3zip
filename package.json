@@ -1,11 +1,13 @@
 {
   "name": "solohost-browser-hub",
-  "version": "2.2.0",
-  "description": "SoloHost Browser — lightweight freeform app hub and local web gateway",
+  "version": "6.2.2",
+  "description": "SoloHost Browser \u2014 system Chromium with live display",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test.js && node tests/browser/architecture.test.js"
+    "test": "node test.js && node tests/browser/architecture.test.js && node --check server.js && node --check browser-gateway.js && node --check public/app.js"
   },
-  "dependencies": {}
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
 }

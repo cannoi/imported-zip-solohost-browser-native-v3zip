@@ -8,6 +8,7 @@
   <title>SoloHost</title>
   <link rel="stylesheet" href="style.css">
   <style>
+    html,body{background:#0c0d10;color:#eceae6;margin:0;min-height:100%;}
     .paf-made-by{position:fixed;right:10px;bottom:10px;width:min(64px,11vw);max-width:11vw;height:auto;object-fit:contain;opacity:.42;background:transparent;padding:0;border:0;box-shadow:none;filter:none;pointer-events:none;z-index:40}
   </style>
 <style>.paf-made-by{position:fixed;right:8px;bottom:8px;width:min(72px,12vw);max-width:12vw;height:auto;object-fit:contain;opacity:.5;background:transparent;padding:0;border:0;box-shadow:none;filter:none;pointer-events:none;z-index:30}</style></head>
@@ -37,6 +38,7 @@
     <div class="tabs-float" id="tabs" role="tablist" aria-label="Open surfaces"></div>
 
     <button type="button" id="btn-new" class="orb-btn" title="New tab" aria-label="New tab">＋</button>
+    <button type="button" id="btn-ai" class="orb-btn" title="Assist" aria-label="Assist">◎</button>
   </header>
 
   <main class="stage" id="stage">
@@ -77,13 +79,8 @@
     </section>
 
     <section class="view browser" id="view-browser" hidden>
-      <iframe
-        id="browser-iframe"
-        title="Page"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-orientation-lock"
-        allow="autoplay; fullscreen; picture-in-picture; clipboard-write; encrypted-media"
-        allowfullscreen
-      ></iframe>
+      <iframe id="browser-view" class="browser-view" title="Chromium" allow="clipboard-read; clipboard-write; fullscreen; autoplay" allowfullscreen></iframe>
+      <canvas id="browser-canvas" class="browser-canvas" hidden aria-hidden="true"></canvas>
       <div class="browser-error" id="browser-error" hidden role="alert">
         <svg class="browser-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <path d="M4.9 15.5a10 10 0 0 1 14.2 0M1.4 11.9a15 15 0 0 1 21.2 0M8.5 19a5 5 0 0 1 7 0M12 20h.01"/>
@@ -111,8 +108,20 @@
     </section>
   </main>
 
+  <aside class="ai-dock" id="ai-dock" hidden>
+    <header>
+      <span>◎</span>
+      <button type="button" id="ai-close" title="Close" aria-label="Close">×</button>
+    </header>
+    <div class="ai-log" id="ai-log"></div>
+    <form id="ai-form">
+      <input id="ai-input" type="text" placeholder="Ask" autocomplete="off" enterkeyhint="send">
+      <button type="submit" aria-label="Send">→</button>
+    </form>
+  </aside>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   
   <script src="app.js?v=3"></script>
-<img class="paf-made-by" src="/made-by.png" alt="Made with App Builder — Pi SoloHost"></body>
+  <img class="paf-made-by" src="made-by.png" alt="">
+</body>
 </html>

@@ -1,8 +1,20 @@
 services:
-  app:
-    image: ghcr.io/your_github/imported-zip-solohost-browser-native-v3zip:0.1.0
-    restart: unless-stopped
+  web:
+    build: .
+    ports:
+      - "127.0.0.1:18080:8080"
+    environment:
+      PORT: "8080"
+      SOLOHOST_DEMO_APPS: "1"
+      HOME: "/tmp/solohost-browser"
+      SOLOHOST_BROWSER_DATA: "/app/data/chromium-profile"
+      OLLAMA_URL: "http://127.0.0.1:11434"
+    shm_size: "1gb"
     labels:
       pi.ui.primary: "true"
-    ports:
-      - "127.0.0.1:18195:8080"
+      pi.browser.engine: "chromium"
+    restart: unless-stopped
+    volumes:
+      - solohost-browser-data:/app/data
+volumes:
+  solohost-browser-data:

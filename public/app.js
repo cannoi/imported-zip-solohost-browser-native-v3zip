@@ -1,839 +1,112 @@
 (() => {
-  const $ = (id) => document.getElementById(id);
-
+  const $ = id => document.getElementById(id);
   const els = {
-    chrome: $('chrome'),
-    greeting: $('greeting'),
-    form: $('search-form'),
-    input: $('search-input'),
-    suggest: $('suggest'),
-    constellation: $('constellation'),
-    sky: $('sky'),
-    statusLine: $('status-line'),
-    statusText: $('status-text'),
-    viewHome: $('view-home'),
-    viewBrowser: $('view-browser'),
-    iframe: $('browser-iframe'),
-    browserError: $('browser-error'),
-    browserErrorTitle: $('browser-error-title'),
-    browserErrorDesc: $('browser-error-desc'),
-    browserErrorRetry: $('browser-error-retry'),
-    tabs: $('tabs'),
-    back: $('btn-back'),
-    forward: $('btn-forward'),
-    reload: $('btn-reload'),
-    neu: $('btn-new'),
-    glow: $('pointer-glow'),
-    toast: $('toast'),
-    findbar: $('findbar'),
-    findInput: $('find-input'),
-    findStatus: $('find-status'),
-    findPrev: $('find-prev'),
-    findNext: $('find-next'),
-    findClose: $('find-close')
+    chrome:$('chrome'), form:$('search-form'), input:$('search-input'), suggest:$('suggest'),
+    constellation:$('constellation'), sky:$('sky'), statusLine:$('status-line'), statusText:$('status-text'),
+    viewHome:$('view-home'), viewBrowser:$('view-browser'), canvas:$('browser-canvas'), view:$('browser-view'),
+    browserError:$('browser-error'), browserErrorTitle:$('browser-error-title'), browserErrorDesc:$('browser-error-desc'),
+    browserErrorRetry:$('browser-error-retry'), tabs:$('tabs'), back:$('btn-back'), forward:$('btn-forward'),
+    reload:$('btn-reload'), neu:$('btn-new'), glow:$('pointer-glow'), toast:$('toast'),
+    findbar:$('findbar'), findInput:$('find-input'), findStatus:$('find-status'), findPrev:$('find-prev'), findNext:$('find-next'), findClose:$('find-close'),
+    aiBtn:$('btn-ai'), aiDock:$('ai-dock'), aiLog:$('ai-log'), aiForm:$('ai-form'), aiInput:$('ai-input'), aiClose:$('ai-close')
   };
-
-  const ICONS = {
-    calculator: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="3.5" width="14" height="17" rx="3"/><path d="M8 8h8M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/></svg>',
-    music: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 18V6l10-2v12"/><circle cx="7" cy="18" r="2.4"/><circle cx="17" cy="16" r="2.4"/></svg>',
-    ai: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="3.2"/><path d="M12 4v2.2M12 17.8V20M4 12h2.2M17.8 12H20M6.4 6.4l1.6 1.6M16 16l1.6 1.6M17.6 6.4 16 8M8 16l-1.6 1.6"/></svg>',
-    node: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3 20 7.5v9L12 21 4 16.5v-9L12 3z"/><path d="M12 12 20 7.5M12 12v9M12 12 4 7.5"/></svg>',
-    favorites: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m12 4.5 2.2 4.6 5 .7-3.6 3.6.9 5.1L12 16.3 7.5 18.5l.9-5.1L4.8 9.8l5-.7L12 4.5z"/></svg>',
-    apps: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01M8 16h.01M12 16h.01M16 16h.01"/></svg>',
-    app: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="5" width="14" height="14" rx="4"/></svg>'
-  };
-
-  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const coarse = window.matchMedia('(pointer: coarse)').matches;
-  const lowPower = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 2;
-
-  const state = {
-    apps: [],
-    bookmarks: [],
-    history: [],
-    tabs: [{ id: 'home', title: 'Home', url: '', kind: 'home' }],
-    active: 'home',
-    online: true,
-    appsError: false,
-    searchOpen: false,
-    pendingUrl: null,
-    loadTimer: null,
-    proxyBase: null,
-    proxyReady: false,
-    findOpen: false
-  };
-
-  function greeting() {
-    const h = new Date().getHours();
-    if (h < 5) return 'Good night';
-    if (h < 12) return 'Good morning';
-    if (h < 18) return 'Good afternoon';
-    return 'Good evening';
+  const ICONS={calculator:'∑',music:'♪',ai:'◎',node:'⬡',app:'◇',apps:'·'};
+  const state={apps:[],bookmarks:[],history:[],tabs:[{id:'home',title:'Home',url:'',kind:'home'}],active:'home',ws:null,pending:null,frame:null,online:true};
+  const ctx=els.canvas ? els.canvas.getContext('2d',{alpha:false,desynchronized:true}) : null;
+  if(els.canvas) els.canvas.tabIndex=0;
+  function hideNovncChrome(win){
+    try{
+      const doc = win && win.document;
+      if(!doc || !doc.head) return;
+      if(doc.getElementById('solohost-novnc-hide')) return;
+      const s=doc.createElement('style');
+      s.id='solohost-novnc-hide';
+      s.textContent='#noVNC_control_bar,#noVNC_control_bar_anchor,#noVNC_control_bar_handle,#noVNC_status,#noVNC_hint,#noVNC_hint_anchor,#noVNC_transition,#noVNC_connect_dlg,#noVNC_buttons,#noVNC_settings,#noVNC_clipboard,#noVNC_power,#noVNC_extras,.noVNC_panel,#noVNC_fallback_error,#noVNC_keyboard_button,#noVNC_toggle_color_mode_button{display:none!important;visibility:hidden!important;pointer-events:none!important}html,body,#noVNC_container,canvas{cursor:none!important}';
+      doc.head.appendChild(s);
+      if(win.UI && typeof win.UI.hideControlbar==='function') win.UI.hideControlbar();
+    }catch(e){}
   }
-
-  function toast(msg) {
-    els.toast.textContent = msg;
-    els.toast.classList.add('show');
-    clearTimeout(toast._t);
-    toast._t = setTimeout(() => els.toast.classList.remove('show'), 1800);
-  }
-
-  function iconSvg(name) {
-    const key = String(name || 'app').toLowerCase();
-    return ICONS[key] || ICONS.app;
-  }
-
-  function measureSky() {
-    const w = Math.max(
-      els.sky.clientWidth,
-      els.constellation.clientWidth,
-      els.viewHome.clientWidth,
-      window.innerWidth - 48
-    );
-    const h = Math.max(
-      els.sky.clientHeight,
-      els.constellation.clientHeight,
-      Math.round(window.innerHeight * 0.38)
-    );
-    return { w, h };
-  }
-
-  function layoutFractions(n, narrow) {
-    if (n <= 0) return [];
-    const desktop = {
-      1: [[0.50, 0.46]],
-      2: [[0.38, 0.44], [0.62, 0.52]],
-      3: [[0.34, 0.38], [0.66, 0.34], [0.52, 0.66]],
-      4: [[0.33, 0.36], [0.64, 0.30], [0.44, 0.64], [0.70, 0.60]],
-      5: [[0.30, 0.34], [0.52, 0.24], [0.74, 0.38], [0.38, 0.66], [0.66, 0.70]],
-      6: [[0.28, 0.30], [0.50, 0.22], [0.74, 0.32], [0.34, 0.62], [0.56, 0.56], [0.76, 0.68]]
-    };
-    const mobile = {
-      1: [[0.50, 0.42]],
-      2: [[0.32, 0.38], [0.68, 0.50]],
-      3: [[0.30, 0.30], [0.70, 0.38], [0.50, 0.68]],
-      4: [[0.30, 0.28], [0.70, 0.34], [0.38, 0.64], [0.68, 0.72]],
-      5: [[0.28, 0.24], [0.72, 0.30], [0.50, 0.48], [0.30, 0.72], [0.70, 0.76]],
-      6: [[0.28, 0.22], [0.70, 0.26], [0.46, 0.44], [0.24, 0.66], [0.54, 0.70], [0.78, 0.62]]
-    };
-    const table = (narrow ? mobile : desktop)[n];
-    if (table) return table.map(([x, y]) => ({ x, y }));
-    const golden = Math.PI * (3 - Math.sqrt(5));
-    return Array.from({ length: n }, (_, i) => {
-      const t = i + 0.6;
-      const r = 0.16 + Math.sqrt(t) * 0.055;
-      const a = t * golden - 0.35;
-      return {
-        x: Math.min(0.86, Math.max(0.14, 0.5 + Math.cos(a) * r * 1.15)),
-        y: Math.min(0.84, Math.max(0.16, 0.48 + Math.sin(a) * r * 0.72))
-      };
-    });
-  }
-
-  function layoutPositions(n, width, height) {
-    const padX = 56;
-    const padY = 44;
-    const w = Math.max(320, width);
-    const h = Math.max(220, height);
-    if (n <= 0) return [];
-
-    const narrow = w < 700;
-    const desktop = {
-      1: [[0.50, 0.46]],
-      2: [[0.38, 0.44], [0.62, 0.52]],
-      3: [[0.34, 0.38], [0.66, 0.34], [0.52, 0.66]],
-      4: [[0.33, 0.36], [0.64, 0.30], [0.44, 0.64], [0.70, 0.60]],
-      5: [[0.30, 0.34], [0.52, 0.24], [0.74, 0.38], [0.38, 0.66], [0.66, 0.70]],
-      6: [[0.28, 0.30], [0.50, 0.22], [0.74, 0.32], [0.34, 0.62], [0.56, 0.56], [0.76, 0.68]]
-    };
-    const mobile = {
-      1: [[0.50, 0.42]],
-      2: [[0.32, 0.38], [0.68, 0.50]],
-      3: [[0.30, 0.30], [0.70, 0.38], [0.50, 0.68]],
-      4: [[0.30, 0.28], [0.70, 0.34], [0.38, 0.64], [0.68, 0.72]],
-      5: [[0.28, 0.24], [0.72, 0.30], [0.50, 0.48], [0.30, 0.72], [0.70, 0.76]],
-      6: [[0.28, 0.22], [0.70, 0.26], [0.46, 0.44], [0.24, 0.66], [0.54, 0.70], [0.78, 0.62]]
-    };
-
-    const presets = narrow ? mobile : desktop;
-    if (presets[n]) {
-      return presets[n].map(([x, y]) => ({
-        x: Math.min(w - padX, Math.max(padX, x * w)),
-        y: Math.min(h - padY, Math.max(padY, y * h))
-      }));
+  function showDisplay(){
+    if(!els.view) return;
+    if(!els.view.src || els.view.src.indexOf('/view/')===-1){
+      els.view.src='view/vnc.html?autoconnect=1&reconnect=1&resize=scale&show_dot=0&path=view/websockify';
     }
-
-    const cx = w * 0.5;
-    const cy = h * 0.48;
-    const golden = Math.PI * (3 - Math.sqrt(5));
-    const positions = [];
-    for (let i = 0; i < n; i++) {
-      const t = i + 0.6;
-      const radius = 70 + Math.sqrt(t) * Math.min(w, h) * 0.10;
-      const a = t * golden - 0.35;
-      positions.push({
-        x: Math.min(w - padX, Math.max(padX, cx + Math.cos(a) * radius * 1.15)),
-        y: Math.min(h - padY, Math.max(padY, cy + Math.sin(a) * radius * 0.72))
-      });
-    }
-    return separate(positions, 96, w, h, padX, padY);
+    els.view.onload=()=>hideNovncChrome(els.view.contentWindow);
+    if(els.view.contentWindow) hideNovncChrome(els.view.contentWindow);
   }
 
-  function separate(positions, minDist, w, h, padX, padY) {
-    const out = positions.map((p) => ({ ...p }));
-    for (let pass = 0; pass < 8; pass++) {
-      for (let i = 0; i < out.length; i++) {
-        for (let j = i + 1; j < out.length; j++) {
-          const dx = out[j].x - out[i].x;
-          const dy = out[j].y - out[i].y;
-          const d = Math.hypot(dx, dy) || 0.01;
-          if (d < minDist) {
-            const push = (minDist - d) / 2;
-            const ux = dx / d;
-            const uy = dy / d;
-            out[i].x -= ux * push;
-            out[i].y -= uy * push;
-            out[j].x += ux * push;
-            out[j].y += uy * push;
-          }
-        }
-        out[i].x = Math.min(w - padX, Math.max(padX, out[i].x));
-        out[i].y = Math.min(h - padY, Math.max(padY, out[i].y));
-      }
-    }
-    return out;
+  function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+  function toast(s){els.toast.textContent=s;els.toast.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>els.toast.classList.remove('show'),1800);}
+  function icon(n){return `<span class="app-symbol">${esc(ICONS[String(n||'app').toLowerCase()]||ICONS.app)}</span>`;}
+  function setStatus(ok){state.online=ok;els.statusLine.classList.toggle('online',ok);els.statusLine.classList.toggle('offline',!ok);els.statusText.textContent=ok?'Online':'Offline';}
+
+  function renderApps(){
+    els.constellation.innerHTML='';
+    if(!state.apps.length){els.constellation.innerHTML='<div class="empty-space"><div class="empty-mark">·</div><h2>No apps yet</h2><p>Apps installed on SoloHost will appear here.</p></div>';return;}
+    state.apps.forEach((app,i)=>{const b=document.createElement('button');b.className='app-node';b.type='button';b.style.left=`${20+((i*29)%65)}%`;b.style.top=`${24+((i*41)%55)}%`;b.innerHTML=`<span class="app-dot ${app.status||'offline'}"></span>${icon(app.icon||app.id)}<span class="app-label">${esc(app.name)}</span>`;b.onclick=()=>openUrl(app.route,app.name);els.constellation.appendChild(b);});
   }
+  async function loadApps(){try{const r=await fetch('/api/apps');if(!r.ok)throw 0;const d=await r.json();state.apps=d.apps||[];setStatus(true);}catch{setStatus(false);}renderApps();}
+  async function loadBookmarks(){try{state.bookmarks=(await (await fetch('/api/bookmarks')).json()).bookmarks||[];}catch{state.bookmarks=[];}}
+  async function loadHistory(){try{state.history=(await (await fetch('/api/history')).json()).history||[];}catch{state.history=[];}}
 
-  function renderConstellation() {
-    const host = els.constellation;
-    const sky = measureSky();
-    host.innerHTML = '';
-
-    if (state.appsError) {
-      host.innerHTML = `
-        <div class="error-space">
-          <div class="empty-mark">${iconSvg('apps')}</div>
-          <h2>My Apps unavailable</h2>
-          <p>The registry could not be reached. Browsing still works.</p>
-          <button class="retry" type="button" id="retry-apps">Retry</button>
-        </div>`;
-      const retry = document.getElementById('retry-apps');
-      if (retry) retry.addEventListener('click', () => loadApps());
+  function renderTabs(){
+    els.tabs.innerHTML='';state.tabs.forEach(t=>{const g=document.createElement('span');g.className='tab-group'+(t.id===state.active?' active':'');const b=document.createElement('button');b.className='tab'+(t.id===state.active?' active':'');b.textContent=t.title||'New Tab';b.onclick=()=>activate(t.id);g.appendChild(b);if(t.kind!=='home'){const x=document.createElement('button');x.className='tab-close';x.textContent='×';x.onclick=e=>{e.stopPropagation();closeTab(t.id)};g.appendChild(x);}els.tabs.appendChild(g);});
+  }
+  function showHome(){document.body.classList.remove('browsing');els.chrome.classList.remove('browsing');els.viewBrowser.hidden=true;els.viewHome.hidden=false;state.active='home';els.input.value='';els.input.placeholder='Search the Web';renderTabs();}
+  function ensureWs(){
+    if(state.ws&&state.ws.readyState===WebSocket.OPEN)return Promise.resolve(state.ws);
+    return new Promise((resolve,reject)=>{const proto=location.protocol==='https:'?'wss':'ws';const ws=new WebSocket(`${proto}://${location.host}/ws`);ws.binaryType='arraybuffer';let done=false;const fail=()=>{if(!done){done=true;reject(new Error('Browser engine unavailable'));}};ws.onopen=()=>{state.ws=ws;done=true;resolve(ws);};ws.onerror=fail;ws.onclose=()=>{if(state.ws===ws)state.ws=null;};ws.onmessage=e=>{if(typeof e.data==='string')handleEvent(JSON.parse(e.data));else drawFrame(e.data);};});
+  }
+  function send(obj){if(state.ws&&state.ws.readyState===WebSocket.OPEN)state.ws.send(JSON.stringify(obj));}
+  function handleEvent(m){
+    if(m.type==='error'){
+      if(els.view && els.view.src){ hideError(); return; }
+      showError('Page unavailable', m.error || 'Chromium could not load this address.');
       return;
     }
-
-    if (!state.apps.length) {
-      host.innerHTML = `
-        <div class="empty-space">
-          <div class="empty-mark">${iconSvg('apps')}</div>
-          <h2>No apps yet</h2>
-          <p>Apps installed on SoloHost will appear here.</p>
-        </div>`;
-      return;
-    }
-
-    const spots = layoutFractions(state.apps.length, window.matchMedia('(max-width: 720px)').matches);
-    state.apps.forEach((app, i) => {
-      const pos = spots[i] || { x: 0.5, y: 0.5 };
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'app-node';
-      btn.style.left = `${pos.x * 100}%`;
-      btn.style.top = `${pos.y * 100}%`;
-      btn.dataset.route = app.route;
-      btn.dataset.id = app.id;
-      btn.setAttribute('aria-label', `${app.name}, ${app.status || 'unknown'}`);
-      btn.innerHTML = `
-        <span class="app-dot ${app.status || 'offline'}" aria-hidden="true"></span>
-        <span class="app-glyph">${iconSvg(app.icon || app.id)}</span>
-        <span class="app-label">${escapeHtml(app.name)}</span>`;
-      btn.addEventListener('click', (e) => openApp(app, e.currentTarget));
-      host.appendChild(btn);
-    });
+    if(m.type==='gateway'){ if(m.ready) hideError(); return; }
+    if(m.type==='tab'&&m.event==='state'){const t=state.tabs.find(x=>x.id===m.id);if(t){if(m.title)t.title=m.title.slice(0,42);if(m.url){t.url=m.url;state.pending=m.url;if(t.id===state.active)els.input.value=m.url;}renderTabs();}}
   }
+  function drawFrame(buf){const d=new DataView(buf);if(d.byteLength<12)return;const w=d.getUint32(4),h=d.getUint32(8);const blob=new Blob([buf.slice(12)],{type:'image/jpeg'});createImageBitmap(blob).then(img=>{if(els.canvas.width!==w||els.canvas.height!==h){els.canvas.width=w;els.canvas.height=h;}ctx.drawImage(img,0,0,w,h);img.close();hideError();});}
+  function showError(t,d){els.browserErrorTitle.textContent=t;els.browserErrorDesc.textContent=d;els.browserError.hidden=false;}
+  function hideError(){els.browserError.hidden=true;}
+  function activate(id){const t=state.tabs.find(x=>x.id===id);if(!t)return;state.active=id;renderTabs();if(t.kind==='home'){showHome();return;}document.body.classList.add('browsing');els.chrome.classList.add('browsing');els.viewHome.hidden=true;els.viewBrowser.hidden=false;els.input.value=t.url||'';els.input.placeholder='Search or enter website';showDisplay();ensureWs().then(()=>send({type:'activate',id})).catch(()=>{ if(!(els.view&&els.view.src)) showError('Browser engine unavailable','The Chromium engine is not ready yet.'); });}
+  function closeTab(id){const i=state.tabs.findIndex(t=>t.id===id);if(i<0)return;send({type:'close',id});const was=state.active===id;state.tabs.splice(i,1);if(was)activate((state.tabs[i-1]||state.tabs[i]||state.tabs[0]).id);else renderTabs();}
+  function normalize(raw){let u=String(raw||'').trim();if(!u)return '';if(u.startsWith('/'))return location.origin+u;if(/^https?:\/\//i.test(u))return u;if(/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(u)||/^localhost(:\d+)?/.test(u)||/^(\d{1,3}\.){3}\d{1,3}/.test(u))return 'https://'+u;return 'https://www.google.com/search?q='+encodeURIComponent(u);}
+  function openUrl(raw,title){const url=normalize(raw);if(!url)return;let t=state.tabs.find(x=>x.url===url&&x.kind==='web');if(!t){t={id:'tab-'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),title:title||new URL(url).hostname.replace(/^www\./,''),url,kind:'web'};state.tabs.push(t);}state.active=t.id;renderTabs();activate(t.id);showDisplay();hideError();const go=()=>fetch('/api/browser/navigate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})}).catch(()=>{});ensureWs().then(()=>send({type:'create',id:t.id,url})).then(()=>{send({type:'activate',id:t.id});remember(url,title||t.title);go();}).catch(()=>{go();remember(url,title||t.title);});}
+  function remember(url,title){fetch('/api/history',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,title:title||url})}).catch(()=>{});}
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, (c) => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[c]));
-  }
+  function pointer(e,phase,button=''){const r=els.canvas.getBoundingClientRect();const sx=els.canvas.width/r.width,sy=els.canvas.height/r.height;send({type:'mouse',id:state.active,x:Math.round((e.clientX-r.left)*sx),y:Math.round((e.clientY-r.top)*sy),phase,button});}
+  els.canvas.addEventListener('pointermove',e=>pointer(e,'move'));els.canvas.addEventListener('pointerdown',e=>{els.canvas.focus();pointer(e,'down',e.button===2?'right':e.button===1?'middle':'left');});els.canvas.addEventListener('pointerup',e=>pointer(e,'up',e.button===2?'right':e.button===1?'middle':'left'));els.canvas.addEventListener('contextmenu',e=>e.preventDefault());els.canvas.addEventListener('wheel',e=>{e.preventDefault();const r=els.canvas.getBoundingClientRect();send({type:'wheel',id:state.active,x:Math.round(e.clientX-r.left),y:Math.round(e.clientY-r.top),delta:Math.round(-e.deltaY)});},{passive:false});
+  els.canvas.addEventListener('keydown',e=>{send({type:'key',id:state.active,phase:'down',code:e.code,key:e.key,ctrl:e.ctrlKey?'1':'0',alt:e.altKey?'1':'0',shift:e.shiftKey?'1':'0',meta:e.metaKey?'1':'0'});e.preventDefault();});
+  els.canvas.addEventListener('keyup',e=>{send({type:'key',id:state.active,phase:'up',code:e.code,key:e.key,ctrl:e.ctrlKey?'1':'0',alt:e.altKey?'1':'0',shift:e.shiftKey?'1':'0',meta:e.metaKey?'1':'0'});e.preventDefault();});
 
-  function closeTab(id) {
-    const idx = state.tabs.findIndex((t) => t.id === id);
-    if (idx === -1) return;
-    const tab = state.tabs[idx];
-    if (tab.kind === 'home') return; // Home is the permanent anchor tab; nothing to close it to.
-    const wasActive = state.active === id;
-    state.tabs.splice(idx, 1);
-    if (!state.tabs.some((t) => t.id === 'home')) {
-      state.tabs.unshift({ id: 'home', title: 'Home', url: '', kind: 'home' });
-    }
-    if (wasActive) {
-      const next = state.tabs[idx - 1] || state.tabs[idx] || state.tabs[0];
-      activateTab(next.id);
-    } else {
-      renderTabs();
-    }
-  }
-
-  function renderTabs() {
-    els.tabs.innerHTML = '';
-    state.tabs.forEach((tab) => {
-      const group = document.createElement('span');
-      group.className = 'tab-group' + (tab.id === state.active ? ' active' : '');
-
-      const b = document.createElement('button');
-      b.type = 'button';
-      b.className = 'tab' + (tab.id === state.active ? ' active' : '');
-      b.textContent = tab.title;
-      b.setAttribute('role', 'tab');
-      b.setAttribute('aria-selected', tab.id === state.active ? 'true' : 'false');
-      b.addEventListener('click', () => activateTab(tab.id));
-      group.appendChild(b);
-
-      if (tab.kind !== 'home') {
-        const x = document.createElement('button');
-        x.type = 'button';
-        x.className = 'tab-close';
-        x.innerHTML = '<svg viewBox="0 0 24 24" width="9" height="9" aria-hidden="true"><path d="M5 5l14 14M19 5 5 19" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none"/></svg>';
-        x.title = 'Close';
-        x.setAttribute('aria-label', 'Close ' + tab.title);
-        x.addEventListener('click', (e) => {
-          e.stopPropagation();
-          closeTab(tab.id);
-        });
-        group.appendChild(x);
-      }
-
-      els.tabs.appendChild(group);
-    });
-  }
-
-  function activateTab(id) {
-    const tab = state.tabs.find((t) => t.id === id);
-    if (!tab) return;
-    state.active = id;
-    renderTabs();
-    if (tab.kind === 'home') {
-      showHome();
-    } else {
-      showBrowser(tab.url, false);
-    }
-  }
-
-  function showHome() {
-    document.body.classList.remove('browsing');
-    els.chrome.classList.remove('browsing');
-    els.viewBrowser.hidden = true;
-    els.viewHome.hidden = false;
-    els.input.value = '';
-    els.input.placeholder = 'Search the Web';
-    state.active = 'home';
-    state.pendingUrl = null;
-    clearLoadTimer();
-    hideNetError();
-    if (state.findOpen) closeFind();
-    if (!state.tabs.some((t) => t.id === 'home')) {
-      state.tabs.unshift({ id: 'home', title: 'Home', url: '', kind: 'home' });
-    }
-    renderTabs();
-    requestAnimationFrame(renderConstellation);
-  }
-
-  const PAGE_LOAD_TIMEOUT = 25000;
-
-  function hideNetError() {
-    els.browserError.hidden = true;
-  }
-
-  function showNetError(kind) {
-    if (kind === 'offline') {
-      els.browserErrorTitle.textContent = 'No connection';
-      els.browserErrorDesc.textContent = 'The host cannot reach the network right now.';
-    } else {
-      els.browserErrorTitle.textContent = 'Page unavailable';
-      els.browserErrorDesc.textContent = 'This address could not be opened. Try again or enter another site.';
-    }
-    els.browserError.hidden = false;
-  }
-
-  function clearLoadTimer() {
-    if (state.loadTimer) {
-      clearTimeout(state.loadTimer);
-      state.loadTimer = null;
-    }
-  }
-
-  // Find in page. The iframe is served from our own origin (/api/proxy), so
-  // with `allow-same-origin` in its sandbox the parent page can reach into
-  // it directly — no postMessage bridge needed. We use the browser's own
-  // window.find() primitive (supported in Chromium, Firefox and Safari) to
-  // highlight and scroll to matches rather than re-implementing text search;
-  // the trade-off is a simple found/not-found indicator instead of an exact
-  // "3 of 12" counter, which keeps this feature small and dependency-free.
-  function findSupported() {
-    try {
-      return document.body.classList.contains('browsing') && typeof els.iframe.contentWindow.find === 'function';
-    } catch {
-      return false;
-    }
-  }
-
-  function openFind() {
-    if (!document.body.classList.contains('browsing')) return;
-    state.findOpen = true;
-    els.findbar.hidden = false;
-    els.findStatus.textContent = '';
-    els.findStatus.classList.remove('no-match');
-    els.findInput.focus();
-    els.findInput.select();
-  }
-
-  function closeFind() {
-    state.findOpen = false;
-    els.findbar.hidden = true;
-    try {
-      const sel = els.iframe.contentWindow.getSelection && els.iframe.contentWindow.getSelection();
-      if (sel) sel.removeAllRanges();
-    } catch {}
-  }
-
-  function runFind(backwards) {
-    const query = els.findInput.value;
-    if (!query) {
-      els.findStatus.textContent = '';
-      els.findStatus.classList.remove('no-match');
-      return;
-    }
-    if (!findSupported()) {
-      els.findStatus.textContent = '—';
-      return;
-    }
-    try {
-      const found = els.iframe.contentWindow.find(query, false, !!backwards, true, false, true, false);
-      els.findStatus.textContent = found ? '' : 'Not found';
-      els.findStatus.classList.toggle('no-match', !found);
-    } catch {
-      els.findStatus.textContent = '—';
-    }
-  }
-
-  // The proxy endpoint lives on the SAME origin (host + port) that served
-  // this page. We intentionally never point this at a different port: a
-  // separate gateway port is not reachable through most single-port
-  // reverse-proxy setups (including how SoloHost normally exposes an app's
-  // domain), which was the real cause of pages failing to load while the
-  // app wrongly reported "no Internet". Same-origin is guaranteed reachable
-  // no matter how this page itself was reached.
-  const PROXY_ENDPOINT = '/api/proxy';
-
-  function sameOriginProxyBase() {
-    return `${location.origin}${PROXY_ENDPOINT}`;
-  }
-
-  function usableProxyBase(value) {
-    if (!value) return false;
-    try {
-      const u = new URL(value, location.origin);
-      return u.origin === location.origin && u.pathname.endsWith('/api/proxy');
-    } catch {
-      return false;
-    }
-  }
-
-  async function ensureProxyBase() {
-    if (state.proxyBase && usableProxyBase(state.proxyBase)) return state.proxyBase;
-    state.proxyBase = sameOriginProxyBase();
-    try {
-      const res = await fetch('/api/proxy-url', { cache: 'no-store' });
-      if (res.ok) {
-        const data = await res.json();
-        if (usableProxyBase(data && data.base)) state.proxyBase = String(data.base);
-      }
-    } catch {
-      state.proxyBase = sameOriginProxyBase();
-    }
-    state.proxyReady = true;
-    return state.proxyBase;
-  }
-
-  function frameUrl(url) {
-    if (url.startsWith('/apps/') || url.startsWith(location.origin + '/apps/')) return url;
-    if (!/^https?:\/\//i.test(url)) return url;
-    return `${state.proxyBase || sameOriginProxyBase()}?url=${encodeURIComponent(url)}`;
-  }
-
-  async function showBrowser(url, record) {
-    document.body.classList.add('browsing');
-    els.chrome.classList.add('browsing');
-    els.viewHome.hidden = true;
-    els.viewBrowser.hidden = false;
-    els.input.value = url;
-    els.input.placeholder = 'Search or enter website';
-    state.pendingUrl = url;
-    clearLoadTimer();
-    if (state.findOpen) closeFind();
-
-    // Note: we deliberately do NOT gate this on navigator.onLine. That flag only
-    // reflects whether the device has a network interface, not whether the
-    // gateway can actually reach the Internet — in containerized/proxied
-    // environments like this one it can report `false` while requests still
-    // work fine, which was causing false "no Internet" errors. We always
-    // attempt the real request and let the actual outcome (load vs timeout)
-    // decide whether to show an error.
-    let target = url;
-    if (/^https?:\/\//i.test(url)) {
-      target = `${await ensureProxyBase()}?url=${encodeURIComponent(url)}`;
-    }
-    hideNetError();
-    els.iframe.src = target;
-    state.loadTimer = setTimeout(async () => {
-      if (state.pendingUrl !== url) return;
-      let kind = 'timeout';
-      try {
-        const res = await fetch('/api/net', { cache: 'no-store' });
-        const data = await res.json();
-        if (!data.outbound) kind = 'offline';
-      } catch {
-        kind = 'timeout';
-      }
-      if (state.pendingUrl === url) showNetError(kind);
-    }, PAGE_LOAD_TIMEOUT);
-    if (record) remember(url);
-  }
-
-  const DOMAIN_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:\d{1,5})?(\/\S*)?$/i;
-  const IPV4_RE = /^(\d{1,3}\.){3}\d{1,3}(:\d{1,5})?(\/\S*)?$/;
-  const LOCALHOST_RE = /^localhost(:\d{1,5})?(\/\S*)?$/i;
-
-  function looksLikeWebAddress(str) {
-    if (!str || /\s/.test(str)) return false;
-    return LOCALHOST_RE.test(str) || IPV4_RE.test(str) || DOMAIN_RE.test(str);
-  }
-
-  function openUrl(raw, title) {
-    let url = String(raw || '').trim();
-    if (!url) return;
-    if (url.startsWith('/')) {
-      // internal app route, use as-is
-    } else if (/^https?:\/\//i.test(url)) {
-      // already a full URL, use as-is
-    } else if (looksLikeWebAddress(url)) {
-      url = 'https://' + url;
-    } else {
-      url = 'https://www.google.com/search?q=' + encodeURIComponent(url);
-    }
-    const name = title || prettyTitle(url);
-    let tab = state.tabs.find((t) => t.url === url && t.kind === 'web');
-    if (!tab) {
-      tab = { id: 't' + Date.now(), title: name, url, kind: 'web' };
-      state.tabs.push(tab);
-    }
-    state.active = tab.id;
-    renderTabs();
-    showBrowser(url, true);
-  }
-
-  function prettyTitle(url) {
-    try {
-      if (url.startsWith('/apps/')) {
-        const id = url.split('/').pop();
-        const app = state.apps.find((a) => a.id === id || a.route === url);
-        return app ? app.name : id;
-      }
-      const u = new URL(url, location.origin);
-      return u.hostname.replace(/^www\./, '');
-    } catch {
-      return url.slice(0, 18);
-    }
-  }
-
-  function openApp(app, node) {
-    const go = () => openUrl(app.route, app.name);
-    if (reduceMotion || !node) return go();
-
-    const rect = node.querySelector('.app-glyph').getBoundingClientRect();
-    const ghost = document.createElement('div');
-    ghost.className = 'opening-ghost';
-    ghost.style.left = rect.left + 'px';
-    ghost.style.top = rect.top + 'px';
-    ghost.innerHTML = iconSvg(app.icon || app.id);
-    document.body.appendChild(ghost);
-    const destX = window.innerWidth / 2 - 28;
-    const destY = window.innerHeight / 2 - 28;
-    ghost.animate(
-      [
-        { transform: 'translate(0,0) scale(1)', opacity: 1 },
-        { transform: `translate(${destX - rect.left}px, ${destY - rect.top}px) scale(1.08)`, opacity: 0 }
-      ],
-      { duration: 220, easing: 'cubic-bezier(.22,.7,.28,1)' }
-    ).finished.then(() => {
-      ghost.remove();
-      go();
-    }).catch(go);
-  }
-
-  function remember(url) {
-    fetch('/api/history', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: prettyTitle(url), url })
-    }).then(loadHistory).catch(() => {});
-  }
-
-  async function loadApps() {
-    try {
-      const res = await fetch('/api/apps');
-      if (!res.ok) throw new Error('unavailable');
-      const data = await res.json();
-      state.apps = data.apps || [];
-      state.appsError = false;
-      setStatus(true);
-    } catch {
-      state.appsError = true;
-      setStatus(false);
-    }
-    renderConstellation();
-    if (state.searchOpen) renderSuggest();
-  }
-
-  async function loadBookmarks() {
-    try {
-      const res = await fetch('/api/bookmarks');
-      const data = await res.json();
-      state.bookmarks = data.bookmarks || [];
-    } catch {
-      state.bookmarks = [];
-    }
-  }
-
-  async function loadHistory() {
-    try {
-      const res = await fetch('/api/history');
-      const data = await res.json();
-      state.history = data.history || [];
-    } catch {
-      state.history = [];
-    }
-  }
-
-  async function loadStatus() {
-    try {
-      const res = await fetch('/api/status');
-      const data = await res.json();
-      setStatus(data.solohost !== 'offline');
-    } catch {
-      setStatus(false);
-    }
-  }
-
-  function setStatus(online) {
-    state.online = online;
-    els.statusLine.classList.toggle('online', online);
-    els.statusLine.classList.toggle('offline', !online);
-    els.statusText.textContent = online ? 'Online' : 'Offline';
-  }
-
-  function renderSuggest() {
-    const q = els.input.value.trim().toLowerCase();
-    const groups = [];
-
-    const apps = state.apps.filter((a) => !q || a.name.toLowerCase().includes(q)).slice(0, 6);
-    const favs = state.bookmarks.filter((b) => !q || (b.title + b.url).toLowerCase().includes(q)).slice(0, 4);
-    const recents = state.history.filter((h) => !q || (h.title + h.url).toLowerCase().includes(q)).slice(0, 4);
-
-    if (apps.length) groups.push({ label: 'My Apps', items: apps.map((a) => ({ label: a.name, url: a.route, kind: 'app', app: a })) });
-    if (favs.length) groups.push({ label: 'Favorites', items: favs.map((b) => ({ label: b.title, url: b.url })) });
-    if (recents.length) groups.push({ label: 'Recent', items: recents.map((h) => ({ label: h.title, url: h.url })) });
-
-    if (!groups.length) {
-      els.suggest.hidden = true;
-      els.suggest.innerHTML = '';
-      return;
-    }
-
-    els.suggest.hidden = false;
-    els.suggest.innerHTML = '';
-    groups.forEach((g) => {
-      const lab = document.createElement('div');
-      lab.className = 'suggest-label';
-      lab.textContent = g.label;
-      els.suggest.appendChild(lab);
-      g.items.forEach((item) => {
-        const b = document.createElement('button');
-        b.type = 'button';
-        b.className = 'chip';
-        b.textContent = item.label;
-        b.addEventListener('click', () => {
-          if (item.kind === 'app') openApp(item.app);
-          else openUrl(item.url, item.label);
-          closeSearch();
-        });
-        els.suggest.appendChild(b);
-      });
-    });
-  }
-
-  function openSearch() {
-    state.searchOpen = true;
-    els.form.classList.add('is-focus');
-    els.input.placeholder = 'Search or enter website';
-    renderSuggest();
-  }
-
-  function closeSearch() {
-    state.searchOpen = false;
-    els.form.classList.remove('is-focus');
-    if (!document.body.classList.contains('browsing')) {
-      els.input.placeholder = 'Search the Web';
-    }
-    els.suggest.hidden = true;
-  }
-
-  function submitSearch(ev) {
-    ev.preventDefault();
-    const val = els.input.value.trim();
-    if (!val) {
-      els.input.focus();
-      return;
-    }
-    openUrl(val);
-    closeSearch();
-  }
-
-  function bindPointer() {
-    if (reduceMotion || coarse || lowPower) return;
-    const glow = els.glow;
-    let x = 0, y = 0, tx = 0, ty = 0, raf = 0;
-    const loop = () => {
-      x += (tx - x) * 0.16;
-      y += (ty - y) * 0.16;
-      glow.style.transform = `translate3d(${x}px, ${y}px, 0)`;
-      raf = requestAnimationFrame(loop);
-    };
-    window.addEventListener('pointermove', (e) => {
-      if (e.pointerType !== 'mouse') return;
-      tx = e.clientX;
-      ty = e.clientY;
-      glow.classList.add('on');
-      if (!raf) raf = requestAnimationFrame(loop);
-    }, { passive: true });
-    window.addEventListener('pointerleave', () => glow.classList.remove('on'));
-  }
-
-  function bindParallax() {
-    if (reduceMotion || coarse) return;
-    const radial = document.querySelector('.atmosphere .radial');
-    window.addEventListener('pointermove', (e) => {
-      if (e.pointerType !== 'mouse') return;
-      const dx = (e.clientX / window.innerWidth - 0.5) * 4;
-      const dy = (e.clientY / window.innerHeight - 0.5) * 3;
-      radial.style.transform = `translate(${dx}px, ${dy}px)`;
-    }, { passive: true });
-  }
-
-  els.form.addEventListener('submit', submitSearch);
-  els.input.addEventListener('focus', openSearch);
-  els.input.addEventListener('input', renderSuggest);
-  document.addEventListener('click', (e) => {
-    if (!els.form.contains(e.target) && !els.suggest.contains(e.target)) closeSearch();
-  });
-
-  els.back.addEventListener('click', () => {
-    const idx = state.tabs.findIndex((t) => t.id === state.active);
-    if (idx > 0) activateTab(state.tabs[idx - 1].id);
-    else showHome();
-  });
-  els.forward.addEventListener('click', () => {
-    const idx = state.tabs.findIndex((t) => t.id === state.active);
-    if (idx >= 0 && idx < state.tabs.length - 1) activateTab(state.tabs[idx + 1].id);
-  });
-  els.reload.addEventListener('click', () => {
-    if (document.body.classList.contains('browsing') && els.iframe.src) {
-      if (state.pendingUrl) {
-        showBrowser(state.pendingUrl, false);
-      } else {
-        try { els.iframe.contentWindow.location.reload(); } catch { els.iframe.src = els.iframe.src; }
-      }
-    } else {
-      loadApps();
-      loadStatus();
-    }
-  });
-  els.neu.addEventListener('click', showHome);
-
-  els.iframe.addEventListener('load', () => {
-    clearLoadTimer();
-    if (els.iframe.src && els.iframe.src !== 'about:blank') hideNetError();
-  });
-  els.iframe.addEventListener('error', () => {
-    clearLoadTimer();
-    showNetError('timeout');
-  });
-
-  els.browserErrorRetry.addEventListener('click', () => {
-    if (state.pendingUrl) showBrowser(state.pendingUrl, false);
-  });
-
-  els.findInput.addEventListener('input', () => runFind(false));
-  els.findInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+  els.form.onsubmit=e=>{e.preventDefault();openUrl(els.input.value);};els.input.onfocus=()=>els.form.classList.add('is-focus');
+  els.input.oninput=()=>{const q=els.input.value.toLowerCase();const hits=[...state.bookmarks,...state.history].filter(x=>(x.title+' '+x.url).toLowerCase().includes(q)).slice(0,6);els.suggest.hidden=!q||!hits.length;els.suggest.innerHTML=hits.map(x=>`<button class="chip" type="button">${esc(x.title||x.url)}</button>`).join('');[...els.suggest.querySelectorAll('button')].forEach((b,i)=>b.onclick=()=>openUrl(hits[i].url,hits[i].title));};
+  document.addEventListener('click',e=>{if(!els.form.contains(e.target)&&!els.suggest.contains(e.target))els.suggest.hidden=true;});
+  els.neu.onclick=()=>openUrl('about:blank','New Tab');
+  els.back.onclick=()=>send({type:'back',id:state.active});els.forward.onclick=()=>send({type:'forward',id:state.active});els.reload.onclick=()=>send({type:'reload',id:state.active});
+  els.browserErrorRetry.onclick=()=>{hideError();send({type:'reload',id:state.active});};
+  els.findClose.onclick=()=>els.findbar.hidden=true;els.findPrev.onclick=()=>{};els.findNext.onclick=()=>{};
+  window.addEventListener('resize',()=>{if(state.active!=='home')send({type:'resize',id:state.active,width:Math.max(320,els.viewBrowser.clientWidth),height:Math.max(300,els.viewBrowser.clientHeight-52)});});
+  if(els.aiBtn){
+    const add=(cls,s)=>{const p=document.createElement('p');p.className=cls;p.textContent=s;els.aiLog.appendChild(p);els.aiLog.scrollTop=els.aiLog.scrollHeight;};
+    els.aiBtn.onclick=()=>{els.aiDock.hidden=!els.aiDock.hidden;if(!els.aiDock.hidden)els.aiInput.focus();};
+    els.aiClose.onclick=()=>{els.aiDock.hidden=true;};
+    els.aiForm.onsubmit=async e=>{
       e.preventDefault();
-      runFind(e.shiftKey);
-    } else if (e.key === 'Escape') {
-      e.preventDefault();
-      closeFind();
-    }
-  });
-  els.findNext.addEventListener('click', () => runFind(false));
-  els.findPrev.addEventListener('click', () => runFind(true));
-  els.findClose.addEventListener('click', closeFind);
-
-  window.addEventListener('online', () => {
-    // If we're currently showing an error, the browser thinks connectivity
-    // just came back — retry the pending page.
-    if (document.body.classList.contains('browsing') && state.pendingUrl && !els.browserError.hidden) {
-      showBrowser(state.pendingUrl, false);
-    }
-  });
-  // Deliberately no 'offline' handler that kills the page: navigator.onLine /
-  // the offline event are unreliable in this environment and were causing
-  // false "no Internet" errors while pages actually loaded fine through the
-  // gateway. Real failures are already caught by the load timeout and by the
-  // iframe 'error' event below.
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'l' && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      els.input.focus();
-    }
-    if (e.key === 'f' && (e.metaKey || e.ctrlKey) && document.body.classList.contains('browsing')) {
-      e.preventDefault();
-      openFind();
-    }
-    if (e.key === 'Escape') {
-      if (state.findOpen) closeFind();
-      else if (state.searchOpen) closeSearch();
-      else showHome();
-    }
-  });
-
-  let resizeT;
-  window.addEventListener('resize', () => {
-    clearTimeout(resizeT);
-    resizeT = setTimeout(renderConstellation, 80);
-  });
-
-  els.greeting.textContent = greeting();
-  bindPointer();
-  bindParallax();
-  renderTabs();
-  loadApps();
-  loadBookmarks();
-  loadHistory();
-  loadStatus();
-  setInterval(() => {
-    loadApps();
-    loadStatus();
-  }, 20000);
+      const q=els.aiInput.value.trim();
+      if(!q)return;
+      els.aiInput.value='';
+      add('me',q);
+      try{
+        const r=await fetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json','Accept-Language':navigator.language||''},body:JSON.stringify({message:q})});
+        const d=await r.json();
+        add('', d.text || d.error || '—');
+        if(d.navigate) openUrl(d.navigate);
+      }catch{ add('','AI unavailable'); }
+    };
+  }
+  loadApps();loadBookmarks();loadHistory();renderTabs();
+  els.input.placeholder='Search the Web';
 })();

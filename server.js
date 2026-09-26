@@ -8,12 +8,14 @@ const { URL } = require('url');
 
 const appManager = require('./lib/app-manager');
 const store = require('./lib/store');
-const webGateway = require('./lib/web-gateway');
+const netProbe = require('./lib/net-probe');
+const netStatus = require('./lib/net-status');
+const browserGateway = require('./browser-gateway');
+const aiAgent = require('./lib/ai-agent');
+const engineManager = require('./lib/engine-manager');
+const displayProxy = require('./lib/display-proxy');
 
 const PORT = Number(process.env.PORT || 8080);
-const PROXY_PORT = Number(process.env.PROXY_PORT || 8081);
-const PROXY_HOST = process.env.PROXY_HOST || '0.0.0.0';
-
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
 const MIME = {
@@ -198,25 +200,86 @@ const server = http.createServer(async (req, res) => {
     const p = url.pathname;
     const method = req.method || 'GET';
 
-    if (p === '/api/proxy-url') {
-      return json(res, 200, { base: webGateway.proxyBaseFromReq(req) });
-    }
     if (p === '/health') {
-      return json(res, 200, { status: 'ok', service: 'solohost-browser', timestamp: new Date().toISOString() });
+      return json(res, 200, {
+        status: 'ok',
+        service: 'solohost-browser',
+        http: 'READY',
+        timestamp: new Date().toISOString()
+      });
+    }
+    if (p === '/ready') {
+      const ok = engineManager.ready();
+      return json(res, ok ? 200 : 503, {
+        status: ok ? 'READY' : 'NOT_READY',
+        engine: engineManager.snapshot()
+      });
+    }
+    if (p === '/api/browser/status') {
+      return json(res, 200, engineManager.snapshot());
+    }
+    if (p === '/api/browser/navigate' && method === 'POST') {
+      const body = await readBody(req);
+      const target = String(body.url || '').trim();
+      if (!target) return json(res, 400, { ok: false, error: 'url required' });
+      try {
+        const out = await browserGateway.navigate(target);
+        return json(res, 200, { ok: true, ...out });
+      } catch (err) {
+        return json(res, 503, { ok: false, error: String(err.message || err) });
+      }
+    }
+    if (p === '/diagnostics' || p === '/api/diagnostics') {
+      const eng = engineManager.snapshot();
+      const net = await netProbe.probeOutbound();
+      let mem = null;
+      try { mem = process.memoryUsage(); } catch { mem = null; }
+      return json(res, 200, {
+        app: require('./package.json').version,
+        runtime: 'solohost-web',
+        engine: eng,
+        network: { layer: 'https', state: net.outbound ? 'PASS' : 'FAILED' },
+        memory: mem,
+        page: browserGateway.pageSnapshot(),
+        solohost: 'PASS'
+      });
+    }
+    if (p.startsWith('/view')) {
+      return displayProxy.handleHttp(req, res);
     }
     if (p === '/api/net') {
-      const probe = await webGateway.probeOutbound();
+      const probe = await netProbe.probeOutbound();
       return json(res, probe.ok ? 200 : 503, probe);
     }
-    if (p === '/api/proxy') {
-      return webGateway.handleProxyRequest(req, res);
+    if (p === '/api/network/status') {
+      return json(res, 200, await netStatus.collect());
+    }
+    if (p === '/api/ai' && method === 'GET') {
+      return json(res, 200, await aiAgent.probe());
+    }
+    if (p === '/api/ai/chat' && method === 'POST') {
+      const body = await readBody(req, 20000);
+      try {
+        const out = await aiAgent.chat({
+          message: body.message || body.q || '',
+          page: browserGateway.pageSnapshot(),
+          acceptLanguage: req.headers['accept-language'] || '',
+          navigate: (url) => browserGateway.navigate(url)
+        });
+        return json(res, out.ok ? 200 : 400, out);
+      } catch (err) {
+        return json(res, 503, { ok: false, error: String(err.message || err), state: 'FAILED' });
+      }
+    }
+    if (p === '/api/engine' && method === 'GET') {
+      return json(res, 200, browserGateway.status());
     }
     if (p === '/api/hub') {
       return json(res, 200, {
         name: 'SoloHost Browser',
         status: 'active',
-        version: '2.2.0',
-        features: ['App Discovery', 'App Gateway', 'Web Gateway', 'Bookmarks', 'History']
+        version: '5.0.0',
+        features: ['Chromium', 'CEF', 'Off-screen Rendering', 'WebSocket Display', 'Persistent Profile', 'Tabs', 'App Discovery', 'Bookmarks', 'History']
       });
     }
     if (p === '/api/status') {
@@ -286,18 +349,18 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`SoloHost Browser running on port ${PORT}`);
+browserGateway.install(server);
+
+server.on('upgrade', (req, socket) => {
+  const u = req.url || '';
+  if (u.startsWith('/ws') || u.startsWith('/view')) return;
+  socket.destroy();
 });
 
-if (process.env.SOLOHOST_LEGACY_PROXY !== '0') {
-  const proxyServer = http.createServer((req, res) => {
-    const requestUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    if (requestUrl.pathname === '/health') return json(res, 200, { status: 'ok', service: 'solohost-web-gateway' });
-    req.url = '/api/proxy' + (requestUrl.search || '');
-    return webGateway.handleProxyRequest(req, res);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`SoloHost Browser running on port ${PORT}`);
+  engineManager.start().catch((err) => {
+    console.error('[engine]', err.message);
   });
-  proxyServer.listen(PROXY_PORT, PROXY_HOST, () => {
-    console.log(`Legacy web gateway port ${PROXY_HOST}:${PROXY_PORT} (optional)`);
-  });
-}
+});
+

@@ -276,7 +276,7 @@ body { min-height: 100dvh; }
   .atmosphere, .chrome, .toast, .findbar, .paf-made-by, .view.home { display: none !important; }
   html, body { overflow: visible; height: auto; background: #fff; }
   .stage, .view.browser { position: static; inset: auto; padding-top: 0; height: auto; }
-  .view.browser iframe { width: 100%; height: 100vh; }
+  .view.browser .browser-canvas { width: 100%; height: 100vh; }
 }
 
 .chrome.browsing .nav-float button,
@@ -556,12 +556,8 @@ body { min-height: 100dvh; }
   inset: 0;
   padding-top: calc(52px + env(safe-area-inset-top));
 }
-.view.browser iframe {
-  width: 100%;
-  height: 100%;
-  border: 0;
-  background: #0e0f12;
-}
+.browser-canvas { width:100%; height:100%; display:block; border:0; background:#0e0f12; image-rendering:auto; outline:none; }
+.browser-view { width:100%; height:100%; border:0; background:#0e0f12; display:block; }
 
 .browser-error[hidden] {
   display: none !important;
@@ -668,3 +664,29 @@ body.browsing .atmosphere .radial { opacity: .45; }
   }
   .pointer-glow { display: none !important; }
 }
+
+.ai-dock {
+  position: fixed;
+  right: 16px;
+  bottom: 64px;
+  width: min(320px, 92vw);
+  max-height: 48vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(16,17,21,.92);
+  color: #eceae6;
+  border-radius: 18px;
+  z-index: 30;
+  overflow: hidden;
+}
+.ai-dock[hidden] { display: none !important; }
+.ai-dock header { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; font-size:13px; color:#9a9790; }
+.ai-dock header button { background:none; border:0; color:inherit; font-size:18px; cursor:pointer; }
+.ai-log { flex:1; overflow:auto; padding:0 12px 8px; font-size:13px; line-height:1.45; }
+.ai-log p { margin:0 0 8px; }
+.ai-log .me { color:#c8c4bc; }
+.ai-dock form { display:flex; gap:6px; padding:8px 10px 10px; }
+.ai-dock input { flex:1; border:0; background:#1a1b20; color:inherit; border-radius:12px; padding:8px 10px; }
+.ai-dock form button { border:0; background:transparent; color:inherit; cursor:pointer; }
+
+.browser-view { cursor: none; }
