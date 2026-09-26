@@ -6,6 +6,7 @@
 - x11vnc -nocursor (was -nocursorshape) so no cursor is composited into the video frame at all.
 - display-proxy now injects the hide-CSS/auto-connect script server-side into vnc.html itself, removing the brief flash of noVNC's connect dialog on first load.
 - Sharper page rendering: Xvfb/Chromium baseline resolution raised from 1280x800 to 1920x1080, x11vnc -xrandr added, and the client now requests resize=remote (native resolution match) with quality=9/compression=0 instead of resize=scale, which was stretching a small fixed image and causing the blur.
+- Reverted resize=remote/-xrandr: with no window manager in the container, Chromium's already-open kiosk window did not resize when Xvfb's virtual screen changed size, which cropped/hid part of the page for viewports that did not match exactly. Back to resize=scale (always shows the full page, never crops) while keeping the 1920x1080 baseline and quality=9/compression=0 for sharpness.
 
 # Changelog
 

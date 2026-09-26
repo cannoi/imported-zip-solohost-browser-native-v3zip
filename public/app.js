@@ -29,11 +29,13 @@
   function showDisplay(){
     if(!els.view) return;
     if(!els.view.src || els.view.src.indexOf('/view/')===-1){
-      // resize=remote asks the server to match its real resolution to the
-      // iframe's exact pixel size (via x11vnc -xrandr) instead of stretching
-      // a small fixed image with CSS, which is what was causing the blur.
-      // quality=9&compression=0 keeps the tightest, least lossy encoding.
-      els.view.src='view/vnc.html?autoconnect=1&reconnect=1&resize=remote&quality=9&compression=0&show_dot=0&path=view/websockify';
+      // resize=scale keeps the full page always visible, scaled to fit the
+      // SoloHost window: there is no window manager in the container, so a
+      // dynamic desktop-resize approach leaves Chromium's already-open kiosk
+      // window unresized, which cropped/hid part of the page. quality=9 and
+      // compression=0 keep the least lossy encoding so the scaled image
+      // still looks sharp.
+      els.view.src='view/vnc.html?autoconnect=1&reconnect=1&resize=scale&quality=9&compression=0&show_dot=0&path=view/websockify';
     }
     els.view.onload=()=>hideNovncChrome(els.view.contentWindow);
     if(els.view.contentWindow) hideNovncChrome(els.view.contentWindow);
