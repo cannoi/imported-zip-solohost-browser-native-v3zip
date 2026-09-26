@@ -3,6 +3,9 @@
 ## [6.2.2] - 2026-09-26
 - Hide noVNC control bar, status, panels, and local/virtual cursor (show_dot=0 + injected CSS).
 - x11vnc -nocursorshape so RFB does not draw a second cursor overlay.
+- x11vnc -nocursor (was -nocursorshape) so no cursor is composited into the video frame at all.
+- display-proxy now injects the hide-CSS/auto-connect script server-side into vnc.html itself, removing the brief flash of noVNC's connect dialog on first load.
+- Sharper page rendering: Xvfb/Chromium baseline resolution raised from 1280x800 to 1920x1080, x11vnc -xrandr added, and the client now requests resize=remote (native resolution match) with quality=9/compression=0 instead of resize=scale, which was stretching a small fixed image and causing the blur.
 
 # Changelog
 
