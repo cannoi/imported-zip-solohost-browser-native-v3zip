@@ -18,12 +18,18 @@
     try{
       const doc = win && win.document;
       if(!doc || !doc.head) return;
-      if(doc.getElementById('solohost-novnc-hide')) return;
-      const s=doc.createElement('style');
-      s.id='solohost-novnc-hide';
-      s.textContent='#noVNC_control_bar,#noVNC_control_bar_anchor,#noVNC_control_bar_handle,#noVNC_status,#noVNC_hint,#noVNC_hint_anchor,#noVNC_transition,#noVNC_connect_dlg,#noVNC_buttons,#noVNC_settings,#noVNC_clipboard,#noVNC_power,#noVNC_extras,.noVNC_panel,#noVNC_fallback_error,#noVNC_keyboard_button,#noVNC_toggle_color_mode_button{display:none!important;visibility:hidden!important;pointer-events:none!important}html,body,#noVNC_container,canvas{cursor:none!important}';
-      doc.head.appendChild(s);
-      if(win.UI && typeof win.UI.hideControlbar==='function') win.UI.hideControlbar();
+      if(!doc.getElementById('solohost-novnc-hide')){
+        const s=doc.createElement('style');
+        s.id='solohost-novnc-hide';
+        s.textContent='#noVNC_control_bar,#noVNC_control_bar_anchor,#noVNC_control_bar_handle,#noVNC_status,#noVNC_hint,#noVNC_hint_anchor,#noVNC_transition,#noVNC_connect_dlg,#noVNC_connect_button,#noVNC_credentials_dlg,#noVNC_verify_server_dlg,#noVNC_buttons,#noVNC_settings,#noVNC_clipboard,#noVNC_power,#noVNC_extras,.noVNC_panel,#noVNC_fallback_error,#noVNC_keyboard_button,#noVNC_toggle_color_mode_button{display:none!important;visibility:hidden!important;pointer-events:none!important}html,body,#noVNC_container,canvas{cursor:none!important}';
+        doc.head.appendChild(s);
+      }
+      if(win.UI){
+        if(typeof win.UI.connect==='function' && !win.UI.connected) win.UI.connect();
+        if(typeof win.UI.hideControlbar==='function') win.UI.hideControlbar();
+      }
+      const btn=doc.getElementById('noVNC_connect_button');
+      if(btn) btn.click();
     }catch(e){}
   }
   function showDisplay(){
@@ -38,7 +44,14 @@
       // quality=9&compression=0 keep the least lossy encoding for sharpness.
       els.view.src='view/vnc.html?autoconnect=1&reconnect=1&resize=scale&quality=9&compression=0&show_dot=0&path=view/websockify';
     }
-    els.view.onload=()=>hideNovncChrome(els.view.contentWindow);
+    els.view.onload=()=>{
+      hideNovncChrome(els.view.contentWindow);
+      let n=0;
+      const iv=setInterval(()=>{
+        hideNovncChrome(els.view.contentWindow);
+        if(++n>8) clearInterval(iv);
+      },250);
+    };
     if(els.view.contentWindow) hideNovncChrome(els.view.contentWindow);
   }
 
@@ -84,7 +97,7 @@
   function activate(id){const t=state.tabs.find(x=>x.id===id);if(!t)return;state.active=id;renderTabs();if(t.kind==='home'){showHome();return;}document.body.classList.add('browsing');els.chrome.classList.add('browsing');els.viewHome.hidden=true;els.viewBrowser.hidden=false;els.input.value=t.url||'';els.input.placeholder='Search or enter website';showDisplay();ensureWs().then(()=>{send({type:'activate',id});sendResize();}).catch(()=>{ if(!(els.view&&els.view.src)) showError('Browser engine unavailable','The Chromium engine is not ready yet.'); });}
   function closeTab(id){const i=state.tabs.findIndex(t=>t.id===id);if(i<0)return;send({type:'close',id});const was=state.active===id;state.tabs.splice(i,1);if(was)activate((state.tabs[i-1]||state.tabs[i]||state.tabs[0]).id);else renderTabs();}
   function normalize(raw){let u=String(raw||'').trim();if(!u)return '';if(u.startsWith('/'))return location.origin+u;if(/^https?:\/\//i.test(u))return u;if(/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(u)||/^localhost(:\d+)?/.test(u)||/^(\d{1,3}\.){3}\d{1,3}/.test(u))return 'https://'+u;return 'https://www.google.com/search?q='+encodeURIComponent(u);}
-  function openUrl(raw,title){const url=normalize(raw);if(!url)return;let t=state.tabs.find(x=>x.url===url&&x.kind==='web');if(!t){t={id:'tab-'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),title:title||new URL(url).hostname.replace(/^www\./,''),url,kind:'web'};state.tabs.push(t);}state.active=t.id;renderTabs();activate(t.id);showDisplay();hideError();const go=()=>fetch('/api/browser/navigate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})}).catch(()=>{});ensureWs().then(()=>send({type:'create',id:t.id,url})).then(()=>{send({type:'activate',id:t.id});remember(url,title||t.title);go();}).catch(()=>{go();remember(url,title||t.title);});}
+  function openUrl(raw,title){const url=normalize(raw);if(!url)return;let t=state.tabs.find(x=>x.url===url&&x.kind==='web');const isNew=!t;if(!t){t={id:'tab-'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),title:title||new URL(url).hostname.replace(/^www\./,''),url,kind:'web'};state.tabs.push(t);}state.active=t.id;renderTabs();activate(t.id);showDisplay();hideError();if(isNew){ensureWs().then(()=>send({type:'create',id:t.id,url})).then(()=>remember(url,title||t.title)).catch(()=>remember(url,title||t.title));}else{remember(url,title||t.title);}}
   function remember(url,title){fetch('/api/history',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url,title:title||url})}).catch(()=>{});}
 
   function pointer(e,phase,button=''){const r=els.canvas.getBoundingClientRect();const sx=els.canvas.width/r.width,sy=els.canvas.height/r.height;send({type:'mouse',id:state.active,x:Math.round((e.clientX-r.left)*sx),y:Math.round((e.clientY-r.top)*sy),phase,button});}

@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "6.2.2",
+  "version": "6.2.3",
   "description": "SoloHost Browser \u2014 system Chromium with live display",
   "main": "server.js",
   "scripts": {

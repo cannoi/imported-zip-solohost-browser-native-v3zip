@@ -1,5 +1,14 @@
 # Changelog
 
+## [6.2.3] - 2026-09-27
+- UI tabs map to Chromium targets via /json/new + /json/activate.
+- Switching a shell tab brings that Chromium page to the front.
+- Closing a shell tab closes the Chromium target.
+- Reopening a tab no longer navigates the currently visible page.
+- noVNC connect dialog is auto-clicked and hidden.
+
+# Changelog
+
 ## [6.2.2] - 2026-09-26
 - Hide noVNC control bar, status, panels, and local/virtual cursor (show_dot=0 + injected CSS).
 - x11vnc -nocursorshape so RFB does not draw a second cursor overlay.
