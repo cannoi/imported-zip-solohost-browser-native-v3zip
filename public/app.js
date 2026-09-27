@@ -29,12 +29,13 @@
   function showDisplay(){
     if(!els.view) return;
     if(!els.view.src || els.view.src.indexOf('/view/')===-1){
-      // resize=scale keeps the full page always visible, scaled to fit the
-      // SoloHost window: there is no window manager in the container, so a
-      // dynamic desktop-resize approach leaves Chromium's already-open kiosk
-      // window unresized, which cropped/hid part of the page. quality=9 and
-      // compression=0 keep the least lossy encoding so the scaled image
-      // still looks sharp.
+      // Chromium's real window + the x11vnc capture rectangle are now kept
+      // in lock-step with this container's actual size/orientation (see
+      // sendResize() and lib/cdp-control.js applyResize) so the page really
+      // reflows to portrait/landscape instead of being letterboxed. We keep
+      // resize=scale as a safety net only, for the brief moment before that
+      // server-side resize lands, or if it ever fails.
+      // quality=9&compression=0 keep the least lossy encoding for sharpness.
       els.view.src='view/vnc.html?autoconnect=1&reconnect=1&resize=scale&quality=9&compression=0&show_dot=0&path=view/websockify';
     }
     els.view.onload=()=>hideNovncChrome(els.view.contentWindow);
@@ -76,7 +77,11 @@
   function drawFrame(buf){const d=new DataView(buf);if(d.byteLength<12)return;const w=d.getUint32(4),h=d.getUint32(8);const blob=new Blob([buf.slice(12)],{type:'image/jpeg'});createImageBitmap(blob).then(img=>{if(els.canvas.width!==w||els.canvas.height!==h){els.canvas.width=w;els.canvas.height=h;}ctx.drawImage(img,0,0,w,h);img.close();hideError();});}
   function showError(t,d){els.browserErrorTitle.textContent=t;els.browserErrorDesc.textContent=d;els.browserError.hidden=false;}
   function hideError(){els.browserError.hidden=true;}
-  function activate(id){const t=state.tabs.find(x=>x.id===id);if(!t)return;state.active=id;renderTabs();if(t.kind==='home'){showHome();return;}document.body.classList.add('browsing');els.chrome.classList.add('browsing');els.viewHome.hidden=true;els.viewBrowser.hidden=false;els.input.value=t.url||'';els.input.placeholder='Search or enter website';showDisplay();ensureWs().then(()=>send({type:'activate',id})).catch(()=>{ if(!(els.view&&els.view.src)) showError('Browser engine unavailable','The Chromium engine is not ready yet.'); });}
+  function viewportSize(){return {width:Math.max(320,els.viewBrowser.clientWidth),height:Math.max(300,els.viewBrowser.clientHeight-52)};}
+  function sendResize(){if(state.active==='home')return;const s=viewportSize();send({type:'resize',id:state.active,width:s.width,height:s.height});}
+  let resizeT=null;
+  function debouncedResize(){clearTimeout(resizeT);resizeT=setTimeout(sendResize,400);}
+  function activate(id){const t=state.tabs.find(x=>x.id===id);if(!t)return;state.active=id;renderTabs();if(t.kind==='home'){showHome();return;}document.body.classList.add('browsing');els.chrome.classList.add('browsing');els.viewHome.hidden=true;els.viewBrowser.hidden=false;els.input.value=t.url||'';els.input.placeholder='Search or enter website';showDisplay();ensureWs().then(()=>{send({type:'activate',id});sendResize();}).catch(()=>{ if(!(els.view&&els.view.src)) showError('Browser engine unavailable','The Chromium engine is not ready yet.'); });}
   function closeTab(id){const i=state.tabs.findIndex(t=>t.id===id);if(i<0)return;send({type:'close',id});const was=state.active===id;state.tabs.splice(i,1);if(was)activate((state.tabs[i-1]||state.tabs[i]||state.tabs[0]).id);else renderTabs();}
   function normalize(raw){let u=String(raw||'').trim();if(!u)return '';if(u.startsWith('/'))return location.origin+u;if(/^https?:\/\//i.test(u))return u;if(/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(u)||/^localhost(:\d+)?/.test(u)||/^(\d{1,3}\.){3}\d{1,3}/.test(u))return 'https://'+u;return 'https://www.google.com/search?q='+encodeURIComponent(u);}
   function openUrl(raw,title){const url=normalize(raw);if(!url)return;let t=state.tabs.find(x=>x.url===url&&x.kind==='web');if(!t){t={id:'tab-'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),title:title||new URL(url).hostname.replace(/^www\./,''),url,kind:'web'};state.tabs.push(t);}state.active=t.id;renderTabs();activate(t.id);showDisplay();hideError();const go=()=>fetch('/api/browser/navigate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url})}).catch(()=>{});ensureWs().then(()=>send({type:'create',id:t.id,url})).then(()=>{send({type:'activate',id:t.id});remember(url,title||t.title);go();}).catch(()=>{go();remember(url,title||t.title);});}
@@ -94,7 +99,7 @@
   els.back.onclick=()=>send({type:'back',id:state.active});els.forward.onclick=()=>send({type:'forward',id:state.active});els.reload.onclick=()=>send({type:'reload',id:state.active});
   els.browserErrorRetry.onclick=()=>{hideError();send({type:'reload',id:state.active});};
   els.findClose.onclick=()=>els.findbar.hidden=true;els.findPrev.onclick=()=>{};els.findNext.onclick=()=>{};
-  window.addEventListener('resize',()=>{if(state.active!=='home')send({type:'resize',id:state.active,width:Math.max(320,els.viewBrowser.clientWidth),height:Math.max(300,els.viewBrowser.clientHeight-52)});});
+  window.addEventListener('resize',debouncedResize);
   if(els.aiBtn){
     const add=(cls,s)=>{const p=document.createElement('p');p.className=cls;p.textContent=s;els.aiLog.appendChild(p);els.aiLog.scrollTop=els.aiLog.scrollHeight;};
     els.aiBtn.onclick=()=>{els.aiDock.hidden=!els.aiDock.hidden;if(!els.aiDock.hidden)els.aiInput.focus();};
