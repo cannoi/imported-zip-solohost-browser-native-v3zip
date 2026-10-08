@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="dark"><title>Security & Privacy · SoloHost</title>
+<style>
+:root{color-scheme:dark;font:15px system-ui,sans-serif;background:#0b0c0f;color:#eee}*{box-sizing:border-box}body{margin:0;padding:24px}main{max-width:820px;margin:auto}header{display:flex;align-items:center;justify-content:space-between;gap:16px}a{color:#b9d0ff}h1{font-size:24px;font-weight:550}h2{font-size:16px;margin:0 0 12px}p,.muted{color:#a6a39e;line-height:1.5}.card{background:#15171d;border:1px solid #30323a;border-radius:14px;padding:18px;margin:16px 0}.setting{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid #2c2e35}.setting:last-child{border:0}.setting small{display:block;color:#999;margin-top:3px}input,select,button{font:inherit;color:inherit;background:#20232b;border:1px solid #41444d;border-radius:8px;padding:9px}input[type=checkbox]{width:18px;height:18px;accent-color:#b9d0ff}button{cursor:pointer}button.primary{background:#d7d5ce;color:#111;border:0;font-weight:600}.origin{display:grid;grid-template-columns:1fr repeat(4,auto);gap:8px;align-items:center;margin-top:10px}#status{min-height:22px;color:#9fc9a8}label{font-size:13px} @media(max-width:600px){body{padding:14px}.origin{grid-template-columns:1fr 1fr}.origin input{grid-column:1/-1}}
+</style></head><body><main>
+<header><div><p>🛡️ SoloHost Browser</p><h1 id="title">Security & Privacy</h1></div><a href="/">← <span id="back">Browser</span></a></header>
+<p id="intro">Simple controls for website permissions, downloads and safer navigation. Permissions are denied unless explicitly granted.</p>
+<section class="card"><h2>Website permissions</h2><p id="permissionNote">Grant permissions only to trusted origins. Camera and microphone are paired in this engine build.</p>
+<div class="setting"><div>📷 Camera<small>Allow on listed website origins</small></div><input type="checkbox" id="camera"></div>
+<div class="setting"><div>🎙️ Microphone<small>Allow on listed website origins</small></div><input type="checkbox" id="microphone"></div>
+<div class="setting"><div>📍 Location<small>Allow geolocation requests</small></div><input type="checkbox" id="location"></div>
+<div class="setting"><div>🔔 Notifications<small>Allow website notifications</small></div><input type="checkbox" id="notifications"></div>
+<label for="origin">Website origin (e.g. https://example.com)</label><div class="origin"><input id="origin" placeholder="https://example.com" type="url"><button id="grant">Save origin</button></div><div id="originList"></div>
+</section>
+<section class="card"><h2>Navigation & downloads</h2>
+<div class="setting"><div>🛑 Safe navigation<small>Block dangerous URL schemes and embedded credentials</small></div><input type="checkbox" id="safeNavigation"></div>
+<div class="setting"><div>🏠 Block local/private network URLs<small>Reduce access to localhost, LAN and link-local IPs</small></div><input type="checkbox" id="blockPrivateNetwork"></div>
+<div class="setting"><div>🪟 Popups<small>New windows are blocked by the native engine</small></div><select id="popups"><option value="block">Block</option></select></div>
+<div class="setting"><div>⬇️ Downloads<small>Files are saved in the browser profile; blocked downloads are cancelled</small></div><select id="downloads"><option value="allow">Save downloads</option><option value="block">Block downloads</option></select></div>
+<div class="setting"><div>🔒 Mixed content<small>Insecure active content is disabled by WebKit settings</small></div><select id="mixedContent"><option value="block">Block</option></select></div>
+</section>
+<section class="card"><h2>Privacy</h2>
+<div class="setting"><div>🕵️ Tracker reduction<small>Preference saved; network-level blocking list is not bundled yet</small></div><input type="checkbox" id="trackerReduction"></div>
+<div class="setting"><div>🍪 Third-party cookies<small>Preference saved; cookie partitioning is not fully wired</small></div><input type="checkbox" id="thirdPartyCookies"></div>
+<div class="setting"><div>🧹 Clear data on exit<small>Preference saved; automatic cleanup is not yet implemented</small></div><input type="checkbox" id="clearOnExit"></div>
+<div class="setting"><div>🕶️ Private mode<small>Preference saved; separate private-window workflow is not yet implemented</small></div><input type="checkbox" id="privateMode"></div>
+</section>
+<p id="status" role="status" aria-live="polite"></p><button class="primary" id="save">Save security settings</button>
+</main><script>
+(()=>{const $=id=>document.getElementById(id);const vi=(navigator.language||'en').toLowerCase().startsWith('vi');if(vi){document.documentElement.lang='vi';$('title').textContent='Bảo mật & Quyền riêng tư';$('back').textContent='Trình duyệt';$('intro').textContent='Điều khiển quyền website, tải xuống và điều hướng an toàn. Quyền bị từ chối trừ khi được cấp rõ ràng.';$('permissionNote').textContent='Chỉ cấp quyền cho website đáng tin cậy. Trong bản engine này, camera và microphone được cấp cùng nhau.';$('save').textContent='Lưu cài đặt bảo mật';}
+const fields=['camera','microphone','location','notifications','safeNavigation','blockPrivateNetwork','trackerReduction','thirdPartyCookies','clearOnExit','privateMode','popups','downloads','mixedContent'];let settings={permissions:{}};
+function readUI(){const out={...settings};for(const k of fields){const el=$(k);out[k]=el.type==='checkbox'?el.checked:el.value;}return out;}
+function fill(s){settings=s;for(const k of fields){const el=$(k);if(el.type==='checkbox')el.checked=!!s[k];else if(s[k])el.value=s[k];}renderOrigins();}
+function renderOrigins(){const list=$('originList');list.replaceChildren();Object.entries(settings.permissions||{}).forEach(([origin,grants])=>{const row=document.createElement('div');row.className='origin';const name=document.createElement('span');name.textContent=origin;row.append(name);for(const key of ['camera','microphone','location','notifications']){const lab=document.createElement('label');const cb=document.createElement('input');cb.type='checkbox';cb.checked=!!grants[key];cb.addEventListener('change',async()=>{settings.permissions[origin][key]=cb.checked;await save(false)});lab.append(cb,document.createTextNode(' '+key));row.append(lab);}const del=document.createElement('button');del.textContent='×';del.title='Remove origin';del.onclick=async()=>{delete settings.permissions[origin];await save(false)};row.append(del);list.append(row);});}
+async function save(show=true){const next=readUI();next.permissions=settings.permissions||{};const r=await fetch('/api/security/settings',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({settings:next})});const j=await r.json();if(!r.ok||!j.ok)throw Error(j.error||'Save failed');fill(j.settings);$('status').textContent=show?(vi?'Đã lưu cài đặt.':'Security settings saved.'):(vi?'Đã cập nhật quyền website.':'Website permission updated.');}
+$('save').onclick=()=>save(true).catch(e=>$('status').textContent=e.message);
+$('grant').onclick=async()=>{try{const u=new URL($('origin').value);if(!['http:','https:'].includes(u.protocol)||u.origin!==$('origin').value.replace(/\/$/,''))throw Error('Enter an exact http(s) origin without a path.');settings.permissions[u.origin]={camera:$('camera').checked,microphone:$('microphone').checked,location:$('location').checked,notifications:$('notifications').checked};$('origin').value='';await save(true);}catch(e){$('status').textContent=e.message;}};
+fetch('/api/security/settings').then(r=>r.json()).then(j=>fill(j.settings||{})).catch(e=>$('status').textContent=e.message);
+})();
+</script></body></html>

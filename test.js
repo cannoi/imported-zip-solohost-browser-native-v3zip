@@ -9,8 +9,8 @@ console.log('✓ package.json');
 [
   'server.js', 'start.sh', 'public/index.html', 'public/style.css', 'public/app.js',
   'lib/app-manager.js', 'lib/store.js', 'lib/net-probe.js', 'lib/net-status.js', 'lib/engine-adapter.js',
-  'lib/display-proxy.js', 'lib/webkit-control.js', 'lib/webkit-engine-manager.js', 'lib/ai-agent.js', 'browser-gateway.js',
-  'native/webkit-engine/main.cpp', 'native/webkit-engine/CMakeLists.txt', 'native/webkit-engine/main.cpp', 'native/webkit-engine/CMakeLists.txt'
+  'lib/display-proxy.js', 'lib/performance-monitor.js', 'lib/webkit-control.js', 'lib/webkit-engine-manager.js', 'lib/ai-agent.js', 'browser-gateway.js',
+  'native/webkit-engine/main.cpp', 'native/webkit-engine/CMakeLists.txt', 'tests/browser/media-engine.test.js', 'tests/browser/security-policy.test.js', 'lib/security-policy.js', 'public/security.html'
 ].forEach((f) => {
   assert.ok(fs.existsSync(path.join(__dirname, f)), 'missing ' + f);
 });
@@ -23,6 +23,9 @@ const compose = fs.readFileSync(path.join(__dirname, 'docker-compose.yml'), 'utf
 const dockerfile = fs.readFileSync(path.join(__dirname, 'Dockerfile'), 'utf8');
 const gateway = fs.readFileSync(path.join(__dirname, 'browser-gateway.js'), 'utf8');
 assert.ok(html.includes('constellation'));
+assert.ok(html.includes('/security'));
+assert.ok(server.includes('/api/security/settings'));
+assert.ok(server.includes('/api/security/validate'));
 assert.ok(html.includes('browser-view'));
 assert.ok(js.includes('/view/'));
 assert.ok(server.includes("listen(PORT, '0.0.0.0'"));
@@ -40,6 +43,10 @@ assert.ok(!dockerfile.match(/^\s*chromium\s*\\$/m));
 assert.ok(dockerfile.includes('libwebkit2gtk-4.1'));
 assert.ok(dockerfile.includes('solohost-webkit-engine'));
 assert.ok(dockerfile.includes('novnc'));
+assert.ok(dockerfile.includes('gstreamer1.0-libav'));
+assert.ok(dockerfile.includes('gstreamer1.0-plugins-ugly'));
+assert.ok(dockerfile.includes('gst-inspect-1.0'));
+assert.ok(js.includes('media-volume'));
 assert.ok(!gateway.includes('Page.startScreencast'));
 console.log('✓ contracts');
 console.log('All static tests passed successfully.');

@@ -1,0 +1,14 @@
+'use strict';
+const assert = require('assert');
+const policy = require('../../lib/security-policy');
+assert.strictEqual(policy.isPrivateHost('127.0.0.1'), true);
+assert.strictEqual(policy.isPrivateHost('192.168.1.1'), true);
+assert.strictEqual(policy.isPrivateHost('localhost'), true);
+assert.strictEqual(policy.isPrivateHost('example.com'), false);
+assert.throws(() => policy.validateNavigation('javascript:alert(1)'), /dangerous/);
+assert.throws(() => policy.validateNavigation('https://user:pass@example.com'), /credentials/);
+assert.throws(() => policy.validateNavigation('http://127.0.0.1'), /private-network/);
+assert.throws(() => policy.validateNavigation('ftp://example.com'), /Unsupported/);
+assert.strictEqual(policy.normalize({camera:true}).camera, true);
+assert.strictEqual(policy.normalize({permissions:{'https://example.com':{camera:true}}}).permissions['https://example.com'].camera,true);
+console.log('PASS security policy validation');

@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0c0d10">
   <meta name="color-scheme" content="dark">
   <title>SoloHost</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=7.6.0">
   <style>
     html,body{background:#0c0d10;color:#eceae6;margin:0;min-height:100%;}
     .paf-made-by{position:fixed;right:10px;bottom:10px;width:min(64px,11vw);max-width:11vw;height:auto;object-fit:contain;opacity:.42;background:transparent;padding:0;border:0;box-shadow:none;filter:none;pointer-events:none;z-index:40}
@@ -38,6 +38,8 @@
     <div class="tabs-float" id="tabs" role="tablist" aria-label="Open surfaces"></div>
 
     <button type="button" id="btn-new" class="orb-btn" title="New tab" aria-label="New tab">＋</button>
+    <a id="btn-downloads" class="orb-btn" href="/downloads" target="_blank" rel="noopener" title="Downloads" aria-label="Downloads">↓</a>
+    <a id="btn-security" class="orb-btn" href="/security" target="_blank" rel="noopener" title="Security & Privacy" aria-label="Security & Privacy">🛡</a>
     <button type="button" id="btn-ai" class="orb-btn" title="Assist" aria-label="Assist">◎</button>
   </header>
 
@@ -81,6 +83,13 @@
     <section class="view browser" id="view-browser" hidden>
       <iframe id="browser-view" class="browser-view" title="WebKit" allow="clipboard-read; clipboard-write; fullscreen; autoplay" allowfullscreen></iframe>
       <canvas id="browser-canvas" class="browser-canvas" hidden aria-hidden="true"></canvas>
+      <div class="media-controls" id="media-controls" role="toolbar" aria-label="Media controls">
+        <button type="button" id="media-play" title="Play / Pause" aria-label="Play or pause media">▶ / Ⅱ</button>
+        <button type="button" id="media-mute" title="Mute / Unmute" aria-label="Mute or unmute media">🔊</button>
+        <label for="media-volume" title="Volume">🔉</label><input id="media-volume" type="range" min="0" max="1" step="0.05" value="0.8" aria-label="Volume">
+        <button type="button" id="media-captions" title="Subtitles" aria-label="Toggle subtitles">CC</button>
+        <button type="button" id="media-fullscreen" title="Video fullscreen" aria-label="Toggle video fullscreen">⛶</button>
+      </div>
       <div class="browser-error" id="browser-error" hidden role="alert">
         <svg class="browser-error-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true">
           <path d="M4.9 15.5a10 10 0 0 1 14.2 0M1.4 11.9a15 15 0 0 1 21.2 0M8.5 19a5 5 0 0 1 7 0M12 20h.01"/>
@@ -121,7 +130,7 @@
   </aside>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   
-  <script src="app.js?v=7.2.0"></script>
-  
-<img class="paf-made-by" src="/made-by.png" alt="Made with App Builder — Pi SoloHost"></body>
+  <script src="app.js?v=7.6.0"></script>
+  <img class="paf-made-by" src="made-by.png" alt="">
+</body>
 </html>

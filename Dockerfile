@@ -3,7 +3,6 @@ ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libwebkit2gtk-4.1-dev \
     libgtk-3-dev \
-    build-essential \
     g++ \
     pkg-config \
     cmake \
@@ -24,14 +23,18 @@ ENV NODE_ENV=production \
     SOLOHOST_BROWSER_DATA=/app/data/webkit-profile \
     SOLOHOST_ENGINE=webkit \
     SOLOHOST_ENGINE_CONTROL_PORT=9333 \
+    SOLOHOST_SECURITY_SETTINGS=/app/data/webkit-profile/security-settings.json \
     DISPLAY=:99
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libwebkit2gtk-4.1-0 \
     libgtk-3-0 \
-    gstreamer1.0-libav \
+    gstreamer1.0-tools \
+    gstreamer1.0-plugins-base \
     gstreamer1.0-plugins-good \
     gstreamer1.0-plugins-bad \
     gstreamer1.0-plugins-ugly \
+    gstreamer1.0-libav \
+    gstreamer1.0-gl \
     fonts-liberation \
     fonts-noto-core \
     ca-certificates \
@@ -40,6 +43,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     novnc \
     websockify \
     bubblewrap \
+    && for plugin in playbin decodebin avdec_h264 avdec_aac avdec_mp3 vp8dec vp9dec vorbisdec opusdec; do gst-inspect-1.0 "$plugin" >/dev/null || { echo "Missing GStreamer media element: $plugin"; exit 1; }; done \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/node_modules ./node_modules

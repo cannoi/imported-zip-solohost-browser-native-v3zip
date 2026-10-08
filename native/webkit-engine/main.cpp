@@ -16,6 +16,7 @@
 #include <vector>
 #include <map>
 #include <algorithm>
+#include <cctype>
 
 namespace fs = std::filesystem;
 
@@ -141,9 +142,64 @@ static void on_web_process_terminated(WebKitWebView* view, WebKitWebProcessTermi
     tab->last_change_ms = now_ms();
 }
 
-static gboolean on_permission_request(WebKitWebView*, WebKitPermissionRequest* request, gpointer) {
-    // Secure default: permissions stay denied until a dedicated SoloHost permission UI exists.
-    webkit_permission_request_deny(request);
+static bool policy_bool(const std::string& origin, const std::string& key) {
+    std::ifstream in(fs::path(g_profile) / "security-settings.json");
+    if (!in) return false;
+    std::string raw((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    const std::string needle = "\"" + origin + "\"";
+    auto at = raw.find(needle);
+    if (at == std::string::npos) return false;
+    auto end = raw.find('}', at);
+    if (end == std::string::npos) return false;
+    auto k = raw.find("\"" + key + "\"", at);
+    if (k == std::string::npos || k > end) return false;
+    auto colon = raw.find(':', k);
+    if (colon == std::string::npos || colon > end) return false;
+    auto val = raw.find_first_not_of(" \t\r\n", colon + 1);
+    return val != std::string::npos && raw.compare(val, 4, "true") == 0;
+}
+static bool global_policy_bool(const std::string& key, bool fallback) {
+    std::ifstream in(fs::path(g_profile) / "security-settings.json");
+    if (!in) return fallback;
+    std::string raw((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    auto k = raw.find("\"" + key + "\"");
+    if (k == std::string::npos) return fallback;
+    auto colon = raw.find(':', k);
+    if (colon == std::string::npos) return fallback;
+    auto val = raw.find_first_not_of(" \\t\\r\\n", colon + 1);
+    if (val == std::string::npos) return fallback;
+    if (raw.compare(val, 4, "true") == 0) return true;
+    if (raw.compare(val, 5, "false") == 0) return false;
+    return fallback;
+}
+static std::string view_origin(WebKitWebView* view) {
+    const gchar* uri = webkit_web_view_get_uri(view);
+    if (!uri) return "";
+    GError* error = nullptr;
+    GUri* parsed = g_uri_parse(uri, G_URI_FLAGS_NONE, &error);
+    if (!parsed) { if (error) g_error_free(error); return ""; }
+    const char* scheme = g_uri_get_scheme(parsed);
+    const char* host = g_uri_get_host(parsed);
+    std::string out;
+    if (scheme && host && (g_str_equal(scheme, "http") || g_str_equal(scheme, "https"))) {
+        out = scheme; out += "://"; out += host;
+        int port = g_uri_get_port(parsed);
+        if (port > 0 && !((g_str_equal(scheme,"http") && port == 80) || (g_str_equal(scheme,"https") && port == 443))) out += ":" + std::to_string(port);
+    }
+    g_uri_unref(parsed);
+    return out;
+}
+static gboolean on_permission_request(WebKitWebView* view, WebKitPermissionRequest* request, gpointer) {
+    const std::string origin = view_origin(view);
+    const char* type = g_type_name(G_OBJECT_TYPE(request));
+    bool allow = false;
+    if (type && origin.size()) {
+        if (strstr(type, "Geolocation")) allow = policy_bool(origin, "location");
+        else if (strstr(type, "Notification")) allow = policy_bool(origin, "notifications");
+        else if (strstr(type, "UserMedia")) allow = policy_bool(origin, "camera") && policy_bool(origin, "microphone");
+    }
+    if (allow) webkit_permission_request_allow(request);
+    else webkit_permission_request_deny(request);
     return TRUE;
 }
 
@@ -158,11 +214,47 @@ static gboolean on_leave_fullscreen(WebKitWebView*, gpointer) {
 }
 
 static gboolean on_decide_policy(WebKitWebView*, WebKitPolicyDecision* decision, WebKitPolicyDecisionType type, gpointer) {
-    if (type == WEBKIT_POLICY_DECISION_TYPE_NAVIGATION_ACTION) {
-        webkit_policy_decision_use(decision);
+    if (type == WEBKIT_POLICY_DECISION_TYPE_NEW_WINDOW_ACTION) {
+        // Popups are blocked by default; no untrusted page may open an unmanaged window.
+        webkit_policy_decision_ignore(decision);
         return TRUE;
     }
-    return FALSE;
+    if (type != WEBKIT_POLICY_DECISION_TYPE_NAVIGATION_ACTION) return FALSE;
+    WebKitNavigationAction* action = webkit_navigation_policy_decision_get_navigation_action(WEBKIT_NAVIGATION_POLICY_DECISION(decision));
+    WebKitURIRequest* request = action ? webkit_navigation_action_get_request(action) : nullptr;
+    const gchar* raw_uri = request ? webkit_uri_request_get_uri(request) : nullptr;
+    const gchar* scheme_raw = raw_uri ? g_uri_parse_scheme(raw_uri) : nullptr;
+    std::string scheme = scheme_raw ? scheme_raw : "";
+    g_free((gpointer)scheme_raw);
+    std::transform(scheme.begin(), scheme.end(), scheme.begin(), [](unsigned char c) { return static_cast<char>(g_ascii_tolower(c)); });
+    bool allowed = scheme == "http" || scheme == "https" || scheme == "about" || scheme == "data" || scheme == "blob";
+    if ((scheme == "http" || scheme == "https") && raw_uri) {
+        GError* parse_error = nullptr;
+        GUri* parsed = g_uri_parse(raw_uri, G_URI_FLAGS_NONE, &parse_error);
+        if (parsed) {
+            const char* host_raw = g_uri_get_host(parsed);
+            std::string host = host_raw ? host_raw : "";
+            std::transform(host.begin(), host.end(), host.begin(), [](unsigned char c) { return static_cast<char>(g_ascii_tolower(c)); });
+            bool private_host = host == "localhost" || host == "::1" || host == "0.0.0.0" || host.rfind("127.",0)==0 || host.rfind("10.",0)==0 || host.rfind("192.168.",0)==0 || host.rfind("169.254.",0)==0 || host.rfind("172.16.",0)==0 || host.rfind("172.17.",0)==0 || host.rfind("172.18.",0)==0 || host.rfind("172.19.",0)==0 || host.rfind("172.2",0)==0 || host.rfind("172.30.",0)==0 || host.rfind("172.31.",0)==0 || host.size()>6 && (host.rfind("fc",0)==0 || host.rfind("fd",0)==0 || host.rfind("fe80:",0)==0);
+            if (private_host && global_policy_bool("blockPrivateNetwork", true)) allowed = false;
+            g_uri_unref(parsed);
+        }
+        if (parse_error) g_error_free(parse_error);
+    }
+    if (scheme == "file" && raw_uri) {
+        GError* error = nullptr;
+        gchar* profile_uri = g_filename_to_uri(g_profile.c_str(), nullptr, &error);
+        if (profile_uri) {
+            std::string prefix = profile_uri;
+            if (!prefix.empty() && prefix.back() != '/') prefix += '/';
+            allowed = std::string(raw_uri).rfind(prefix, 0) == 0;
+            g_free(profile_uri);
+        }
+        if (error) g_error_free(error);
+    }
+    if (allowed) webkit_policy_decision_use(decision);
+    else webkit_policy_decision_ignore(decision);
+    return TRUE;
 }
 
 static void on_download_decide_destination(WebKitDownload* download, const gchar* suggested_filename, gpointer) {
@@ -174,11 +266,19 @@ static void on_download_decide_destination(WebKitDownload* download, const gchar
     while (fs::exists(dest)) {
         dest = fs::path(g_downloads) / (std::to_string(n++) + "-" + name);
     }
-    std::string uri = "file://" + dest.string();
-    webkit_download_set_destination(download, uri.c_str());
+    GError* error = nullptr;
+    gchar* uri = g_filename_to_uri(dest.c_str(), nullptr, &error);
+    if (uri) { webkit_download_set_destination(download, uri); g_free(uri); }
+    if (error) g_error_free(error);
 }
 
 static void on_download_started(WebKitWebContext*, WebKitDownload* download, gpointer) {
+    std::ifstream in(fs::path(g_profile) / "security-settings.json");
+    std::string raw((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    if (raw.find("\"downloads\": \"block\"") != std::string::npos) {
+        webkit_download_cancel(download);
+        return;
+    }
     g_signal_connect(download, "decide-destination", G_CALLBACK(on_download_decide_destination), nullptr);
 }
 
@@ -217,9 +317,15 @@ static Tab* create_tab(const std::string& id, const std::string& uri, bool priva
         "enable-webaudio", TRUE,
         "enable-webrtc", TRUE,
         "enable-encrypted-media", TRUE,
+        "allow-running-of-insecure-content", FALSE,
         "enable-media-stream", std::getenv("SOLOHOST_ALLOW_MEDIA_STREAM") && std::string(std::getenv("SOLOHOST_ALLOW_MEDIA_STREAM")) == "1",
         "user-agent", "SoloHostBrowser/7.1 WebKit",
         nullptr);
+    // Media defaults: user-gesture required avoids noisy surprise autoplay.
+    // Set SOLOHOST_MEDIA_AUTOPLAY=1 only for deployments that explicitly want autoplay.
+    const char* autoplay = std::getenv("SOLOHOST_MEDIA_AUTOPLAY");
+    webkit_settings_set_media_playback_requires_user_gesture(settings, !(autoplay && std::string(autoplay) == "1"));
+    webkit_settings_set_media_playback_allows_inline(settings, TRUE);
     webkit_web_view_set_settings(view, settings);
     g_object_unref(settings);
 
@@ -340,6 +446,29 @@ static std::string command_on_main(const std::string& command) {
         if (auto* tab = active_tab()) if (auto* view = view_of(*tab)) webkit_find_controller_search_next(webkit_web_view_get_find_controller(view));
     } else if (op == "FINDPREV") {
         if (auto* tab = active_tab()) if (auto* view = view_of(*tab)) webkit_find_controller_search_previous(webkit_web_view_get_find_controller(view));
+    } else if (op == "MEDIA") {
+        if (auto* tab = active_tab()) if (auto* view = view_of(*tab)) {
+            const auto sep = arg.find(' ');
+            const std::string action = sep == std::string::npos ? arg : arg.substr(0, sep);
+            const std::string value = sep == std::string::npos ? "" : arg.substr(sep + 1);
+            std::string script;
+            if (action == "play") {
+                // The shell button is an explicit user intent; relax the per-view gesture gate
+                // only after that click so media playback can begin from this control.
+                WebKitSettings* settings = webkit_web_view_get_settings(view);
+                webkit_settings_set_media_playback_requires_user_gesture(settings, FALSE);
+                script = "document.querySelectorAll('video,audio').forEach(m=>{if(m.paused)m.play().catch(()=>{});else m.pause()});";
+            }
+            else if (action == "mute") script = "document.querySelectorAll('video,audio').forEach(m=>m.muted=!m.muted);";
+            else if (action == "volume") {
+                char* end = nullptr; double volume = std::strtod(value.c_str(), &end);
+                if (end && *end == '\0' && volume >= 0.0 && volume <= 1.0) {
+                    script = "document.querySelectorAll('video,audio').forEach(m=>{m.volume=" + value + ";if(m.volume>0)m.muted=false});";
+                }
+            } else if (action == "captions") script = "document.querySelectorAll('video,audio').forEach(m=>{const ts=[...m.textTracks].filter(t=>t.kind==='subtitles'||t.kind==='captions');if(ts.length){const on=ts.some(t=>t.mode==='showing');ts.forEach(t=>t.mode=on?'disabled':'showing')}});";
+            else if (action == "fullscreen") script = "(()=>{const d=document.documentElement;const on=d.classList.toggle('solohost-media-fullscreen');let st=document.getElementById('solohost-media-fullscreen-style');if(on&&!st){st=document.createElement('style');st.id='solohost-media-fullscreen-style';st.textContent='.solohost-media-fullscreen video{position:fixed!important;inset:0!important;width:100vw!important;height:100vh!important;max-width:none!important;max-height:none!important;object-fit:contain!important;background:#000!important;z-index:2147483647!important}';d.appendChild(st)}if(on){const v=[...document.querySelectorAll('video')].find(x=>x.readyState>0)||document.querySelector('video');if(v)v.scrollIntoView({block:'center'})}})();";
+            if (!script.empty()) webkit_web_view_run_javascript(view, script.c_str(), nullptr, nullptr, nullptr);
+        }
     } else if (op == "QUIT") {
         g_running = false;
         gtk_main_quit();

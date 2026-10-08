@@ -1,0 +1,18 @@
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const root = path.join(__dirname, '..', '..');
+const monitor = require(path.join(root, 'lib/performance-monitor'));
+const sample = monitor.sample({ status: 'ready', tabs: [{ id: 'home' }], active: 'home', processIds: {} });
+assert.ok(sample.node && Number.isFinite(sample.node.rssBytes));
+assert.ok(sample.cgroupMemory && 'currentBytes' in sample.cgroupMemory);
+assert.strictEqual(sample.browser.tabCount, 1);
+const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+const proxy = fs.readFileSync(path.join(root, 'lib/display-proxy.js'), 'utf8');
+const manager = fs.readFileSync(path.join(root, 'lib/webkit-engine-manager.js'), 'utf8');
+assert.ok(server.includes("p === '/api/performance'"));
+assert.ok(proxy.includes('keepAlive: true') && proxy.includes('agent: DISPLAY_HTTP_AGENT'));
+assert.ok(manager.includes('processIds:') && manager.includes('screen:'));
+assert.ok(fs.existsSync(path.join(root, 'scripts/benchmark.js')));
+console.log('PASS performance telemetry, process snapshots, HTTP keep-alive, benchmark harness');

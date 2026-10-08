@@ -14,9 +14,39 @@ const browserGateway = require('./browser-gateway');
 const aiAgent = require('./lib/ai-agent');
 const engineManager = require('./lib/engine-adapter');
 const displayProxy = require('./lib/display-proxy');
+const securityPolicy = require('./lib/security-policy');
+const performanceMonitor = require('./lib/performance-monitor');
 
 const PORT = Number(process.env.PORT || 8080);
 const PUBLIC_DIR = path.join(__dirname, 'public');
+
+const BROWSER_PROFILE = path.resolve(process.env.SOLOHOST_BROWSER_DATA || '/app/data/webkit-profile');
+const BROWSER_DOWNLOADS = path.resolve(process.env.SOLOHOST_DOWNLOADS || path.join(BROWSER_PROFILE, 'downloads'));
+function safeDownloadName(raw) {
+  let name;
+  try { name = decodeURIComponent(String(raw || '')); } catch { return null; }
+  if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\') || name.includes('\0')) return null;
+  return name;
+}
+async function listDownloads() {
+  await fs.promises.mkdir(BROWSER_DOWNLOADS, { recursive: true });
+  const entries = await fs.promises.readdir(BROWSER_DOWNLOADS, { withFileTypes: true });
+  const rows = [];
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const full = path.join(BROWSER_DOWNLOADS, entry.name);
+    const stat = await fs.promises.stat(full);
+    rows.push({ name: entry.name, size: stat.size, modified: stat.mtime.toISOString(), url: '/api/files/downloads/' + encodeURIComponent(entry.name) });
+  }
+  return rows.sort((a, b) => b.modified.localeCompare(a.modified));
+}
+function downloadsPage(items, lang) {
+  const vi = lang.toLowerCase().startsWith('vi');
+  const esc = value => String(value).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const rows = items.map(item => `<li><span class="file">📄 ${esc(item.name)}</span><small>${(item.size/1024).toFixed(1)} KB · ${esc(item.modified)}</small><a href="${item.url}">${vi?'Tải xuống':'Download'}</a></li>`).join('');
+  return `<!doctype html><html lang="${vi?'vi':'en'}"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${vi?'Tệp đã tải xuống':'Downloads'} · SoloHost</title><style>body{margin:0;background:#101116;color:#eee;font:15px system-ui;padding:24px}main{max-width:820px;margin:auto}a{color:#a9c7ff}li{list-style:none;display:grid;grid-template-columns:1fr auto;gap:8px;padding:14px 0;border-bottom:1px solid #333}small{grid-column:1;color:#aaa}.file{overflow-wrap:anywhere}header{display:flex;justify-content:space-between;align-items:center}p{color:#aaa}</style><main><header><h1>⬇ ${vi?'Tệp đã tải xuống':'Downloads'}</h1><a href="/">${vi?'Về trình duyệt':'Back to Browser'}</a></header><p>${vi?'Tệp được lưu trong hồ sơ trình duyệt SoloHost.':'Files are stored in the SoloHost browser profile.'}</p><ul>${rows || `<li>${vi?'Chưa có tệp tải xuống.':'No downloads yet.'}</li>`}</ul></main></html>`;
+}
+
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -207,6 +237,41 @@ const server = http.createServer(async (req, res) => {
     const p = url.pathname;
     const method = req.method || 'GET';
 
+    if (p === '/security' && method === 'GET') {
+      return serveStatic(req, res, '/security.html');
+    }
+    if (p === '/api/security/settings' && method === 'GET') {
+      return json(res, 200, { ok: true, settings: securityPolicy.load() });
+    }
+    if (p === '/api/security/settings' && method === 'PUT') {
+      const body = await readBody(req, 20000);
+      const settings = securityPolicy.save(body.settings || body);
+      return json(res, 200, { ok: true, settings });
+    }
+    if (p === '/api/security/validate' && method === 'POST') {
+      const body = await readBody(req, 8192);
+      try { return json(res, 200, { ok: true, url: securityPolicy.validateNavigation(body.url, securityPolicy.load()) }); }
+      catch (error) { return json(res, 403, { ok: false, error: String(error.message || error) }); }
+    }
+    if (p === '/downloads' && method === 'GET') {
+      const items = await listDownloads();
+      return send(res, 200, downloadsPage(items, req.headers['accept-language'] || 'en'), { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+    }
+    if (p === '/api/files/downloads' && method === 'GET') {
+      return json(res, 200, { ok: true, downloads: await listDownloads() });
+    }
+    if (p.startsWith('/api/files/downloads/') && (method === 'GET' || method === 'HEAD')) {
+      const name = safeDownloadName(p.slice('/api/files/downloads/'.length));
+      if (!name) return json(res, 400, { error: 'invalid file name' });
+      const full = path.resolve(BROWSER_DOWNLOADS, name);
+      if (path.dirname(full) !== BROWSER_DOWNLOADS) return json(res, 400, { error: 'invalid file path' });
+      let stat;
+      try { stat = await fs.promises.lstat(full); } catch { return json(res, 404, { error: 'download not found' }); }
+      if (!stat.isFile() || stat.isSymbolicLink()) return json(res, 404, { error: 'download not found' });
+      res.writeHead(200, { 'Content-Length': stat.size, 'Content-Type': 'application/octet-stream', 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(name)}`, 'X-Content-Type-Options': 'nosniff', 'Cache-Control': 'no-store' });
+      if (method === 'HEAD') return res.end();
+      return fs.createReadStream(full).pipe(res);
+    }
     if (p === '/health') {
       return json(res, 200, {
         status: 'ok',
@@ -224,6 +289,9 @@ const server = http.createServer(async (req, res) => {
     }
     if (p === '/api/browser/status') {
       return json(res, 200, engineManager.snapshot());
+    }
+    if (p === '/api/performance' || p === '/api/diagnostics/performance') {
+      return json(res, 200, performanceMonitor.sample(engineManager.snapshot()));
     }
     if (p === '/api/browser/navigate' && method === 'POST') {
       const body = await readBody(req);
@@ -286,7 +354,7 @@ const server = http.createServer(async (req, res) => {
         name: 'SoloHost Browser',
         status: 'active',
         version: require('./package.json').version,
-        features: ['WebKit', 'HTML5 Media', 'Live Display', 'Persistent Profile', 'Tabs', 'App Discovery', 'Bookmarks', 'History']
+        features: ['WebKit', 'HTTP/HTTPS', 'WebSocket/WebRTC', 'HTML5 Media', 'Safe Downloads', 'Profile-Scoped Files', 'Security Policy', 'Safe Downloads', 'PDF/Images/Text/JSON/Archives', 'Live Display', 'Persistent Profile', 'Tabs', 'App Discovery', 'Bookmarks', 'History']
       });
     }
     if (p === '/api/status') {

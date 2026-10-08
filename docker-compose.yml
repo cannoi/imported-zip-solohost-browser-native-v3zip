@@ -11,6 +11,8 @@ services:
       SOLOHOST_DOWNLOADS: "/app/data/webkit-profile/downloads"
       SOLOHOST_WEBKIT_SANDBOX: "1"
       SOLOHOST_NAV_TIMEOUT_MS: "30000"
+      SOLOHOST_MEDIA_AUTOPLAY: "0"
+      SOLOHOST_ALLOW_MEDIA_STREAM: "0"
       OLLAMA_URL: "http://127.0.0.1:11434"
     shm_size: "1gb"
     labels:

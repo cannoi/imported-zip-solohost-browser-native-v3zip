@@ -1,0 +1,15 @@
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const root = path.join(__dirname, '..', '..');
+const native = fs.readFileSync(path.join(root, 'native/webkit-engine/main.cpp'), 'utf8');
+const manager = fs.readFileSync(path.join(root, 'lib/webkit-engine-manager.js'), 'utf8');
+const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+const docker = fs.readFileSync(path.join(root, 'Dockerfile'), 'utf8');
+for (const item of ['enable-media', 'enable-mediasource', 'enable-webaudio', 'webkit_settings_set_media_playback_requires_user_gesture', 'action == \"captions\"', 'action == \"fullscreen\"']) assert.ok(native.includes(item), `missing native media support: ${item}`);
+for (const item of ['media-play', 'media-mute', 'media-volume', 'media-captions', 'media-fullscreen']) assert.ok(html.includes(item) && app.includes(item), `missing media control: ${item}`);
+for (const item of ['media-play', 'media-mute', 'media-volume', 'media-captions', 'media-fullscreen']) assert.ok(manager.includes(item), `missing media command route: ${item}`);
+for (const item of ['gstreamer1.0-libav', 'gstreamer1.0-plugins-good', 'gstreamer1.0-plugins-bad', 'gstreamer1.0-plugins-ugly', 'gst-inspect-1.0']) assert.ok(docker.includes(item), `missing GStreamer package/check: ${item}`);
+assert.ok(docker.includes('avdec_h264') && docker.includes('vp9dec'));
+console.log('PASS media controls, autoplay policy, GStreamer package/preflight contract');

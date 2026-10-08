@@ -690,3 +690,14 @@ body.browsing .atmosphere .radial { opacity: .45; }
 .ai-dock form button { border:0; background:transparent; color:inherit; cursor:pointer; }
 
 .browser-view { cursor: none; }
+
+
+/* Compact global HTML5 media controls; page-native controls remain available. */
+.media-controls{position:absolute;z-index:12;right:14px;bottom:14px;display:flex;align-items:center;gap:7px;padding:7px 10px;border:1px solid rgba(255,255,255,.14);border-radius:14px;background:rgba(12,13,16,.82);backdrop-filter:blur(12px);opacity:.28;transition:opacity .18s ease;max-width:calc(100% - 28px)}
+.media-controls:hover,.media-controls:focus-within{opacity:1}
+.media-controls button{border:0;border-radius:8px;background:rgba(255,255,255,.08);color:#eceae6;padding:7px 9px;cursor:pointer;font-size:12px;white-space:nowrap}
+.media-controls button:hover,.media-controls button:focus-visible{background:rgba(255,255,255,.18)}
+.media-controls input[type=range]{width:76px;max-width:15vw;accent-color:#d9d5cc}
+.media-controls label{font-size:12px}
+#view-browser{position:relative}
+@media(max-width:520px){.media-controls{right:8px;bottom:8px;gap:4px;padding:5px}.media-controls button{padding:6px;font-size:11px}.media-controls input[type=range]{width:48px}}
