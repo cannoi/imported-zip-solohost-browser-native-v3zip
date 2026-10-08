@@ -8,6 +8,7 @@
     "test": "node test.js && node tests/browser/architecture.test.js && node --check server.js && node --check browser-gateway.js && node --check public/app.js"
   },
   "dependencies": {
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "sqlite3": "*"
   }
 }
