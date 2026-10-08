@@ -1,13 +1,14 @@
 {
   "name": "solohost-browser-hub",
   "version": "7.6.0-performance",
-  "description": "SoloHost Browser \u2014 native WebKit engine foundation",
+  "description": "SoloHost Browser — native WebKit engine foundation",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "test": "node test.js && node tests/browser/architecture.test.js && node tests/browser/navigation-policy.test.js && node tests/browser/file-protocol.test.js && node tests/browser/media-engine.test.js && node --check server.js && node --check browser-gateway.js && node --check public/app.js && node tests/browser/security-policy.test.js && node tests/browser/performance.test.js && node --check lib/performance-monitor.js && node --check lib/display-proxy.js && node --check scripts/benchmark.js"
   },
   "dependencies": {
-    "ws": "^8.18.3"
+    "ws": "^8.18.3",
+    "sqlite3": "*"
   }
 }
