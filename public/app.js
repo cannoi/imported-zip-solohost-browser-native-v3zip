@@ -36,7 +36,7 @@
       // resize=scale as a safety net only, for the brief moment before that
       // server-side resize lands, or if it ever fails.
       // quality=9&compression=0 keep the least lossy encoding for sharpness.
-      els.view.src='view/vnc.html?autoconnect=1&reconnect=1&resize=scale&quality=9&compression=0&show_dot=0&path=view/websockify';
+      els.view.src='view/vnc.html?autoconnect=1&reconnect=1&resize=scale&quality=7&compression=2&show_dot=0&path=view/websockify';
     }
     els.view.onload=()=>hideNovncChrome(els.view.contentWindow);
     if(els.view.contentWindow) hideNovncChrome(els.view.contentWindow);

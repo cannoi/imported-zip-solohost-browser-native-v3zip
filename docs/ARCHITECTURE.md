@@ -27,7 +27,7 @@ HTTP: Node 0.0.0.0:8080 first, engine later
 ## A Native CEF surface
 
 Prebuilt CEF can paint a native window. It still needs a pixel transport to reach Pi Browser.
-Official linux64 CEF runtimes are hundreds of MB. Compiling CEF in Docker is rejected.
+The repository keeps native/ as an experimental/history path; it is not included in the production Docker build context. The default SoloHost runtime remains the smaller Debian Chromium + Xvfb + x11vnc + noVNC path.
 
 Verdict: keep native/ as history. Not default runtime.
 

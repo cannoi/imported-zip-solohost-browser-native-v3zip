@@ -35,6 +35,9 @@ function send(res, status, body, headers = {}) {
   res.writeHead(status, {
     'Content-Length': payload.length,
     'X-Content-Type-Options': 'nosniff',
+    'Referrer-Policy': 'no-referrer',
+    'X-Frame-Options': 'SAMEORIGIN',
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
     ...headers
   });
   res.end(payload);
@@ -134,7 +137,11 @@ function serveStatic(req, res, urlPath) {
   }
   const ext = path.extname(file).toLowerCase();
   const stream = fs.createReadStream(file);
-  res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+  const cacheable = /\.(?:css|js|png|svg|ico|woff2)$/i.test(file);
+  res.writeHead(200, {
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': cacheable ? 'public, max-age=86400' : 'no-cache'
+  });
   stream.pipe(res);
   return true;
 }
