@@ -1,63 +1,34 @@
-# Architecture — SoloHost Browser 6.1
+# SoloHost Browser 7 architecture
 
-## Hard constraint
+## Goal
+A real browser inside SoloHost Docker without Chromium/CEF/WebView2. The web engine is WebKitGTK; the application shell remains Node.js.
 
-SoloHost Browser is a web app opened inside Pi Browser.
+## Runtime
 
-Pi Browser cannot host a native Chromium compositor surface in its DOM.
-Pixels from container Chromium must travel over HTTP/WebSocket (or WebRTC).
+```text
+SoloHost
+  -> Node browser shell/API
+  -> native WebKitGTK engine
+  -> X11/Xvfb
+  -> x11vnc
+  -> websockify/noVNC
+  -> Browser UI
+```
 
-The product therefore cannot be an in-process embedded Chromium like Win32 WebView.
-noVNC is not "embedded Chromium". It is a live view of a real Chromium process.
+The Node shell handles navigation commands, tabs, history, bookmarks, AI and SoloHost integration. The native engine owns web rendering. noVNC is only the display/input transport; it is not the web engine.
 
-## Pipelines
+## Why WebKitGTK
+WebKitGTK is a native web content engine available directly from Debian Trixie packages. Debian currently provides `libwebkit2gtk-4.1-0` and development headers for `libwebkit2gtk-4.1-dev`. citeturn1search0turn1search2
 
-Display:
+## 7.2 core implemented
+- WebKitGTK persistent browser context with browser cache model.
+- Real native tabs backed by multiple WebKitWebView instances; shared persistent profile, plus an ephemeral-context path reserved for private tabs.
+- Engine watchdog, restart and profile-recovery backup.
+- Navigation timeout, TLS/navigation error capture and blank/error state tracking.
+- Download destination is restricted to the browser profile download area.
+- WebKit subprocess sandbox enabled by default; `bubblewrap` is included in the runtime image.
+- Find-in-page, zoom and fullscreen control paths are exposed through the native engine.
+- Browser session metadata is restored by the SoloHost shell.
 
-    system Chromium (kiosk, one process)
-      -> Xvfb
-      -> x11vnc RFB
-      -> websockify + noVNC
-      -> iframe #browser-view
-
-Page input: noVNC -> VNC -> X11 -> Chromium
-Control / AI: CDP :9222
-HTTP: Node 0.0.0.0:8080 first, engine later
-
-## A Native CEF surface
-
-Prebuilt CEF can paint a native window. It still needs a pixel transport to reach Pi Browser.
-The repository keeps native/ as an experimental/history path; it is not included in the production Docker build context. The default SoloHost runtime remains the smaller Debian Chromium + Xvfb + x11vnc + noVNC path.
-
-Verdict: keep native/ as history. Not default runtime.
-
-## B WebRTC / Selkies-style
-
-Better motion latency on paper. Needs GStreamer, often GPU, sometimes TURN.
-Desktop images often ~1 GB. ICE/UDP frequently fails behind a single SoloHost HTTP proxy.
-
-Verdict: not default. Revisit only with GPU and a proven one-port path.
-
-## C X11 + VNC + noVNC kiosk
-
-Debian packages only. One TCP port. Works through SoloHost proxy.
-Chromium is real. RFB is weaker than WebRTC for video FPS.
-
-Verdict: default. Chromium runs kiosk/fullscreen so the stream is the page, not a desktop.
-
-## D CDP JPEG / canvas
-
-Rejected for display. CDP is control plane only.
-
-## Choice
-
-C kiosk-optimized: real engine, one port, no CEF compile, smallest extra deps among live-view options.
-Not a local browser widget.
-
-## Profile
-
-/app/data/chromium-profile with writable fallback.
-
-## GPU
-
-CHROMIUM_GPU=0 uses SwiftShader. Otherwise Chromium default. No NVIDIA assumption.
+## Foundation limitations
+The first release is deliberately a foundation. Full compatibility with every website, DRM/Widevine, every codec/container, downloads, permission prompts, printing, extensions and strong per-tab process policy require dedicated validation and additional work.

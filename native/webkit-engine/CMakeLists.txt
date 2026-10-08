@@ -1,0 +1,7 @@
+cmake_minimum_required(VERSION 3.16)
+project(solohost_webkit_engine LANGUAGES CXX)
+set(CMAKE_CXX_STANDARD 17)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(WEBKIT REQUIRED IMPORTED_TARGET webkit2gtk-4.1)
+add_executable(solohost-webkit-engine main.cpp)
+target_link_libraries(solohost-webkit-engine PRIVATE PkgConfig::WEBKIT)

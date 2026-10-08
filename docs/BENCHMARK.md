@@ -1,6 +1,6 @@
 # Benchmark
 
-All rows NOT_MEASURED in the packager environment (no Docker daemon / no Xvfb+Chromium runtime here).
+All rows NOT_MEASURED in the packager environment (no Docker daemon / no Xvfb+WebKit runtime here).
 
 Do not treat this file as proof of speed.
 
@@ -18,3 +18,7 @@ Do not treat this file as proof of speed.
 
 On SoloHost run: docker compose up --build
 Then record the row values before calling the app fast or production-ready.
+
+## 7.2 measurement plan
+
+The implementation now exposes enough state to benchmark startup, tab count, navigation timeout/recovery and profile size. Actual RAM/CPU/FPS/image-size numbers still require a real Docker + WebKitGTK runtime and must be measured on SoloHost hardware before publishing performance claims.

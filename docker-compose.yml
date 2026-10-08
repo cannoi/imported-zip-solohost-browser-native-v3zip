@@ -7,12 +7,15 @@ services:
       PORT: "8080"
       SOLOHOST_DEMO_APPS: "1"
       HOME: "/tmp/solohost-browser"
-      SOLOHOST_BROWSER_DATA: "/app/data/chromium-profile"
+      SOLOHOST_BROWSER_DATA: "/app/data/webkit-profile"
+      SOLOHOST_DOWNLOADS: "/app/data/webkit-profile/downloads"
+      SOLOHOST_WEBKIT_SANDBOX: "1"
+      SOLOHOST_NAV_TIMEOUT_MS: "30000"
       OLLAMA_URL: "http://127.0.0.1:11434"
     shm_size: "1gb"
     labels:
       pi.ui.primary: "true"
-      pi.browser.engine: "chromium"
+      pi.browser.engine: "webkit"
     restart: unless-stopped
     volumes:
       - solohost-browser-data:/app/data

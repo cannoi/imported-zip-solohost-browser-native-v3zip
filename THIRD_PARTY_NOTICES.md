@@ -1,10 +1,10 @@
 # Third-party notices
 
-## Chromium Embedded Framework (CEF)
+## WebKitGTK
+SoloHost Browser uses the WebKitGTK project/library as its native web rendering engine. Consult the distribution package metadata and WebKitGTK licensing files shipped by the Debian packages for the complete applicable notices.
 
-SoloHost Browser embeds the Chromium Embedded Framework (CEF), an open-source BSD-licensed project based on Google Chromium.
+## GStreamer
+HTML5 media support uses GStreamer packages provided by Debian.
 
-The Docker build pins a specific CEF binary distribution and includes the corresponding runtime files. The CEF binary distribution's `LICENSE.txt`, `README.txt` and source/package metadata are the authoritative notices for the exact bundled CEF release.
-
-CEF documentation: https://chromiumembedded.github.io/cef/
-CEF builds: https://cef-builds.spotifycdn.com/index.html
+## noVNC / websockify / X11
+The display transport uses the Debian noVNC, websockify, Xvfb and x11vnc packages.

@@ -12,7 +12,7 @@ const netProbe = require('./lib/net-probe');
 const netStatus = require('./lib/net-status');
 const browserGateway = require('./browser-gateway');
 const aiAgent = require('./lib/ai-agent');
-const engineManager = require('./lib/engine-manager');
+const engineManager = require('./lib/engine-adapter');
 const displayProxy = require('./lib/display-proxy');
 
 const PORT = Number(process.env.PORT || 8080);
@@ -285,8 +285,8 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, {
         name: 'SoloHost Browser',
         status: 'active',
-        version: '5.0.0',
-        features: ['Chromium', 'CEF', 'Off-screen Rendering', 'WebSocket Display', 'Persistent Profile', 'Tabs', 'App Discovery', 'Bookmarks', 'History']
+        version: require('./package.json').version,
+        features: ['WebKit', 'HTML5 Media', 'Live Display', 'Persistent Profile', 'Tabs', 'App Discovery', 'Bookmarks', 'History']
       });
     }
     if (p === '/api/status') {
@@ -363,6 +363,15 @@ server.on('upgrade', (req, socket) => {
   if (u.startsWith('/ws') || u.startsWith('/view')) return;
   socket.destroy();
 });
+
+async function shutdown(signal) {
+  console.log(`[shutdown] ${signal}`);
+  try { await engineManager.stop(); } catch (err) { console.error('[engine stop]', err.message); }
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), 3000).unref();
+}
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`SoloHost Browser running on port ${PORT}`);

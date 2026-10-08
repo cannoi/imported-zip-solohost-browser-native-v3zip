@@ -1,11 +1,11 @@
 {
   "name": "solohost-browser-hub",
-  "version": "6.3.1",
-  "description": "SoloHost Browser — system Chromium with live display",
+  "version": "7.2.0-core-stability",
+  "description": "SoloHost Browser — native WebKit engine foundation",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test.js && node tests/browser/architecture.test.js && node --check server.js && node --check browser-gateway.js && node --check public/app.js"
+    "test": "node test.js && node tests/browser/architecture.test.js && node tests/browser/navigation-policy.test.js && node --check server.js && node --check browser-gateway.js && node --check public/app.js"
   },
   "dependencies": {
     "ws": "^8.18.3"

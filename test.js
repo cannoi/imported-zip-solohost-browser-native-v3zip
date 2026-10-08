@@ -8,9 +8,9 @@ assert.ok(pkg.version);
 console.log('✓ package.json');
 [
   'server.js', 'start.sh', 'public/index.html', 'public/style.css', 'public/app.js',
-  'lib/app-manager.js', 'lib/store.js', 'lib/net-probe.js', 'lib/net-status.js', 'lib/engine-manager.js',
-  'lib/display-proxy.js', 'lib/cdp-control.js', 'lib/ai-agent.js', 'browser-gateway.js',
-  'native/main.cpp'
+  'lib/app-manager.js', 'lib/store.js', 'lib/net-probe.js', 'lib/net-status.js', 'lib/engine-adapter.js',
+  'lib/display-proxy.js', 'lib/webkit-control.js', 'lib/webkit-engine-manager.js', 'lib/ai-agent.js', 'browser-gateway.js',
+  'native/webkit-engine/main.cpp', 'native/webkit-engine/CMakeLists.txt', 'native/webkit-engine/main.cpp', 'native/webkit-engine/CMakeLists.txt'
 ].forEach((f) => {
   assert.ok(fs.existsSync(path.join(__dirname, f)), 'missing ' + f);
 });
@@ -33,7 +33,12 @@ assert.ok(!server.includes("require('./lib/web-gateway')"));
 assert.ok(compose.includes('build: .'));
 assert.ok(!/^\s*image:\s*\S/m.test(compose));
 assert.ok(!dockerfile.includes('CEF_URL'));
-assert.ok(dockerfile.includes('chromium'));
+assert.ok(!dockerfile.includes('chromium'));
+assert.ok(!dockerfile.includes('CHROME_PATH'));
+assert.ok(!server.includes('cdp-control'));
+assert.ok(!dockerfile.match(/^\s*chromium\s*\\$/m));
+assert.ok(dockerfile.includes('libwebkit2gtk-4.1'));
+assert.ok(dockerfile.includes('solohost-webkit-engine'));
 assert.ok(dockerfile.includes('novnc'));
 assert.ok(!gateway.includes('Page.startScreencast'));
 console.log('✓ contracts');

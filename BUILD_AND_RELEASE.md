@@ -1,29 +1,17 @@
-# Build and release
+# Build and release — SoloHost Browser 7
 
-## Local image build
+## Runtime architecture
 
-The production image is a multi-stage build. The build stage downloads the pinned CEF 152 Linux x64 binary distribution, compiles the native CEF browser core and packages the CEF runtime files.
+The production runtime is a native WebKitGTK engine inside Docker. Chromium, CEF, WebView2 and CDP are not runtime dependencies.
 
-```bash
-docker build -t ghcr.io/cannoi/solohost-browser:5.0.0 .
-```
+## Build
 
-## Smoke test
+The Dockerfile uses a multi-stage build. The builder installs WebKitGTK development headers and compiles `native/webkit-engine/solohost-webkit-engine`. The final image contains only the WebKitGTK runtime, GStreamer media runtime, Xvfb/x11vnc/noVNC/websockify and the Node application.
 
-```bash
-docker run --rm -p 18080:8080 --shm-size=1g ghcr.io/cannoi/solohost-browser:5.0.0
-```
-
-Open the mapped SoloHost Browser URL and verify:
-
-1. Chromium page renders without VNC/noVNC.
-2. Address bar navigation works.
-3. Links and forms accept mouse/keyboard input.
-4. Back/forward/reload work.
-5. New tabs remain independent.
-6. Cookies/local storage survive a container restart using the named data volume.
-7. `/health` reports `engine: CEF/Chromium` and `display: off-screen-rendering`.
-
-## SoloHost deployment
-
-`docker-compose.yml` intentionally uses the immutable image reference rather than `build:`. Publish the verified image to the configured registry before installing the ZIP on a SoloHost instance.
+## Validation
+1. Static Node tests pass.
+2. Dockerfile contains no Chromium package.
+3. Native engine source and CMake project exist.
+4. Docker build must compile the native WebKit engine.
+5. Container smoke test must confirm `/health` and `/ready`.
+6. Browser smoke test must cover Google, YouTube, Facebook, audio/video playback and navigation.
