@@ -1,13 +1,22 @@
 {
   "name": "solohost-browser-hub",
-  "version": "7.9.0-universal-ai",
-  "description": "SoloHost Browser \u2014 WebKit + Universal AI/Feedback modules",
+  "version": "8.1.0-phase2-api",
+  "description": "SoloHost Browser \u2014 Express JSON API Gateway + Headless Chromium extract",
   "main": "server.js",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server.js",
-    "test": "node test.js && node tests/browser/architecture.test.js && node tests/browser/navigation-policy.test.js && node tests/browser/file-protocol.test.js && node tests/browser/media-engine.test.js && node --check server.js && node --check browser-gateway.js && node --check public/app.js && node tests/browser/security-policy.test.js && node tests/browser/performance.test.js && node --check lib/performance-monitor.js && node --check lib/display-proxy.js && node --check scripts/benchmark.js && node --check lib/display-manager.js && node tests/browser/display-engine.test.js && node --check lib/ai-agent.js && node tests/browser/ai-assistant.test.js"
+    "smoke:extract": "node scripts/smoke-extract.js",
+    "test": "node test.js && node tests/browser/architecture.test.js && node tests/browser/navigation-policy.test.js && node tests/browser/file-protocol.test.js && node tests/browser/media-engine.test.js && node --check server.js && node --check browser-gateway.js && node --check public/app.js && node tests/browser/security-policy.test.js && node tests/browser/performance.test.js && node --check lib/performance-monitor.js && node --check scripts/benchmark.js && node --check scripts/smoke-extract.js && node tests/browser/content-extractor.test.js && node tests/browser/chromium-engine.test.js && node tests/browser/reader-view.test.js && node --check lib/ai-agent.js && node tests/browser/ai-assistant.test.js && node tests/browser/api-gateway.test.js"
   },
   "dependencies": {
+    "@mozilla/readability": "^0.5.0",
+    "express": "^4.19.2",
+    "jsdom": "^24.1.0",
+    "playwright": "1.40.0",
+    "playwright-core": "1.40.0",
     "ws": "^8.18.3"
   }
 }

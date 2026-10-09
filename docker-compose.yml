@@ -9,15 +9,14 @@ services:
       HOME: "/tmp/solohost-browser"
       SOLOHOST_BROWSER_DATA: "/app/data/webkit-profile"
       SOLOHOST_DOWNLOADS: "/app/data/webkit-profile/downloads"
-      SOLOHOST_WEBKIT_SANDBOX: "1"
       SOLOHOST_NAV_TIMEOUT_MS: "30000"
-      SOLOHOST_MEDIA_AUTOPLAY: "0"
-      SOLOHOST_ALLOW_MEDIA_STREAM: "0"
+      SOLOHOST_EXTRACT_CONCURRENCY: "3"
       OLLAMA_URL: "http://127.0.0.1:11434"
     shm_size: "1gb"
+    init: true
     labels:
       pi.ui.primary: "true"
-      pi.browser.engine: "webkit"
+      pi.browser.engine: "chromium"
     restart: unless-stopped
     volumes:
       - solohost-browser-data:/app/data

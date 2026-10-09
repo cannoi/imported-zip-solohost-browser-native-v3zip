@@ -9,12 +9,18 @@ console.log('✓ package.json');
 [
   'server.js', 'start.sh', 'public/index.html', 'public/style.css', 'public/app.js',
   'lib/app-manager.js', 'lib/store.js', 'lib/net-probe.js', 'lib/net-status.js', 'lib/engine-adapter.js',
-  'lib/display-proxy.js', 'lib/performance-monitor.js', 'lib/webkit-control.js', 'lib/webkit-engine-manager.js', 'lib/ai-agent.js', 'browser-gateway.js',
-  'native/webkit-engine/main.cpp', 'native/webkit-engine/CMakeLists.txt', 'tests/browser/media-engine.test.js', 'tests/browser/security-policy.test.js', 'lib/security-policy.js', 'public/security.html'
+  'lib/engine-control.js', 'lib/chromium-engine.js', 'lib/content-extractor.js', 'lib/reader-view.js',
+  'lib/performance-monitor.js', 'lib/ai-agent.js', 'browser-gateway.js', 'scripts/smoke-extract.js',
+  'tests/browser/media-engine.test.js', 'tests/browser/security-policy.test.js', 'tests/browser/content-extractor.test.js',
+  'lib/security-policy.js', 'public/security.html'
 ].forEach((f) => {
   assert.ok(fs.existsSync(path.join(__dirname, f)), 'missing ' + f);
 });
 assert.ok(!fs.existsSync(path.join(__dirname, 'lib/web-gateway.js')));
+// Phase 1: legacy WebKit / VNC pipeline must be gone.
+['native/webkit-engine', 'lib/webkit-engine-manager.js', 'lib/display-manager.js', 'lib/display-proxy.js', 'lib/webkit-control.js'].forEach((f) => {
+  assert.ok(!fs.existsSync(path.join(__dirname, f)), 'legacy file still present: ' + f);
+});
 console.log('✓ required files');
 const html = fs.readFileSync(path.join(__dirname, 'public/index.html'), 'utf8');
 const js = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
@@ -36,16 +42,20 @@ assert.ok(!server.includes("require('./lib/web-gateway')"));
 assert.ok(compose.includes('build: .'));
 assert.ok(!/^\s*image:\s*\S/m.test(compose));
 assert.ok(!dockerfile.includes('CEF_URL'));
-assert.ok(!dockerfile.includes('chromium'));
-assert.ok(!dockerfile.includes('CHROME_PATH'));
 assert.ok(!server.includes('cdp-control'));
-assert.ok(!dockerfile.match(/^\s*chromium\s*\\$/m));
-assert.ok(dockerfile.includes('libwebkit2gtk-4.1'));
-assert.ok(dockerfile.includes('solohost-webkit-engine'));
-assert.ok(dockerfile.includes('novnc'));
-assert.ok(dockerfile.includes('gstreamer1.0-libav'));
-assert.ok(dockerfile.includes('gstreamer1.0-plugins-ugly'));
-assert.ok(dockerfile.includes('gst-inspect-1.0'));
+assert.ok(dockerfile.includes('mcr.microsoft.com/playwright:v1.40.0'));
+for (const legacy of ['libwebkit2gtk', 'libgtk-3', 'cmake', 'CMakeLists', 'build-essential', 'xvfb', 'x11vnc', 'novnc', 'websockify', 'gstreamer', 'solohost-webkit-engine']) {
+  assert.ok(!dockerfile.toLowerCase().includes(legacy.toLowerCase()), 'Dockerfile still references ' + legacy);
+}
+assert.ok(!server.includes('display-proxy') && !server.includes('display-manager'));
+assert.ok(server.includes('/api/extract'));
+for (const dep of ['playwright-core', 'playwright', '@mozilla/readability', 'jsdom', 'express']) {
+  assert.ok(pkg.dependencies[dep], 'missing dependency ' + dep);
+}
+// Playwright npm version must equal the Docker image tag, or Chromium will not be found at runtime.
+const tag = (dockerfile.match(/playwright:v([0-9.]+)/) || [])[1];
+assert.strictEqual(pkg.dependencies['playwright-core'], tag);
+assert.strictEqual(pkg.dependencies.playwright, tag);
 assert.ok(js.includes('media-volume'));
 assert.ok(!gateway.includes('Page.startScreencast'));
 console.log('✓ contracts');

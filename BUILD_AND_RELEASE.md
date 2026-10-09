@@ -1,32 +1,20 @@
-# Build and release — SoloHost Browser 7
+# Build and release — SoloHost Browser 8
 
 ## Runtime architecture
-
-The production runtime is a native WebKitGTK engine inside Docker. Chromium, CEF, WebView2 and CDP are not runtime dependencies.
+Headless Chromium (Playwright) inside Docker. The Node shell asks `ContentExtractor` to open pages, collects `.m3u8`/`.mp4` network responses, and converts the rendered HTML to a clean article with jsdom + `@mozilla/readability`. There is no native C++ code and no display transport.
 
 ## Build
+Single-stage Dockerfile on `mcr.microsoft.com/playwright:v1.40.0-focal`: `npm install --omit=dev`, then a build-time check that every dependency loads and that Chromium exists for the installed Playwright version.
 
-The Dockerfile uses a multi-stage build. The builder installs WebKitGTK development headers and compiles `native/webkit-engine/solohost-webkit-engine`. The final image contains only the WebKitGTK runtime, GStreamer media runtime, Xvfb/x11vnc/noVNC/websockify and the Node application.
+## Validation checklist
+1. `npm test` passes (static contracts, extractor orchestration, engine, reader view; real jsdom/Readability fixture runs once dependencies are installed).
+2. `docker compose build` succeeds (this step runs the Chromium presence check).
+3. `curl /ready` returns `READY`.
+4. `docker compose exec web node scripts/smoke-extract.js <url>` for one English and one Vietnamese site.
+5. Open the app, search a URL, confirm Reader view, media list, back/forward/reload, and the AI panel answering in the language you type.
 
-## Validation
-1. Static Node tests pass.
-2. Dockerfile contains no Chromium package.
-3. Native engine source and CMake project exist.
-4. Docker build must compile the native WebKit engine.
-5. Container smoke test must confirm `/health` and `/ready`.
-6. Browser smoke test must cover Google, YouTube, Facebook, audio/video playback and navigation.
+## Security & privacy foundation (v7.5, still applies)
+Persisted security settings and `/security` UI, dangerous-scheme/credential checks, private-network blocking, download policy. Page-level permission prompts, popups and in-page downloads belonged to the WebKit engine and are not applicable to the Phase 1 reader.
 
-
-V7.3 image builds additionally run `gst-inspect-1.0` checks for common media decoder elements. A successful static `npm test` does not replace the native C++ compile, Docker image build, or real-site playback test.
-
-
-## v7.5.0 — Security & Privacy foundation
-
-- Added persisted security settings and `/security` UI for site permission preferences, navigation safety, private-network blocking, download policy and privacy preferences.
-- Added dangerous-scheme/credential checks and profile-scoped `file:` navigation policy.
-- Native WebKit blocks new-window popup actions by default, denies website permissions unless an origin has an explicit grant, and cancels downloads when policy is set to `block`.
-- Insecure active content remains disabled; profile data remains under the configured browser profile.
-- Limitations: camera and microphone grants are coupled in this engine version; tracker blocklists, real third-party-cookie controls, automatic clear-on-exit, fully isolated private tabs, a native download confirmation prompt, and complete popup allow mode are not implemented/certified yet. Private-network blocking is a host-pattern guard, not a complete DNS-rebinding/redirect defense. Runtime native compilation and browser validation must be performed in Docker/SoloHost.
-
-## v7.6.0 performance validation
-Run `node scripts/benchmark.js http://127.0.0.1:8080 30` against the running container and save its JSON output. For valid before/after comparisons use the same SoloHost host, browser profile state, screen resolution, target URLs, tab count, warm-up period, and idle/browse/video scenario. The API benchmark alone does not measure render FPS, input latency, decoded-image memory, media rebuffering, or noVNC bandwidth.
+## Performance validation
+`node scripts/benchmark.js http://127.0.0.1:8080 30` measures API latency only. Extraction time per page is reported in every result (`duration_ms`) and by the smoke script; no speed or memory improvement over v7.x has been measured yet.

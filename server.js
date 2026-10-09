@@ -2,6 +2,7 @@
 
 const http = require('http');
 const https = require('https');
+const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
@@ -12,10 +13,10 @@ const netProbe = require('./lib/net-probe');
 const netStatus = require('./lib/net-status');
 const browserGateway = require('./browser-gateway');
 const engineManager = require('./lib/engine-adapter');
-const displayProxy = require('./lib/display-proxy');
+const engineControl = require('./lib/engine-control');
+const readerView = require('./lib/reader-view');
 const securityPolicy = require('./lib/security-policy');
 const performanceMonitor = require('./lib/performance-monitor');
-const displayManager = require('./lib/display-manager');
 const { createMountApp } = require('./lib/module-http');
 const { createAIService } = require('./lib/ai-module/ai-service');
 const { mountAIRoutes } = require('./lib/ai-module/routes');
@@ -47,6 +48,68 @@ mountFeedbackRoutes(universalApp, feedbackService);
 function logApp(level, msg, extra) {
   try { aiService.log(level, msg, extra || {}); } catch { /* optional */ }
 }
+
+const app = express();
+app.disable('x-powered-by');
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: false, limit: '64kb' }));
+
+/** Phase 2 — Chromium health (headless Playwright). */
+async function handleApiHealth(_req, res) {
+  try {
+    const health = await browserGateway.chromiumHealth();
+    const code = health.engine && health.engine.ready ? 200 : 503;
+    res.status(code).json(health);
+  } catch (err) {
+    res.status(503).json({
+      status: 'error',
+      service: 'solohost-browser',
+      engine: { name: 'chromium', ready: false, error: String(err.message || err) },
+      timestamp: new Date().toISOString()
+    });
+  }
+}
+
+/** Phase 2 — structured article parse for clients. */
+async function handleBrowserParse(req, res) {
+  const target = String((req.query && req.query.url) || '').trim();
+  try {
+    const out = await browserGateway.parseUrl(target, {
+      acceptLanguage: req.get ? (req.get('accept-language') || '') : (req.headers['accept-language'] || '')
+    });
+    res.status(200).json(out);
+  } catch (err) {
+    const map = {
+      INVALID_URL: 400,
+      UNSUPPORTED_SCHEME: 400,
+      BLOCKED: 403,
+      BUSY: 429,
+      NAVIGATION_TIMEOUT: 504,
+      HTTP_ERROR: 502,
+      DEPENDENCY_MISSING: 503
+    };
+    const status = map[err.code] || err.httpStatus || 502;
+    res.status(status).json({
+      success: false,
+      url: target || null,
+      error: String(err.message || err),
+      code: err.code || 'EXTRACT_FAILED'
+    });
+  }
+}
+
+app.get('/api/health', handleApiHealth);
+app.get('/health', handleApiHealth);
+app.get('/api/browser/parse', handleBrowserParse);
+
+// Universal AI + Feedback can use real Express routers
+try {
+  mountAIRoutes(app, aiService);
+  mountFeedbackRoutes(app, feedbackService);
+} catch (e) {
+  console.error('[modules]', e.message);
+}
+
 
 const BROWSER_PROFILE = path.resolve(process.env.SOLOHOST_BROWSER_DATA || '/app/data/webkit-profile');
 const BROWSER_DOWNLOADS = path.resolve(process.env.SOLOHOST_DOWNLOADS || path.join(BROWSER_PROFILE, 'downloads'));
@@ -259,8 +322,17 @@ async function handleAppGateway(id, req, res) {
   send(res, 200, html, { 'Content-Type': 'text/html; charset=utf-8' });
 }
 
-const server = http.createServer(async (req, res) => {
+const server = http.createServer(app);
+
+// Legacy raw-HTTP path handler (bookmarks, static, reader view, etc.)
+app.use(async (req, res, next) => {
+  if (res.headersSent) return;
   try {
+    // Skip paths already served by Express Phase-2 / AI / Feedback mounts
+    const p0 = (req.path || req.url || '').split('?')[0];
+    if (p0 === '/api/health' || p0 === '/health' || p0 === '/api/browser/parse') return;
+    if (p0.startsWith('/api/ai') || p0.startsWith('/api/feedback') || p0 === '/api/logs') return;
+
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
     const p = url.pathname;
     const method = req.method || 'GET';
@@ -319,12 +391,16 @@ const server = http.createServer(async (req, res) => {
       return json(res, 200, engineManager.snapshot());
     }
     if (p === '/api/display/status') {
+      // The noVNC/Xvfb pixel transport was removed in v8 Phase 1; kept so existing clients get a clear answer.
       const eng = engineManager.snapshot();
-      return json(res, 200, displayManager.snapshot({
-        engineStatus: eng.status,
-        processIds: eng.processIds || {},
-        screen: eng.screen || null
-      }));
+      return json(res, 200, {
+        path: 'disabled',
+        mode: 'off',
+        transport: 'none',
+        renderer: 'chromium-headless-extract',
+        note: 'Pixel streaming removed. Pages are rendered by headless Chromium and delivered as reader content via /view.',
+        engineStatus: eng.status
+      });
     }
     if (p === '/api/performance' || p === '/api/diagnostics/performance') {
       return json(res, 200, performanceMonitor.sample(engineManager.snapshot()));
@@ -338,6 +414,23 @@ const server = http.createServer(async (req, res) => {
         return json(res, 200, { ok: true, ...out });
       } catch (err) {
         return json(res, 503, { ok: false, error: String(err.message || err) });
+      }
+    }
+    if (p === '/api/browser/content' && method === 'GET') {
+      if (url.searchParams.get('summary')) return json(res, 200, engineManager.revision());
+      return json(res, 200, { ok: true, ...engineManager.getContent(url.searchParams.get('id') || undefined) });
+    }
+    if (p === '/api/extract' && method === 'POST') {
+      const body = await readBody(req, 8192);
+      const target = String(body.url || '').trim();
+      if (!target) return json(res, 400, { ok: false, error: 'url required' });
+      try {
+        const out = await engineControl.extract(target, { acceptLanguage: req.headers['accept-language'] || '' });
+        return json(res, 200, out);
+      } catch (err) {
+        const code = err.code || 'EXTRACT_FAILED';
+        const status = { INVALID_URL: 400, UNSUPPORTED_SCHEME: 400, BLOCKED: 403, BUSY: 429, NAVIGATION_TIMEOUT: 504, HTTP_ERROR: 502 }[code] || (code === 'DEPENDENCY_MISSING' ? 503 : 502);
+        return json(res, status, { ok: false, code, error: String(err.message || err), http_status: err.httpStatus || undefined });
       }
     }
     if (p === '/diagnostics' || p === '/api/diagnostics') {
@@ -355,8 +448,8 @@ const server = http.createServer(async (req, res) => {
         solohost: 'PASS'
       });
     }
-    if (p.startsWith('/view')) {
-      return displayProxy.handleHttp(req, res);
+    if (p === '/view' || p.startsWith('/view/')) {
+      return readerView.handle(req, res, engineManager);
     }
     if (p === '/api/net') {
       const probe = await netProbe.probeOutbound();
@@ -390,7 +483,7 @@ const server = http.createServer(async (req, res) => {
         name: 'SoloHost Browser',
         status: 'active',
         version: require('./package.json').version,
-        features: ['WebKit', 'HTTP/HTTPS', 'WebSocket/WebRTC', 'HTML5 Media', 'Safe Downloads', 'Profile-Scoped Files', 'Security Policy', 'PDF/Images/Text/JSON/Archives', 'Live Display', 'Persistent Profile', 'Tabs', 'App Discovery', 'Bookmarks', 'History', 'AI Assistant (optional)', 'Search', 'Summarize', 'Explain', 'Translate', 'Navigate', 'Extract', 'Assist']
+        features: ['Headless Chromium', 'Reader Mode', 'Media Sniffing (m3u8/mp4)', 'HTTP/HTTPS', 'Safe Downloads', 'Profile-Scoped Files', 'Security Policy', 'Persistent Profile', 'Tabs', 'App Discovery', 'Bookmarks', 'History', 'AI Assistant (optional)', 'Search', 'Summarize', 'Explain', 'Translate', 'Navigate', 'Extract', 'Assist']
       });
     }
     if (p === '/api/status') {
@@ -464,7 +557,7 @@ browserGateway.install(server);
 
 server.on('upgrade', (req, socket) => {
   const u = req.url || '';
-  if (u.startsWith('/ws') || u.startsWith('/view')) return;
+  if (u.startsWith('/ws')) return;
   socket.destroy();
 });
 

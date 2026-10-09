@@ -1,8 +1,15 @@
-# SoloHost Browser 7 — Install
+# SoloHost Browser 8 — Install
 
-The container installs WebKitGTK and GStreamer as the web rendering/media foundation. Chromium/CEF/WebView2 are not part of the runtime.
+The container is based on `mcr.microsoft.com/playwright:v1.40.0-focal` (Node.js + the matching Chromium). No WebKitGTK, GStreamer, Xvfb or VNC packages are installed.
 
-Build the image with the supplied Dockerfile, then expose port 8080 through SoloHost. Persistent browser data is stored in `/app/data/webkit-profile`.
+```bash
+npm install            # first time only: creates package-lock.json — commit it
+docker compose build
+docker compose up -d
+curl http://127.0.0.1:18080/ready          # {"status":"READY",...}
+docker compose exec web node scripts/smoke-extract.js https://example.com
+```
 
+Expose port 8080 through SoloHost. Persistent data lives in `/app/data/webkit-profile` (legacy folder name kept on purpose).
 
-V7.3 installs GStreamer base/good/bad/ugly/libav and checks required decoder elements during image build. By default, media playback requires a user gesture. Autoplay can be enabled explicitly with `SOLOHOST_MEDIA_AUTOPLAY=1`; keep the default for normal interactive use. DRM/Widevine and audio forwarding through noVNC are not included.
+**Version rule:** the image tag (`v1.40.0`) and the `playwright` / `playwright-core` versions in `package.json` must be identical; the Docker build fails early if Chromium is not found for that version.
