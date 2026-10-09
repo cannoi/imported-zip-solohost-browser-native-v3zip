@@ -81,6 +81,38 @@ if (process.env.SHFH_INGEST_TOKEN) fbOpts.ingestToken = process.env.SHFH_INGEST_
 const fb = createFeedbackService(fbOpts);
 mountFeedbackRoutes(app, fb);
 
+// Lightweight persistent browser library: history and bookmarks (JSON fallback, optional SQLite).
+const browserStore = require('./lib/store');
+app.get('/api/browser/history', async (_req, res, next) => {
+  try { res.json({ ok: true, items: await browserStore.listHistory() }); } catch (e) { next(e); }
+});
+app.post('/api/browser/history', async (req, res, next) => {
+  try {
+    const url = String((req.body && req.body.url) || '').trim();
+    const title = String((req.body && req.body.title) || url).slice(0, 300);
+    if (!/^https?:\/\//i.test(url) || url.length > 4096) return res.status(400).json({ ok: false, error: 'Invalid URL' });
+    await browserStore.addHistory(title || url, url);
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+app.delete('/api/browser/history', async (_req, res, next) => {
+  try { await browserStore.clearHistory(); res.json({ ok: true }); } catch (e) { next(e); }
+});
+app.get('/api/browser/bookmarks', async (_req, res, next) => {
+  try { res.json({ ok: true, items: await browserStore.listBookmarks() }); } catch (e) { next(e); }
+});
+app.post('/api/browser/bookmarks', async (req, res, next) => {
+  try {
+    const url = String((req.body && req.body.url) || '').trim();
+    const title = String((req.body && req.body.title) || url).slice(0, 300);
+    if (!/^https?:\/\//i.test(url) || url.length > 4096) return res.status(400).json({ ok: false, error: 'Invalid URL' });
+    res.json({ ok: true, item: await browserStore.addBookmark(title || url, url) });
+  } catch (e) { next(e); }
+});
+app.delete('/api/browser/bookmarks/:id', async (req, res, next) => {
+  try { await browserStore.removeBookmark(req.params.id); res.json({ ok: true }); } catch (e) { next(e); }
+});
+
 // Legacy parse stub
 app.get('/api/browser/parse', (req, res) => {
   const url = String((req.query && req.query.url) || '').trim();

@@ -17,7 +17,10 @@
     theme: localStorage.getItem('solo_theme') || 'rainbow',
     readerOn: false,
     url: '',
-    history: []
+    history: [],
+    tabs: [],
+    activeTabId: null,
+    libraryMode: 'bookmarks'
   };
 
   function applyTheme() {
@@ -32,6 +35,10 @@
     if (input) {
       input.placeholder = state.lang === 'vi' ? 'Tìm kiếm hoặc nhập địa chỉ' : 'Search or enter address';
     }
+    const title = $('library-title'); if (title) title.textContent = state.lang === 'vi' ? 'Thư viện' : 'Library';
+    const libraryButtons = document.querySelectorAll('[data-library]');
+    libraryButtons.forEach(b => { b.textContent = state.lang === 'vi' ? (b.dataset.library === 'bookmarks' ? '☆ Dấu trang' : '◷ Lịch sử') : (b.dataset.library === 'bookmarks' ? '☆ Bookmarks' : '◷ History'); });
+    const clear = $('history-clear'); if (clear) clear.textContent = state.lang === 'vi' ? 'Xóa lịch sử' : 'Clear history';
   }
 
 
@@ -115,11 +122,78 @@
     if (startScreen) startScreen.classList.remove('hidden');
   }
 
+  function getActiveTab() { return state.tabs.find(t => t.id === state.activeTabId) || null; }
+  function renderTabs() {
+    const strip = $('tab-strip'); if (!strip) return;
+    strip.textContent = '';
+    state.tabs.forEach(tab => {
+      const item = document.createElement('div'); item.className = 'browser-tab' + (tab.id === state.activeTabId ? ' active' : '');
+      const select = document.createElement('button'); select.type = 'button'; select.className = 'browser-tab-select';
+      let hostLabel = ''; try { hostLabel = tab.url ? new URL(tab.url).hostname : ''; } catch (_) {}
+      select.textContent = tab.title || hostLabel || (state.lang === 'vi' ? 'Tab mới' : 'New tab');
+      select.title = tab.url || select.textContent; select.addEventListener('click', () => switchTab(tab.id));
+      const close = document.createElement('button'); close.type = 'button'; close.className = 'browser-tab-close'; close.textContent = '×'; close.title = state.lang === 'vi' ? 'Đóng tab' : 'Close tab';
+      close.addEventListener('click', e => { e.stopPropagation(); closeTab(tab.id); });
+      item.append(select, close); strip.appendChild(item);
+    });
+    try { sessionStorage.setItem('solo_tabs_v1', JSON.stringify({ tabs: state.tabs, activeTabId: state.activeTabId })); } catch (_) {}
+  }
+  function newTab(url) {
+    const tab = { id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: state.lang === 'vi' ? 'Tab mới' : 'New tab', url: '' };
+    state.tabs.push(tab); state.activeTabId = tab.id; renderTabs();
+    if (url) navigate(url); else { state.url = ''; if (input) input.value = ''; if (frame) frame.src = 'about:blank'; showStart(); }
+  }
+  function switchTab(id) {
+    const tab = state.tabs.find(t => t.id === id); if (!tab) return;
+    state.activeTabId = id; state.url = tab.url || ''; renderTabs();
+    if (input) input.value = state.url; if (btnOpen) btnOpen.href = state.url || '#';
+    if (state.url && frame) { frame.src = isDirectEmbed(state.url) ? state.url : proxyFrameUrl(state.url); hideStart(); }
+    else { if (frame) frame.src = 'about:blank'; showStart(); }
+  }
+  function closeTab(id) {
+    const index = state.tabs.findIndex(t => t.id === id); if (index < 0) return;
+    const wasActive = state.activeTabId === id; state.tabs.splice(index, 1);
+    if (!state.tabs.length) { newTab(); return; }
+    if (wasActive) switchTab(state.tabs[Math.min(index, state.tabs.length - 1)].id); else renderTabs();
+  }
+  async function saveVisit(url) {
+    if (!url || !/^https?:/i.test(url)) return;
+    const tab = getActiveTab(); if (tab) { tab.url = url; try { tab.title = new URL(url).hostname; } catch (_) {} renderTabs(); }
+    try { await fetch('/api/browser/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, title: (tab && tab.title) || url }) }); } catch (_) {}
+  }
+  async function addCurrentBookmark() {
+    if (!state.url || !/^https?:/i.test(state.url)) return;
+    try {
+      const tab = getActiveTab(); const r = await fetch('/api/browser/bookmarks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url: state.url, title: (tab && tab.title) || state.url }) });
+      if (r.ok) { const b = $('btn-bookmark'); if (b) { b.textContent = '★'; setTimeout(() => { b.textContent = '☆'; }, 1000); } }
+    } catch (_) {}
+  }
+  async function openLibrary(mode) {
+    state.libraryMode = mode || state.libraryMode;
+    const overlay = $('library-overlay'); if (overlay) overlay.hidden = false;
+    document.querySelectorAll('[data-library]').forEach(b => b.classList.toggle('active', b.dataset.library === state.libraryMode));
+    const list = $('library-list'); if (!list) return; list.textContent = state.lang === 'vi' ? 'Đang tải…' : 'Loading…';
+    try {
+      const res = await fetch('/api/browser/' + state.libraryMode); const data = await res.json(); list.textContent = '';
+      if (!data.items || !data.items.length) { list.textContent = state.lang === 'vi' ? 'Chưa có mục nào.' : 'Nothing here yet.'; return; }
+      data.items.forEach(item => {
+        const row = document.createElement('div'); row.className = 'library-item';
+        const go = document.createElement('button'); go.type = 'button'; go.className = 'library-open'; go.textContent = item.title || item.url; go.title = item.url; go.addEventListener('click', () => { const overlay = $('library-overlay'); if (overlay) overlay.hidden = true; navigate(item.url); });
+        const sub = document.createElement('span'); sub.className = 'library-url'; sub.textContent = item.url;
+        row.append(go, sub);
+        if (state.libraryMode === 'bookmarks') { const del = document.createElement('button'); del.type = 'button'; del.className = 'library-delete'; del.textContent = '×'; del.title = state.lang === 'vi' ? 'Xóa dấu trang' : 'Remove bookmark'; del.addEventListener('click', async () => { await fetch('/api/browser/bookmarks/' + encodeURIComponent(item.id), { method: 'DELETE' }); openLibrary('bookmarks'); }); row.appendChild(del); }
+        list.appendChild(row);
+      });
+    } catch (_) { list.textContent = state.lang === 'vi' ? 'Không tải được dữ liệu.' : 'Could not load library.'; }
+  }
+
   function navigate(raw) {
     let url = normalizeUrl(raw);
     if (!url || !frame) return;
     url = toPlayableUrl(url);
     state.url = url;
+    const active = getActiveTab(); if (active) { active.url = url; try { active.title = new URL(url).hostname; } catch (_) {} renderTabs(); }
+    saveVisit(url);
     state.readerOn = false;
     // Omnibox shows the real site URL; iframe loads via same-origin proxy (or direct embed)
     if (input) input.value = url;
@@ -209,10 +283,17 @@
       try {
         const href = frame.contentWindow && frame.contentWindow.location && frame.contentWindow.location.href;
         if (href && href !== 'about:blank' && !href.startsWith('about:')) {
-          state.url = href;
-          if (input) input.value = href;
-          if (btnOpen) btnOpen.href = href;
+          let realHref = href;
+          try {
+            const current = new URL(href);
+            if (current.pathname === '/api/proxy') realHref = current.searchParams.get('url') || href;
+          } catch (_) {}
+          state.url = realHref;
+          const active = getActiveTab(); if (active) { active.url = realHref; try { active.title = new URL(realHref).hostname; } catch (_) {} renderTabs(); }
+          if (input) input.value = realHref;
+          if (btnOpen) btnOpen.href = realHref;
           hideStart();
+          saveVisit(realHref);
         }
       } catch (_) {
         // cross-origin — still hide start; page may be visible in frame
@@ -220,6 +301,17 @@
       }
     });
   }
+
+  if ($('btn-new-tab')) $('btn-new-tab').addEventListener('click', () => newTab());
+  if ($('btn-bookmark')) $('btn-bookmark').addEventListener('click', addCurrentBookmark);
+  if ($('btn-library')) $('btn-library').addEventListener('click', () => openLibrary('bookmarks'));
+  if ($('library-close')) $('library-close').addEventListener('click', () => { $('library-overlay').hidden = true; });
+  document.querySelectorAll('[data-library]').forEach(b => b.addEventListener('click', () => openLibrary(b.dataset.library)));
+  if ($('history-clear')) $('history-clear').addEventListener('click', async () => {
+    if (state.libraryMode !== 'history') return;
+    try { await fetch('/api/browser/history', { method: 'DELETE' }); openLibrary('history'); } catch (_) {}
+  });
+  if ($('library-overlay')) $('library-overlay').addEventListener('click', e => { if (e.target === $('library-overlay')) $('library-overlay').hidden = true; });
 
   const form = $('nav-form');
   if (form) form.addEventListener('submit', (e) => {
@@ -256,12 +348,19 @@
 
   applyTheme();
   applyLang();
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('solo_tabs_v1') || 'null');
+    if (saved && Array.isArray(saved.tabs) && saved.tabs.length) { state.tabs = saved.tabs.slice(0, 12); state.activeTabId = saved.activeTabId; if (!getActiveTab()) state.activeTabId = state.tabs[0].id; }
+  } catch (_) {}
+  if (!state.tabs.length) { state.tabs = [{ id: 't' + Date.now().toString(36), title: state.lang === 'vi' ? 'Tab mới' : 'New tab', url: '' }]; state.activeTabId = state.tabs[0].id; }
+  renderTabs();
   showStart();
 
   try {
     const q = new URLSearchParams(location.search).get('url');
     if (q) navigate(q);
+    else { const active = getActiveTab(); if (active && active.url) navigate(active.url); }
   } catch (_) {}
 
-  window.SoloBrowser = { navigate, extractPage, aiProcess, state };
+  window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary };
 })();

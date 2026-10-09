@@ -1,8 +1,14 @@
-# SoloHost Browser 8.0 — Phase 1: Chromium Reader Engine
+# SoloHost Browser v9.0.7 — Lightweight WebView Browser
 
-A lightweight, private, bilingual (English + Tiếng Việt) browser for Pi SoloHost with an optional AI assistant.
+A lightweight bilingual (English + Vietnamese) browser shell for Pi Network SoloHost with multi-tab controls, persistent bookmarks/history and an optional Universal AI assistant.
 
-**Phase 1** replaces the native WebKitGTK engine and the Xvfb/x11vnc/noVNC pixel stream with **headless Chromium (Playwright)** plus **Mozilla Readability**. Every page is rendered by Chromium (JavaScript included), cleaned into a readable article, and shown in the existing SoloHost shell through Reader mode.
+> **Engine status:** this version remains a WebView/iframe + HTML proxy. It is not a full embedded Chromium browser. See `V9.0.7_BROWSER_CORE_REPORT.md` for implemented features and limitations.
+
+## Browser core (v9.0.7)
+- `＋` opens a tab; tap a tab to switch and `×` to close. Tab list is restored for the current browser session.
+- `☆` bookmarks the current page; `☷` opens Bookmarks/History. Bookmarks persist in app data; history can be cleared.
+- History/bookmark APIs: `GET/POST /api/browser/history`, `DELETE /api/browser/history`, `GET/POST /api/browser/bookmarks`, `DELETE /api/browser/bookmarks/:id`.
+- Cookie editing/isolation and full authenticated-site compatibility are not guaranteed by the proxy architecture. Use `↗` for sites requiring a full browser session.
 
 ## Runtime
 - Node.js shell/API (unchanged): tabs, bookmarks, history, downloads, security policy, SoloHost app catalog

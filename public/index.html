@@ -21,6 +21,9 @@
       <button type="submit" class="icon-btn go" id="btn-go" title="Go" aria-label="Go">→</button>
     </form>
     <div class="chrome-actions">
+      <button type="button" class="icon-btn" id="btn-bookmark" title="Bookmark" aria-label="Bookmark">☆</button>
+      <button type="button" class="icon-btn" id="btn-library" title="History and bookmarks" aria-label="History and bookmarks">☷</button>
+      <button type="button" class="icon-btn" id="btn-new-tab" title="New tab" aria-label="New tab">＋</button>
       <button type="button" class="icon-btn" id="btn-reader" title="Reader" aria-label="Reader">📖</button>
       <button type="button" class="icon-btn" id="btn-summary" title="Summarize" aria-label="Summarize">⚡</button>
       <button type="button" class="icon-btn" id="btn-translate" title="Translate" aria-label="Translate">🌐</button>
@@ -30,6 +33,7 @@
     </div>
   </header>
 
+  <nav class="tab-strip" id="tab-strip" aria-label="Browser tabs"></nav>
   <main class="viewport" id="viewport">
     <iframe
       id="main-webview"
@@ -48,6 +52,15 @@
       </div>
     </div>
   </main>
+
+  <div class="library-overlay" id="library-overlay" hidden>
+    <section class="library-panel" role="dialog" aria-modal="true" aria-labelledby="library-title">
+      <header class="library-header"><strong id="library-title">Library</strong><button type="button" id="library-close" class="icon-btn" aria-label="Close">×</button></header>
+      <div class="library-tabs"><button type="button" data-library="bookmarks" class="active">☆ Bookmarks</button><button type="button" data-library="history">◷ History</button></div>
+      <div id="library-list" class="library-list"></div>
+      <footer class="library-footer"><button type="button" id="history-clear">Clear history</button></footer>
+    </section>
+  </div>
 
   <!-- Universal AI FAB + Panel (Snake Arcade pattern) -->
   <button type="button" class="ai-fab" id="aiFab" title="AI · Feedback · Settings" aria-label="AI">

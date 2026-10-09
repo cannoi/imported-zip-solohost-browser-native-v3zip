@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "9.0.6-universal-ai",
+  "version": "9.0.7-browser-core",
   "description": "SoloHost Browser \u2014 100% client WebView + lightweight AI gateway",
   "main": "server.js",
   "engines": {
