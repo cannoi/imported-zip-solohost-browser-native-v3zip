@@ -75,9 +75,10 @@ async function handleBrowserParse(req, res) {
   const target = String((req.query && req.query.url) || '').trim();
   try {
     const out = await browserGateway.parseUrl(target, {
-      acceptLanguage: req.get ? (req.get('accept-language') || '') : (req.headers['accept-language'] || '')
+      acceptLanguage: req.get ? (req.get('accept-language') || '') : (req.headers['accept-language'] || ''),
+      timeoutMs: browserGateway.EXTRACT_TIMEOUT_MS || 30000
     });
-    res.status(200).json(out);
+    return res.status(200).json(out);
   } catch (err) {
     const map = {
       INVALID_URL: 400,
@@ -86,13 +87,15 @@ async function handleBrowserParse(req, res) {
       BUSY: 429,
       NAVIGATION_TIMEOUT: 504,
       HTTP_ERROR: 502,
-      DEPENDENCY_MISSING: 503
+      DEPENDENCY_MISSING: 503,
+      CLOSED: 503
     };
     const status = map[err.code] || err.httpStatus || 502;
-    res.status(status).json({
+    // Always JSON error — never throw to crash the process
+    return res.status(status).json({
       success: false,
       url: target || null,
-      error: String(err.message || err),
+      error: String(err.message || err || 'Extract failed'),
       code: err.code || 'EXTRACT_FAILED'
     });
   }
@@ -567,6 +570,8 @@ async function shutdown(signal) {
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(0), 3000).unref();
 }
+process.on('uncaughtException', (err) => { console.error('[uncaught]', err && err.message); });
+process.on('unhandledRejection', (err) => { console.error('[unhandled]', err && (err.message || err)); });
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
 

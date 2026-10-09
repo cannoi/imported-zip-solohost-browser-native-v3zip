@@ -1,0 +1,17 @@
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const root = path.join(__dirname, '..', '..');
+const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+const css = fs.readFileSync(path.join(root, 'public/style.css'), 'utf8');
+assert.ok(!/<canvas/i.test(html));
+assert.ok(!/novnc|vnc\.html|browser-canvas/i.test(html));
+assert.ok(html.includes('id="reader-view"'));
+assert.ok(html.includes('id="media-player-container"'));
+assert.ok(html.includes('id="url-input"'));
+assert.ok(app.includes('/api/browser/parse'));
+assert.ok(app.includes('clean_html'));
+assert.ok(css.includes('--reader-scale'));
+assert.ok(css.includes('data-theme'));
+console.log('PASS reader-ui');

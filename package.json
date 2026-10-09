@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "8.1.0-phase2-api",
-  "description": "SoloHost Browser \u2014 Express JSON API Gateway + Headless Chromium extract",
+  "version": "8.2.0-reader-ui",
+  "description": "SoloHost Browser \u2014 Native Reader UI + Chromium extract API",
   "main": "server.js",
   "engines": {
     "node": ">=18"
@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node server.js",
     "smoke:extract": "node scripts/smoke-extract.js",
-    "test": "node test.js && node tests/browser/architecture.test.js && node tests/browser/navigation-policy.test.js && node tests/browser/file-protocol.test.js && node tests/browser/media-engine.test.js && node --check server.js && node --check browser-gateway.js && node --check public/app.js && node tests/browser/security-policy.test.js && node tests/browser/performance.test.js && node --check lib/performance-monitor.js && node --check scripts/benchmark.js && node --check scripts/smoke-extract.js && node tests/browser/content-extractor.test.js && node tests/browser/chromium-engine.test.js && node tests/browser/reader-view.test.js && node --check lib/ai-agent.js && node tests/browser/ai-assistant.test.js && node tests/browser/api-gateway.test.js"
+    "test": "node test.js && node tests/browser/architecture.test.js && node tests/browser/navigation-policy.test.js && node tests/browser/file-protocol.test.js && node tests/browser/media-engine.test.js && node --check server.js && node --check browser-gateway.js && node --check public/app.js && node tests/browser/security-policy.test.js && node tests/browser/performance.test.js && node --check lib/performance-monitor.js && node --check scripts/benchmark.js && node --check scripts/smoke-extract.js && node tests/browser/content-extractor.test.js && node tests/browser/chromium-engine.test.js && node tests/browser/reader-view.test.js && node --check lib/ai-agent.js && node tests/browser/ai-assistant.test.js && node tests/browser/api-gateway.test.js && node tests/browser/reader-ui.test.js"
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",

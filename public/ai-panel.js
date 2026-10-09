@@ -60,13 +60,14 @@ function setFabVisible(visible) {
   fab.style.display = visible ? '' : 'none';
 }
 function gameContext() {
-  const browsing = document.body.classList.contains('browsing');
-  const input = document.getElementById('search-input');
+  const input = document.getElementById('url-input');
+  const title = document.getElementById('meta-title');
+  const reader = document.getElementById('reader');
   return {
-    screen: browsing ? 'browser' : 'home',
+    screen: reader && !reader.hidden ? 'reader' : 'home',
     url: input && input.value ? input.value : '',
-    title: document.title || 'SoloHost Browser',
-    engine: 'webkit'
+    title: (title && title.textContent) || document.title || 'SoloHost Browser',
+    engine: 'chromium-extract'
   };
 }
 function executeActions(actions) {

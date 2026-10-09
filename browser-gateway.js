@@ -1,18 +1,22 @@
 'use strict';
 
 /**
- * SoloHost Browser API Gateway (Phase 2).
- * Structured JSON for clients — no pixel/WebSocket frame streaming.
+ * SoloHost Browser API Gateway (Phase 2/3).
+ * Structured JSON for the Native Reader client — no pixel streaming.
  */
 
 const engine = require('./lib/engine-adapter');
 const engineControl = require('./lib/engine-control');
 const { ContentExtractor, ExtractorError } = require('./lib/content-extractor');
 
+const EXTRACT_TIMEOUT_MS = Math.max(5000, Math.min(30000, Number(process.env.SOLOHOST_NAV_TIMEOUT_MS || 30000)));
+
 let sharedExtractor = null;
 
 function getExtractor() {
-  if (!sharedExtractor) sharedExtractor = new ContentExtractor();
+  if (!sharedExtractor) {
+    sharedExtractor = new ContentExtractor({ timeoutMs: EXTRACT_TIMEOUT_MS });
+  }
   return sharedExtractor;
 }
 
@@ -63,6 +67,15 @@ function toParseSchema(raw) {
   };
 }
 
+function errorPayload(err, url) {
+  return {
+    success: false,
+    url: url || null,
+    error: String((err && err.message) || err || 'Extract failed'),
+    code: (err && err.code) || 'EXTRACT_FAILED'
+  };
+}
+
 function isValidHttpUrl(value) {
   try {
     const u = new URL(String(value || '').trim());
@@ -72,6 +85,10 @@ function isValidHttpUrl(value) {
   }
 }
 
+/**
+ * Parse URL → structured article. Never throws to callers that use safeParse;
+ * parseUrl still throws for Express status mapping but always with code.
+ */
 async function parseUrl(url, options = {}) {
   const target = String(url || '').trim();
   if (!target) {
@@ -87,7 +104,10 @@ async function parseUrl(url, options = {}) {
     throw err;
   }
   try {
-    const raw = await getExtractor().extract(target, options);
+    const raw = await getExtractor().extract(target, {
+      ...options,
+      timeoutMs: Math.min(EXTRACT_TIMEOUT_MS, options.timeoutMs || EXTRACT_TIMEOUT_MS)
+    });
     return toParseSchema(raw);
   } catch (err) {
     if (err instanceof ExtractorError || err.code) {
@@ -96,7 +116,17 @@ async function parseUrl(url, options = {}) {
       e.httpStatus = err.httpStatus || undefined;
       throw e;
     }
-    throw err;
+    const e = new Error(String(err.message || err));
+    e.code = 'EXTRACT_FAILED';
+    throw e;
+  }
+}
+
+async function safeParse(url, options = {}) {
+  try {
+    return await parseUrl(url, options);
+  } catch (err) {
+    return errorPayload(err, url);
   }
 }
 
@@ -129,7 +159,8 @@ async function chromiumHealth() {
       path: chromiumPath,
       error: error || snap.error || null,
       tabs: snap.tabs || [],
-      restarts: snap.restarts || 0
+      restarts: snap.restarts || 0,
+      extractTimeoutMs: EXTRACT_TIMEOUT_MS
     },
     gateway: 'json-api',
     pixelStream: false,
@@ -160,30 +191,18 @@ function install(server) {
       ws.on('message', async (data) => {
         let msg = {};
         try { msg = JSON.parse(String(data)); } catch { return; }
-        if (msg.type === 'mouse' || msg.type === 'key' || msg.type === 'wheel' || msg.type === 'frame') {
-          return;
-        }
+        if (msg.type === 'mouse' || msg.type === 'key' || msg.type === 'wheel' || msg.type === 'frame') return;
         try {
           const out = await engineControl.handle(msg);
           if (out && out.url) {
-            ws.send(JSON.stringify({
-              type: 'tab',
-              event: 'state',
-              id: msg.id,
-              url: out.url,
-              title: out.title || ''
-            }));
+            ws.send(JSON.stringify({ type: 'tab', event: 'state', id: msg.id, url: out.url, title: out.title || '' }));
           }
           if (out && out.state) {
             ws.send(JSON.stringify({ type: 'browser-state', state: out.state }));
           }
         } catch (err) {
           const fatal = msg.type === 'create' || msg.type === 'navigate';
-          ws.send(JSON.stringify({
-            type: fatal ? 'error' : 'warn',
-            layer: 'engine',
-            error: err.message
-          }));
+          ws.send(JSON.stringify({ type: fatal ? 'error' : 'warn', layer: 'engine', error: err.message }));
         }
       });
     });
@@ -216,8 +235,11 @@ module.exports = {
   pageSnapshot,
   navigate,
   parseUrl,
+  safeParse,
   chromiumHealth,
   toParseSchema,
+  errorPayload,
   isValidHttpUrl,
+  EXTRACT_TIMEOUT_MS,
   startCore: () => engine.start()
 };
