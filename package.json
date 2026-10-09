@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "8.3.2-extract-quality",
-  "description": "SoloHost Browser \u2014 Reader extract + AI summarize/translate/ask",
+  "version": "8.4.0-hybrid-routing",
+  "description": "SoloHost Browser \u2014 Hybrid READER/EMBED/WEBVIEW routing",
   "main": "server.js",
   "engines": {
     "node": ">=18"
@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node server.js",
     "smoke:extract": "node scripts/smoke-extract.js",
-    "test": "node test.js && node tests/browser/architecture.test.js && node tests/browser/navigation-policy.test.js && node tests/browser/file-protocol.test.js && node tests/browser/media-engine.test.js && node --check server.js && node --check browser-gateway.js && node --check public/app.js && node tests/browser/security-policy.test.js && node tests/browser/performance.test.js && node --check lib/performance-monitor.js && node --check scripts/benchmark.js && node --check scripts/smoke-extract.js && node tests/browser/content-extractor.test.js && node tests/browser/chromium-engine.test.js && node tests/browser/reader-view.test.js && node --check lib/ai-agent.js && node tests/browser/ai-assistant.test.js && node tests/browser/api-gateway.test.js && node tests/browser/reader-ui.test.js && node tests/browser/ai-article.test.js && node tests/browser/extract-quality.test.js"
+    "test": "node test.js && node tests/browser/architecture.test.js && node tests/browser/navigation-policy.test.js && node tests/browser/file-protocol.test.js && node tests/browser/media-engine.test.js && node --check server.js && node --check browser-gateway.js && node --check public/app.js && node tests/browser/security-policy.test.js && node tests/browser/performance.test.js && node --check lib/performance-monitor.js && node --check scripts/benchmark.js && node --check scripts/smoke-extract.js && node tests/browser/content-extractor.test.js && node tests/browser/chromium-engine.test.js && node tests/browser/reader-view.test.js && node --check lib/ai-agent.js && node tests/browser/ai-assistant.test.js && node tests/browser/api-gateway.test.js && node tests/browser/reader-ui.test.js && node tests/browser/ai-article.test.js && node tests/browser/extract-quality.test.js && node tests/browser/hybrid-routing.test.js"
   },
   "dependencies": {
     "@mozilla/readability": "^0.5.0",

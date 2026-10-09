@@ -182,21 +182,71 @@
     els.mediaVideo.src = preferred.src;
   }
 
+
   function renderArticle(data) {
+    const mode = String(data.mode || 'READER').toUpperCase();
     const meta = data.metadata || {};
     const content = data.content || {};
+    const d = data.data || {};
+
     if (els.metaSite) els.metaSite.textContent = meta.siteName || (data.url ? (() => { try { return new URL(data.url).hostname; } catch { return ''; } })() : '');
     if (els.metaTitle) els.metaTitle.textContent = meta.title || data.url || '';
     if (els.metaByline) els.metaByline.textContent = meta.byline || '';
     if (els.metaTime) {
-      const mins = content.reading_time_minutes || 0;
-      els.metaTime.textContent = mins ? ` · ${mins} ${T.min}` : '';
+      const mins = content.reading_time_minutes || d.reading_time_min || 0;
+      els.metaTime.textContent = mins ? (' · ' + mins + ' ' + T.min) : '';
     }
+
+    destroyMedia();
+
+    if (mode === 'EMBED' && (d.embed_url || (data.media && data.media.videos && data.media.videos[0]))) {
+      const embed = d.embed_url || '';
+      if (els.view) {
+        els.view.innerHTML =
+          '<div class="embed-frame-wrap">' +
+          '<iframe class="embed-frame" src="' + embed.replace(/"/g, '&quot;') + '" title="Media" ' +
+          'allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" ' +
+          'allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe></div>';
+      }
+      if (els.mediaBox) els.mediaBox.hidden = true;
+      showReader();
+      document.title = (meta.title ? meta.title + ' · ' : '') + 'SoloHost';
+      return;
+    }
+
+    if (mode === 'WEBVIEW') {
+      const reason = (d.reason || (data.diagnostics && data.diagnostics.intent_reason) || 'LOGIN_OR_COMPLEX_APP');
+      const note = lang === 'vi'
+        ? 'Trang này cần đăng nhập hoặc tương tác phức tạp. SoloHost mở liên kết trên phiên của bạn (WebView / tab mới) để giữ cookie an toàn trên máy thật.'
+        : 'This site needs login or complex interaction. SoloHost opens it in your session (new tab) so cookies stay on your device.';
+      if (els.view) {
+        els.view.innerHTML =
+          '<div class="webview-panel">' +
+          '<p class="challenge-banner"><strong>↗ WEBVIEW</strong> — ' + note + '</p>' +
+          '<p class="lede">' + (meta.title || data.url || '') + '</p>' +
+          '<p><button type="button" class="btn primary" id="btn-open-external">Open page</button></p>' +
+          '<p class="lede" style="font-size:13px;opacity:.75">Reason: ' + String(reason).replace(/</g,'') + '</p>' +
+          '</div>';
+        const b = document.getElementById('btn-open-external');
+        if (b) b.addEventListener('click', () => {
+          try { window.open(data.url, '_blank', 'noopener,noreferrer'); } catch (_) {}
+        });
+      }
+      // Auto-open once for convenience
+      try { window.open(data.url, '_blank', 'noopener,noreferrer'); } catch (_) {}
+      showReader();
+      document.title = (meta.title ? meta.title + ' · ' : '') + 'SoloHost';
+      return;
+    }
+
+    // READER (default)
     if (els.view) {
-      if (content.clean_html) {
-        els.view.innerHTML = content.clean_html;
-      } else if (content.raw_text) {
-        els.view.innerHTML = '<p>' + String(content.raw_text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'</p><p>') + '</p>';
+      const html = d.clean_html || content.clean_html || '';
+      const text = d.raw_text || content.raw_text || '';
+      if (html) {
+        els.view.innerHTML = html;
+      } else if (text) {
+        els.view.innerHTML = '<p>' + String(text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'</p><p>') + '</p>';
       } else {
         els.view.innerHTML = '<p class="lede">' + T.empty + '</p><p><a href="' + (data.url || '#') + '" target="_blank" rel="noopener">' + (data.url || '') + '</a></p>';
       }
@@ -204,8 +254,8 @@
     if (data.challenge || (data.diagnostics && data.diagnostics.challenge)) {
       const ch = data.challenge || data.diagnostics.challenge;
       const note = (lang === 'vi')
-        ? ('Trang yêu cầu xác minh người dùng (CAPTCHA). Trình duyệt headless không vượt được kiểm tra này. IP máy chủ: có thể bị Google đánh dấu lưu lượng bất thường.')
-        : (ch.message || 'This site requires a human CAPTCHA check. Headless extraction cannot pass it.');
+        ? ('Trang yêu cầu xác minh người dùng (CAPTCHA). Trình duyệt headless không vượt được kiểm tra này.')
+        : (ch.message || 'This site requires a human CAPTCHA check.');
       if (els.view) {
         els.view.innerHTML = '<div class="challenge-banner"><strong>⚠</strong> ' + note + '</div>' + (els.view.innerHTML || '');
       }
@@ -255,8 +305,9 @@
       window.__soloArticle = {
         url: data.url || url,
         title: (data.metadata && data.metadata.title) || '',
-        raw_text: (data.content && data.content.raw_text) || '',
-        clean_html: (data.content && data.content.clean_html) || ''
+        raw_text: (data.data && data.data.raw_text) || (data.content && data.content.raw_text) || '',
+        clean_html: (data.data && data.data.clean_html) || (data.content && data.content.clean_html) || '',
+        mode: data.mode || 'READER'
       };
       renderArticle(data);
       try {

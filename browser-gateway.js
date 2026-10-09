@@ -35,18 +35,23 @@ function mapMedia(list) {
 }
 
 function toParseSchema(raw) {
+  const mode = String(raw.mode || (raw.kind === 'embed' ? 'EMBED' : raw.kind === 'webview' ? 'WEBVIEW' : 'READER')).toUpperCase();
   const media = mapMedia(raw.media);
-  return {
+  const lang = raw.lang || 'en';
+  const base = {
     success: true,
+    mode,
     url: raw.final_url || raw.url,
+    lang,
     metadata: {
       title: raw.title || '',
       byline: raw.author || '',
       siteName: raw.site_name || '',
       favicon: raw.favicon || '',
-      publishedAt: raw.published_at || null,
-      lang: raw.lang || null
+      publishedAt: raw.published_at || null
     },
+    data: {},
+    // Back-compat for older Reader clients
     content: {
       clean_html: raw.clean_html || '',
       raw_text: raw.raw_text || '',
@@ -59,15 +64,36 @@ function toParseSchema(raw) {
     diagnostics: {
       http_status: raw.http_status || null,
       content_type: raw.content_type || null,
-      kind: raw.kind || 'html',
+      kind: raw.kind || mode.toLowerCase(),
       duration_ms: raw.duration_ms || null,
       truncated: !!raw.truncated,
       extracted_at: raw.extracted_at || null,
       challenge: raw.challenge || null,
-      used_fallback: !!raw.used_fallback
+      used_fallback: !!raw.used_fallback,
+      intent_reason: raw.intent_reason || null
     },
     challenge: raw.challenge || null
   };
+
+  if (mode === 'EMBED') {
+    base.data = {
+      embed_url: raw.embed_url || '',
+      platform: raw.platform || '',
+      videoId: raw.videoId || null
+    };
+  } else if (mode === 'WEBVIEW') {
+    base.data = {
+      webview_required: true,
+      reason: raw.intent_reason || 'LOGIN_OR_COMPLEX_APP'
+    };
+  } else {
+    base.data = {
+      clean_html: raw.clean_html || '',
+      raw_text: raw.raw_text || '',
+      reading_time_min: Number(raw.reading_minutes) || 0
+    };
+  }
+  return base;
 }
 
 function errorPayload(err, url) {
