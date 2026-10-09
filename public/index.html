@@ -1,54 +1,59 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="rainbow">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark light">
   <title>SoloHost Browser</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/ai-panel.css">
-  <style>
-    .wv-stage{display:flex;flex-direction:column;flex:1;min-height:0;height:calc(100vh - 56px)}
-    #main-webview{flex:1;width:100%;border:0;background:#fff;min-height:50vh}
-    .wv-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line, #333)}
-    .wv-toolbar .url-form{flex:1;display:flex;gap:8px;min-width:200px}
-    .wv-toolbar input[type="text"]{flex:1;min-width:0}
-    .wv-hint{font-size:12px;opacity:.7;padding:6px 12px}
-    .wv-actions{display:flex;flex-wrap:wrap;gap:6px}
-  </style>
 </head>
-<body>
-  <header class="topbar">
-    <div class="brand">SoloHost</div>
-    <div class="wv-toolbar" style="flex:1;border:0;padding:0 8px">
-      <form class="url-form" id="nav-form" action="javascript:void(0)">
-        <input type="text" id="url-input" placeholder="Search or enter website" autocomplete="off" enterkeyhint="go">
-        <button type="submit" class="btn primary" id="btn-go">Go</button>
-      </form>
-      <div class="wv-actions">
-        <button type="button" class="btn" id="btn-back" title="Back">←</button>
-        <button type="button" class="btn" id="btn-fwd" title="Forward">→</button>
-        <button type="button" class="btn" id="btn-reload" title="Reload">↻</button>
-        <button type="button" class="btn" id="btn-reader" title="Reader Mode">📖</button>
-        <button type="button" class="btn" id="btn-summary" title="Summarize">⚡</button>
-        <button type="button" class="btn" id="btn-translate" title="Translate">🌐</button>
-        <button type="button" class="btn" id="btn-lang" title="Language">EN</button>
-        <a class="btn" id="btn-open-tab" href="#" target="_blank" rel="noopener">↗</a>
-      </div>
+<body class="browser-shell">
+  <header class="chrome" role="banner">
+    <div class="chrome-nav">
+      <button type="button" class="icon-btn" id="btn-back" title="Back" aria-label="Back">←</button>
+      <button type="button" class="icon-btn" id="btn-fwd" title="Forward" aria-label="Forward">→</button>
+      <button type="button" class="icon-btn" id="btn-reload" title="Reload" aria-label="Reload">↻</button>
+    </div>
+    <form class="omnibox" id="nav-form" action="javascript:void(0)" autocomplete="off">
+      <span class="omnibox-lock" aria-hidden="true">◎</span>
+      <input type="text" id="url-input" placeholder="Search or enter address" spellcheck="false" enterkeyhint="go">
+      <button type="submit" class="icon-btn go" id="btn-go" title="Go" aria-label="Go">→</button>
+    </form>
+    <div class="chrome-actions">
+      <button type="button" class="icon-btn" id="btn-reader" title="Reader" aria-label="Reader">📖</button>
+      <button type="button" class="icon-btn" id="btn-summary" title="Summarize" aria-label="Summarize">⚡</button>
+      <button type="button" class="icon-btn" id="btn-translate" title="Translate" aria-label="Translate">🌐</button>
+      <button type="button" class="icon-btn" id="btn-theme" title="Theme" aria-label="Theme">◐</button>
+      <button type="button" class="icon-btn" id="btn-lang" title="Language" aria-label="Language">EN</button>
+      <a class="icon-btn" id="btn-open-tab" href="#" target="_blank" rel="noopener noreferrer" title="Open" aria-label="Open">↗</a>
     </div>
   </header>
-  <p class="wv-hint" id="wv-hint">Client WebView — pages open in the frame. Cross-origin sites may require ↗ Open tab for login &amp; AI extract.</p>
-  <div class="wv-stage">
-    <iframe id="main-webview" name="main-webview" title="WebView" src="about:blank"
-      referrerpolicy="no-referrer-when-downgrade"
-      sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-presentation allow-top-navigation-by-user-activation"></iframe>
-  </div>
 
-  <button type="button" class="ai-fab" id="aiFab" title="AI · Feedback · Settings" aria-label="AI">
-    <img src="/ai-icon.png" alt="AI" class="ai-fab-img">
+  <main class="viewport" id="viewport">
+    <iframe
+      id="main-webview"
+      name="main-webview"
+      title="Page"
+      src="about:blank"
+      referrerpolicy="no-referrer-when-downgrade"
+      allow="accelerometer; autoplay; clipboard-read; clipboard-write; encrypted-media; fullscreen; geolocation; microphone; camera; payment; picture-in-picture"
+    ></iframe>
+    <div class="start-screen" id="start-screen">
+      <div class="start-inner">
+        <div class="start-mark">S</div>
+        <h1>SoloHost</h1>
+        <p id="start-sub">Simple · Private · Lightweight</p>
+      </div>
+    </div>
+  </main>
+
+  <button type="button" class="ai-fab" id="aiFab" title="AI" aria-label="AI">
+    <img src="/ai-icon.png" alt="" class="ai-fab-img">
     <span class="ai-fab-dot" id="aiStatusDot"></span>
     <span class="ai-badge" id="aiBadge" hidden style="display:none"></span>
   </button>
-  <div class="panel-overlay" id="aiOverlay" hidden style="z-index:400">
+  <div class="panel-overlay" id="aiOverlay" hidden>
     <div class="panel ai-panel" id="aiPanel">
       <div class="panel-header">
         <span class="panel-title">✦ AI</span>
@@ -63,7 +68,7 @@
       <div class="tab-pane active" id="tab-chat">
         <div class="panel-body" id="aiChat"></div>
         <div class="panel-footer">
-          <input type="text" id="aiInput" placeholder="Ask about this page…" autocomplete="off" enterkeyhint="send">
+          <input type="text" id="aiInput" placeholder="Ask…" autocomplete="off" enterkeyhint="send">
           <button type="button" id="aiSend" aria-label="Send">➤</button>
         </div>
       </div>

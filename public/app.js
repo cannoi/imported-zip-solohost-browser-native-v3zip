@@ -4,49 +4,56 @@
   const $ = (id) => document.getElementById(id);
   const frame = $('main-webview');
   const input = $('url-input');
-  const hint = $('wv-hint');
+  const startScreen = $('start-screen');
   const btnLang = $('btn-lang');
   const btnOpen = $('btn-open-tab');
+  const btnTheme = $('btn-theme');
+  const root = document.documentElement;
+
+  const THEMES = ['rainbow', 'dark', 'light'];
 
   const state = {
-    lang: localStorage.getItem('solo_lang') || (navigator.language || 'en').toLowerCase().startsWith('vi') ? 'vi' : 'en',
+    lang: localStorage.getItem('solo_lang') || ((navigator.language || '').toLowerCase().startsWith('vi') ? 'vi' : 'en'),
+    theme: localStorage.getItem('solo_theme') || 'rainbow',
     readerOn: false,
-    url: ''
+    url: '',
+    history: []
   };
 
-  const T = {
-    en: {
-      hint: 'Client WebView — pages open in the frame. Cross-origin sites may require ↗ for login & AI extract.',
-      cross: 'Cross-origin page: browser blocks DOM access. Use ↗ Open tab, or AI on same-origin pages only.',
-      noText: 'No text extracted from this page.',
-      loading: 'Working…',
-      sum: 'Summary',
-      tr: 'Translation'
-    },
-    vi: {
-      hint: 'WebView phía client — trang mở trong khung. Site cross-origin có thể cần ↗ để đăng nhập & trích AI.',
-      cross: 'Trang cross-origin: trình duyệt chặn đọc DOM. Dùng ↗ mở tab, hoặc AI trên trang same-origin.',
-      noText: 'Không trích được nội dung trang này.',
-      loading: 'Đang xử lý…',
-      sum: 'Tóm tắt',
-      tr: 'Bản dịch'
-    }
-  };
-
-  function t(k) { return (T[state.lang] || T.en)[k] || T.en[k] || k; }
+  function applyTheme() {
+    if (!THEMES.includes(state.theme)) state.theme = 'rainbow';
+    root.setAttribute('data-theme', state.theme);
+    localStorage.setItem('solo_theme', state.theme);
+  }
 
   function applyLang() {
     if (btnLang) btnLang.textContent = state.lang === 'vi' ? 'VI' : 'EN';
-    if (hint) hint.textContent = t('hint');
     localStorage.setItem('solo_lang', state.lang);
+    if (input) {
+      input.placeholder = state.lang === 'vi' ? 'Tìm kiếm hoặc nhập địa chỉ' : 'Search or enter address';
+    }
   }
 
   function normalizeUrl(raw) {
     let s = String(raw || '').trim();
     if (!s) return '';
+    if (/^about:/i.test(s) || /^javascript:/i.test(s)) return '';
     if (/^https?:\/\//i.test(s)) return s;
+    if (/^\/\//.test(s)) return 'https:' + s;
+    // IP or localhost
+    if (/^(\d{1,3}\.){3}\d{1,3}(:\d+)?(\/.*)?$/.test(s) || /^localhost(:\d+)?(\/.*)?$/i.test(s)) {
+      return 'http://' + s;
+    }
     if (/^[\w.-]+\.[a-z]{2,}([/:].*)?$/i.test(s)) return 'https://' + s;
     return 'https://www.google.com/search?q=' + encodeURIComponent(s);
+  }
+
+  function hideStart() {
+    if (startScreen) startScreen.classList.add('hidden');
+  }
+
+  function showStart() {
+    if (startScreen) startScreen.classList.remove('hidden');
   }
 
   function navigate(raw) {
@@ -56,66 +63,34 @@
     state.readerOn = false;
     if (input) input.value = url;
     if (btnOpen) btnOpen.href = url;
+    hideStart();
+    // Reset then assign — more reliable than only setting src on some WebViews
     try {
-      frame.src = url;
+      frame.removeAttribute('srcdoc');
+      frame.src = 'about:blank';
+      // next tick to force reload path
+      requestAnimationFrame(() => {
+        frame.src = url;
+      });
     } catch (e) {
-      if (hint) hint.textContent = String(e.message || e);
+      try { frame.src = url; } catch (_) {}
     }
   }
 
   function extractPage() {
     if (!window.SoloReader) return { ok: false, error: 'NO_INJECTOR' };
     const out = window.SoloReader.extractCurrentPageDOM(frame);
-    if (!out.ok && out.error === 'NO_DOCUMENT') {
-      return { ok: false, error: 'CROSS_ORIGIN', message: t('cross') };
-    }
-    if (!out.raw_text || out.raw_text.length < 20) {
-      // Likely cross-origin blank access
+    if (!out.ok || !out.raw_text || out.raw_text.length < 20) {
       const doc = window.SoloReader.getFrameDocument(frame);
-      if (!doc) return { ok: false, error: 'CROSS_ORIGIN', message: t('cross') };
-      return { ok: false, error: 'EMPTY', message: t('noText') };
+      if (!doc) return { ok: false, error: 'CROSS_ORIGIN' };
+      return { ok: false, error: 'EMPTY' };
     }
     return out;
   }
 
-  async function aiProcess(action, extra) {
-    const extracted = extractPage();
-    if (!extracted.ok) {
-      appendAiNote(extracted.message || extracted.error || t('cross'));
-      return;
-    }
-    appendAiNote(t('loading'));
-    try {
-      const res = await fetch('/api/ai/process', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action,
-          text: extracted.raw_text,
-          raw_text: extracted.raw_text,
-          lang: state.lang,
-          targetLang: state.lang === 'vi' ? 'vi' : 'en',
-          url: state.url,
-          query: (extra && extra.query) || '',
-          ...(extra || {})
-        })
-      });
-      const data = await res.json();
-      const reply = (data.result && (data.result.reply || data.result.text || data.result.message))
-        || data.error || JSON.stringify(data);
-      appendAiNote((action === 'summarize' ? t('sum') : action === 'translate' ? t('tr') : 'AI') + ':\n' + reply);
-      openAiPanel();
-    } catch (err) {
-      appendAiNote(String(err.message || err));
-    }
-  }
-
   function appendAiNote(text) {
     const box = $('aiChat');
-    if (!box) {
-      if (hint) hint.textContent = String(text).slice(0, 200);
-      return;
-    }
+    if (!box) return;
     const div = document.createElement('div');
     div.className = 'ai-msg';
     div.style.whiteSpace = 'pre-wrap';
@@ -129,28 +104,78 @@
     if (ov) ov.hidden = false;
   }
 
-  // Events
+  async function aiProcess(action, extra) {
+    const extracted = extractPage();
+    if (!extracted.ok) {
+      appendAiNote(state.lang === 'vi'
+        ? 'Không đọc được nội dung khung (cross-origin). Mở ↗ rồi thử lại, hoặc dùng trang same-origin.'
+        : 'Cannot read frame content (cross-origin). Use ↗ Open, or a same-origin page.');
+      openAiPanel();
+      return;
+    }
+    appendAiNote(state.lang === 'vi' ? 'Đang xử lý…' : 'Working…');
+    openAiPanel();
+    try {
+      const res = await fetch('/api/ai/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action,
+          text: extracted.raw_text,
+          raw_text: extracted.raw_text,
+          lang: state.lang,
+          targetLang: state.lang === 'vi' ? 'vi' : 'en',
+          url: state.url,
+          query: (extra && extra.query) || ''
+        })
+      });
+      const data = await res.json();
+      const reply = (data.result && (data.result.reply || data.result.text || data.result.message))
+        || data.error || JSON.stringify(data);
+      appendAiNote(reply);
+    } catch (err) {
+      appendAiNote(String(err.message || err));
+    }
+  }
+
+  // Keep omnibox in sync when iframe navigates (same-origin only)
+  if (frame) {
+    frame.addEventListener('load', () => {
+      try {
+        const href = frame.contentWindow && frame.contentWindow.location && frame.contentWindow.location.href;
+        if (href && href !== 'about:blank' && !href.startsWith('about:')) {
+          state.url = href;
+          if (input) input.value = href;
+          if (btnOpen) btnOpen.href = href;
+          hideStart();
+        }
+      } catch (_) {
+        // cross-origin — still hide start; page may be visible in frame
+        if (state.url) hideStart();
+      }
+    });
+  }
+
   const form = $('nav-form');
   if (form) form.addEventListener('submit', (e) => {
     e.preventDefault();
     navigate(input && input.value);
   });
   if ($('btn-back')) $('btn-back').addEventListener('click', () => {
-    try { frame.contentWindow.history.back(); } catch (_) { history.back(); }
+    try { frame.contentWindow.history.back(); } catch (_) { if (state.history.length) navigate(state.history.pop()); }
   });
   if ($('btn-fwd')) $('btn-fwd').addEventListener('click', () => {
-    try { frame.contentWindow.history.forward(); } catch (_) { history.forward(); }
+    try { frame.contentWindow.history.forward(); } catch (_) {}
   });
   if ($('btn-reload')) $('btn-reload').addEventListener('click', () => {
-    try { frame.contentWindow.location.reload(); } catch (_) { if (state.url) frame.src = state.url; }
+    if (!state.url) return;
+    try { frame.contentWindow.location.reload(); }
+    catch (_) { frame.src = state.url; }
   });
   if ($('btn-reader')) $('btn-reader').addEventListener('click', () => {
     state.readerOn = !state.readerOn;
     const r = window.SoloReader && window.SoloReader.toggleReaderView(frame, state.readerOn);
-    if (r && !r.ok) {
-      if (hint) hint.textContent = r.message || r.error || t('cross');
-      state.readerOn = false;
-    }
+    if (r && !r.ok) state.readerOn = false;
   });
   if ($('btn-summary')) $('btn-summary').addEventListener('click', () => aiProcess('summarize'));
   if ($('btn-translate')) $('btn-translate').addEventListener('click', () => aiProcess('translate'));
@@ -158,8 +183,16 @@
     state.lang = state.lang === 'vi' ? 'en' : 'vi';
     applyLang();
   });
+  if (btnTheme) btnTheme.addEventListener('click', () => {
+    const i = THEMES.indexOf(state.theme);
+    state.theme = THEMES[(i + 1) % THEMES.length];
+    applyTheme();
+  });
 
+  applyTheme();
   applyLang();
+  showStart();
+
   try {
     const q = new URLSearchParams(location.search).get('url');
     if (q) navigate(q);

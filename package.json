@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "9.0.1-smoke-fix",
+  "version": "9.0.2-webview-ui",
   "description": "SoloHost Browser \u2014 100% client WebView + lightweight AI gateway",
   "main": "server.js",
   "engines": {
