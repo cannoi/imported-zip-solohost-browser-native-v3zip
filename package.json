@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "7.8.1-buildfix",
-  "description": "SoloHost Browser \u2014 WebKit + optional AI assistant layer",
+  "version": "7.9.0-universal-ai",
+  "description": "SoloHost Browser \u2014 WebKit + Universal AI/Feedback modules",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

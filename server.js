@@ -11,15 +11,42 @@ const store = require('./lib/store');
 const netProbe = require('./lib/net-probe');
 const netStatus = require('./lib/net-status');
 const browserGateway = require('./browser-gateway');
-const aiAgent = require('./lib/ai-agent');
 const engineManager = require('./lib/engine-adapter');
 const displayProxy = require('./lib/display-proxy');
 const securityPolicy = require('./lib/security-policy');
 const performanceMonitor = require('./lib/performance-monitor');
 const displayManager = require('./lib/display-manager');
+const { createMountApp } = require('./lib/module-http');
+const { createAIService } = require('./lib/ai-module/ai-service');
+const { mountAIRoutes } = require('./lib/ai-module/routes');
+const { createFeedbackService, mountFeedbackRoutes } = require('./lib/feedback-module/feedback-service');
+const appAdapter = require('./lib/app-adapter');
 
 const PORT = Number(process.env.PORT || 8080);
 const PUBLIC_DIR = path.join(__dirname, 'public');
+const DATA_DIR = path.join(__dirname, 'data');
+const PKG = (() => { try { return require('./package.json'); } catch { return { version: '0.0.0' }; } })();
+
+const universalApp = createMountApp();
+const aiService = createAIService({
+  dataDir: DATA_DIR,
+  appName: 'SoloHost Browser',
+  adapter: appAdapter
+});
+mountAIRoutes(universalApp, aiService);
+const feedbackService = createFeedbackService({
+  appId: process.env.SHFH_APP_ID || 'solohost-browser',
+  appName: 'SoloHost Browser',
+  version: PKG.version || '7.8.1',
+  hubId: process.env.SHFH_HUB_ID || 'SHFH-CANNOI-0905428801',
+  baseUrl: process.env.SHFH_HUB_URL || 'http://14.176.78.46:8090',
+  ingestToken: process.env.SHFH_INGEST_TOKEN || 'cannoi_7Kp9xV2mQ8rN4tY6cL3wA5zD1eF0uH9'
+});
+mountFeedbackRoutes(universalApp, feedbackService);
+
+function logApp(level, msg, extra) {
+  try { aiService.log(level, msg, extra || {}); } catch { /* optional */ }
+}
 
 const BROWSER_PROFILE = path.resolve(process.env.SOLOHOST_BROWSER_DATA || '/app/data/webkit-profile');
 const BROWSER_DOWNLOADS = path.resolve(process.env.SOLOHOST_DOWNLOADS || path.join(BROWSER_PROFILE, 'downloads'));
@@ -338,32 +365,22 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/network/status') {
       return json(res, 200, await netStatus.collect());
     }
-    if (p === '/api/ai' && method === 'GET') {
-      return json(res, 200, await aiAgent.probe());
-    }
-    if (p === '/api/ai/skills' && method === 'GET') {
-      return json(res, 200, { skills: aiAgent.SKILLS, required: false });
-    }
-    if (p === '/api/ai/chat' && method === 'POST') {
-      const body = await readBody(req, 20000);
-      try {
-        let page = {};
-        try { page = browserGateway.pageSnapshot() || {}; } catch { page = {}; }
-        if (body.url) page.url = String(body.url);
-        if (body.title) page.title = String(body.title);
-        if (body.excerpt) page.excerpt = String(body.excerpt).slice(0, 8000);
-        const out = await aiAgent.chat({
-          message: body.message || body.q || '',
-          skill: body.skill || '',
-          page,
-          acceptLanguage: req.headers['accept-language'] || '',
-          navigate: (url) => browserGateway.navigate(url)
-        });
-        // AI is optional: never 5xx only because no provider is configured.
-        return json(res, out.ok ? 200 : 200, out);
-      } catch (err) {
-        return json(res, 200, { ok: false, required: false, error: String(err.message || err), state: 'FAILED' });
+    // Universal AI + Feedback modules (Express-style mount on raw HTTP)
+    if (p.startsWith('/api/ai') || p.startsWith('/api/feedback') || p === '/api/logs') {
+      let body = {};
+      if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
+        try { body = await readBody(req, 200000); } catch { body = {}; }
       }
+      const u = new URL(req.url || '/', 'http://127.0.0.1');
+      const query = {};
+      u.searchParams.forEach((v, k) => { query[k] = v; });
+      const handled = await universalApp.dispatch(req, res, {
+        method,
+        pathname: p,
+        query,
+        body
+      });
+      if (handled) return;
     }
     if (p === '/api/engine' && method === 'GET') {
       return json(res, 200, browserGateway.status());

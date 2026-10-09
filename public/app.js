@@ -9,7 +9,7 @@
     reload:$('btn-reload'), neu:$('btn-new'), glow:$('pointer-glow'), toast:$('toast'),
     findbar:$('findbar'), findInput:$('find-input'), findStatus:$('find-status'), findPrev:$('find-prev'), findNext:$('find-next'), findClose:$('find-close'),
     mediaPlay:$('media-play'), mediaMute:$('media-mute'), mediaVolume:$('media-volume'), mediaCaptions:$('media-captions'), mediaFullscreen:$('media-fullscreen'),
-    aiBtn:$('btn-ai'), aiDock:$('ai-dock'), aiLog:$('ai-log'), aiForm:$('ai-form'), aiInput:$('ai-input'), aiClose:$('ai-close')
+    aiBtn:null, aiDock:null, aiLog:null, aiForm:null, aiInput:null, aiClose:null
   };
   const ICONS={calculator:'∑',music:'♪',ai:'◎',node:'⬡',app:'◇',apps:'·'};
   const state={apps:[],bookmarks:[],history:[],tabs:[{id:'home',title:'Home',url:'',kind:'home'}],active:'home',ws:null,pending:null,frame:null,online:true,restored:false};
@@ -17,11 +17,11 @@
   const T={en:{search:'Search the Web',newTab:'New Tab',assist:'Assist',back:'Back',forward:'Forward',reload:'Reload',find:'Find on page',close:'Close',ask:'Ask',online:'Online',offline:'Offline',unavailable:'Page unavailable',unavailableDesc:'This address could not be opened.',retry:'Retry',home:'Home',playPause:'Play / Pause',mute:'Mute / Unmute',volume:'Volume',captions:'Subtitles',videoFullscreen:'Video fullscreen'},vi:{search:'Tìm kiếm trên web',newTab:'Tab mới',assist:'Trợ lý',back:'Quay lại',forward:'Tiến tới',reload:'Tải lại',find:'Tìm trên trang',close:'Đóng',ask:'Hỏi',online:'Trực tuyến',offline:'Ngoại tuyến',unavailable:'Không thể mở trang',unavailableDesc:'Địa chỉ này không thể được mở.',retry:'Thử lại',home:'Trang chủ',playPause:'Phát / Tạm dừng',mute:'Tắt / Bật tiếng',volume:'Âm lượng',captions:'Phụ đề',videoFullscreen:'Toàn màn hình video'}}[lang];
   document.documentElement.lang=lang;
   function applyLanguage(){
-    els.input.placeholder=T.search; els.findInput.placeholder=T.find; els.aiInput.placeholder=T.ask;
+    els.input.placeholder=T.search; els.findInput.placeholder=T.find; if(els.aiInput)els.aiInput.placeholder=T.ask;
     els.browserErrorRetry.textContent=T.retry; els.browserErrorTitle.textContent=T.unavailable; els.browserErrorDesc.textContent=T.unavailableDesc;
     els.back.title=T.back; els.back.setAttribute('aria-label',T.back); els.forward.title=T.forward; els.forward.setAttribute('aria-label',T.forward); els.reload.title=T.reload; els.reload.setAttribute('aria-label',T.reload);
     els.mediaPlay.title=T.playPause; els.mediaPlay.setAttribute('aria-label',T.playPause); els.mediaMute.title=T.mute; els.mediaMute.setAttribute('aria-label',T.mute); els.mediaVolume.title=T.volume; els.mediaVolume.setAttribute('aria-label',T.volume); els.mediaCaptions.title=T.captions; els.mediaCaptions.setAttribute('aria-label',T.captions); els.mediaFullscreen.title=T.videoFullscreen; els.mediaFullscreen.setAttribute('aria-label',T.videoFullscreen);
-    els.neu.title=T.newTab; els.neu.setAttribute('aria-label',T.newTab); els.aiBtn.title=T.assist; els.aiBtn.setAttribute('aria-label',T.assist); els.findClose.title=T.close; els.findClose.setAttribute('aria-label',T.close);
+    els.neu.title=T.newTab; els.neu.setAttribute('aria-label',T.newTab);  els.findClose.title=T.close; els.findClose.setAttribute('aria-label',T.close);
   }
   const ctx=els.canvas ? els.canvas.getContext('2d',{alpha:false,desynchronized:true}) : null;
   if(els.canvas) els.canvas.tabIndex=0;
@@ -116,40 +116,6 @@
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='f'&&state.active!=='home'){e.preventDefault();els.findbar.hidden=false;els.findInput.focus();els.findInput.select();}
     if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='r'&&state.active!=='home'){e.preventDefault();send({type:'reload',id:state.active});}
   });
-  if(els.aiBtn){
-    const add=(cls,s)=>{const p=document.createElement('p');p.className=cls;p.textContent=s;els.aiLog.appendChild(p);els.aiLog.scrollTop=els.aiLog.scrollHeight;};
-    async function askAi(q,skill){
-      if(!q)return;
-      add('me',q);
-      try{
-        const activeTab=state.tabs.find(t=>t.id===state.active)||{};
-        const r=await fetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json','Accept-Language':navigator.language||''},body:JSON.stringify({message:q,skill:skill||'',url:activeTab.url||'',title:activeTab.title||''})});
-        const d=await r.json();
-        if(d.skill||d.provider) add('meta',[d.skill,d.provider].filter(Boolean).join(' · '));
-        add('', d.text || d.error || d.hint || '—');
-        if(d.navigate) openUrl(d.navigate);
-      }catch{ add('','AI unavailable — browser still works'); }
-    }
-    els.aiBtn.onclick=()=>{els.aiDock.hidden=!els.aiDock.hidden;if(!els.aiDock.hidden)els.aiInput.focus();};
-    els.aiClose.onclick=()=>{els.aiDock.hidden=true;};
-    const skills=document.getElementById('ai-skills');
-    if(skills){
-      skills.querySelectorAll('[data-skill]').forEach(btn=>{
-        btn.onclick=()=>{
-          const skill=btn.getAttribute('data-skill');
-          const presets={summarize:'Summarize this page',translate:'Translate this page',explain:'Explain this page',extract:'Extract key points from this page',search:els.aiInput.value.trim()||'Search the web'};
-          const q=presets[skill]||skill;
-          askAi(q,skill);
-        };
-      });
-    }
-    els.aiForm.onsubmit=async e=>{
-      e.preventDefault();
-      const q=els.aiInput.value.trim();
-      if(!q)return;
-      els.aiInput.value='';
-      askAi(q);
-    };
-  }
+  window.openUrl=openUrl;
   applyLanguage(); loadApps();loadBookmarks();loadHistory();renderTabs(); restoreSession();
 })();

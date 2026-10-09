@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0c0d10">
   <meta name="color-scheme" content="dark">
   <title>SoloHost</title>
-  <link rel="stylesheet" href="style.css?v=7.6.0">
+  <link rel="stylesheet" href="style.css?v=7.9.0">
   <style>
     html,body{background:#0c0d10;color:#eceae6;margin:0;min-height:100%;}
     .paf-made-by{position:fixed;right:10px;bottom:10px;width:min(64px,11vw);max-width:11vw;height:auto;object-fit:contain;opacity:.42;background:transparent;padding:0;border:0;box-shadow:none;filter:none;pointer-events:none;z-index:40}
@@ -40,8 +40,7 @@
     <button type="button" id="btn-new" class="orb-btn" title="New tab" aria-label="New tab">＋</button>
     <a id="btn-downloads" class="orb-btn" href="/downloads" target="_blank" rel="noopener" title="Downloads" aria-label="Downloads">↓</a>
     <a id="btn-security" class="orb-btn" href="/security" target="_blank" rel="noopener" title="Security & Privacy" aria-label="Security & Privacy">🛡</a>
-    <button type="button" id="btn-ai" class="orb-btn" title="Assist" aria-label="Assist">◎</button>
-  </header>
+      </header>
 
   <main class="stage" id="stage">
     <section class="view home" id="view-home" data-view="home">
@@ -117,27 +116,112 @@
     </section>
   </main>
 
-  <aside class="ai-dock" id="ai-dock" hidden>
-    <header>
-      <span>◎ Assist</span>
-      <button type="button" id="ai-close" title="Close" aria-label="Close">×</button>
-    </header>
-    <div class="ai-skills" id="ai-skills" role="toolbar" aria-label="AI skills">
-      <button type="button" data-skill="summarize" title="Summarize">∑</button>
-      <button type="button" data-skill="translate" title="Translate">文</button>
-      <button type="button" data-skill="explain" title="Explain">?</button>
-      <button type="button" data-skill="extract" title="Extract">▤</button>
-      <button type="button" data-skill="search" title="Search">🔍</button>
+  <link rel="stylesheet" href="ai-panel.css?v=7.9.0">
+  <button type="button" class="ai-fab" id="aiFab" title="AI · Feedback · Settings" aria-label="AI">
+    <img src="/ai-icon.png" alt="AI" class="ai-fab-img">
+    <span class="ai-fab-dot" id="aiStatusDot"></span>
+    <span class="ai-badge" id="aiBadge" hidden style="display:none"></span>
+  </button>
+
+  <div class="panel-overlay" id="aiOverlay" hidden style="z-index:400">
+    <div class="panel ai-panel" id="aiPanel">
+      <div class="panel-header">
+        <span class="panel-title">✦ AI</span>
+        <button type="button" class="panel-close" id="aiClose" aria-label="Close">×</button>
+      </div>
+      <div class="panel-tabs" id="panelTabs">
+        <button type="button" class="tab active" data-tab="chat">Chat</button>
+        <button type="button" class="tab" data-tab="feedback">Feedback <span class="tab-badge" id="fbTabBadge" hidden></span></button>
+        <button type="button" class="tab" data-tab="settings">Settings</button>
+        <button type="button" class="tab" data-tab="logs">Logs</button>
+      </div>
+      <div class="tab-pane active" id="tab-chat">
+        <div class="panel-body" id="aiChat"></div>
+        <div class="panel-footer">
+          <input type="text" id="aiInput" placeholder="Ask about SoloHost Browser…" autocomplete="off" enterkeyhint="send">
+          <button type="button" id="aiSend" aria-label="Send">➤</button>
+        </div>
+        <div class="ai-status-bar" id="aiStatusBar">AI: checking…</div>
+      </div>
+      <div class="tab-pane" id="tab-feedback">
+        <div class="panel-body fb-body">
+          <div id="fbNotices" class="fb-notices"></div>
+          <div id="fbDonate" class="fb-donate" hidden></div>
+          <label class="fb-label">Type</label>
+          <select id="fbType">
+            <option value="improvement">Improvement</option>
+            <option value="bug">Bug</option>
+            <option value="question">Question</option>
+          </select>
+          <label class="fb-label">Rating</label>
+          <div class="fb-stars" id="fbStars">
+            <button type="button" data-r="1">★</button>
+            <button type="button" data-r="2">★</button>
+            <button type="button" data-r="3">★</button>
+            <button type="button" data-r="4">★</button>
+            <button type="button" data-r="5">★</button>
+          </div>
+          <label class="fb-label">Message</label>
+          <textarea id="fbMessage" rows="3" placeholder="Your feedback…" maxlength="2000"></textarea>
+          <p class="fb-hint">No password or API key needed for feedback.</p>
+          <button type="button" class="fb-submit" id="fbSubmit">Send Feedback</button>
+          <p class="fb-status" id="fbStatus"></p>
+        </div>
+      </div>
+      <div class="tab-pane" id="tab-settings">
+        <div class="panel-body settings-body">
+          <label class="fb-label">Provider</label>
+          <select id="setProvider">
+            <option value="none">— None —</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="groq">Groq</option>
+            <option value="mistral">Mistral</option>
+            <option value="xai">xAI</option>
+            <option value="custom">Custom OpenAI-compatible</option>
+            <option value="local">Local OpenAI-compatible</option>
+          </select>
+          <label class="fb-label">API Key</label>
+          <input type="password" id="setApiKey" placeholder="sk-… (hidden after save)" autocomplete="off">
+          <p class="fb-hint" id="setKeyHint">Key: (none)</p>
+          <label class="fb-label">Base URL <small>(Custom / Local)</small></label>
+          <input type="text" id="setBaseUrl" placeholder="https://api.example.com/v1">
+          <label class="fb-label">Model</label>
+          <input type="text" id="setModel" placeholder="auto" value="auto">
+          <label class="fb-label">Mode</label>
+          <select id="setMode">
+            <option value="cloud_enabled">Cloud Enabled</option>
+            <option value="prefer_local">Prefer Local</option>
+            <option value="local_only">Local Only</option>
+            <option value="balanced">Balanced</option>
+            <option value="custom">Custom</option>
+          </select>
+          <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <button type="button" class="fb-submit" id="setSave">Save Settings</button>
+            <button type="button" class="ws-btn" id="setTest">Check token</button>
+            <button type="button" class="ws-btn" id="setModels">Load models</button>
+          </div>
+          <p class="fb-status" id="setStatus"></p>
+        </div>
+      </div>
+      <div class="tab-pane" id="tab-logs">
+        <div class="panel-body" id="aiLogs" style="font-family:ui-monospace,monospace;font-size:11px;white-space:pre-wrap"></div>
+        <div class="panel-footer">
+          <button type="button" class="ws-btn" id="logsRefresh">Refresh</button>
+          <button type="button" class="ws-btn" id="logsClear">Clear</button>
+        </div>
+      </div>
     </div>
-    <div class="ai-log" id="ai-log"></div>
-    <form id="ai-form">
-      <input id="ai-input" type="text" placeholder="Ask" autocomplete="off" enterkeyhint="send">
-      <button type="submit" aria-label="Send">→</button>
-    </form>
-  </aside>
+  </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
-  
-  <script src="app.js?v=7.8.0"></script>
+  <script src="app.js?v=7.9.0"></script>
+  <script src="/ai-module/ai-module.js?v=7.9.0"></script>
+  <script src="/feedback-module/feedback-module.js?v=7.9.0"></script>
+  <script src="/ai-panel.js?v=7.9.0"></script>
   <img class="paf-made-by" src="made-by.png" alt="">
 </body>
 </html>

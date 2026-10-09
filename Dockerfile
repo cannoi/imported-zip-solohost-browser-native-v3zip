@@ -64,7 +64,7 @@ COPY package.json package-lock.json ./
 COPY server.js browser-gateway.js start.sh config_options.yml ./
 COPY lib ./lib
 COPY public ./public
-RUN mkdir -p /app/data/webkit-profile /tmp/solohost-browser \
+RUN mkdir -p /app/data/webkit-profile /app/data /tmp/solohost-browser \
     && chmod +x /app/start.sh \
     && chown -R node:node /app/data /tmp/solohost-browser
 EXPOSE 8080
