@@ -38,9 +38,13 @@
   /** Sites that block top-level iframe: map to official embed URL when possible. */
   function isDirectEmbed(url) {
     try {
-      const h = new URL(url).hostname.replace(/^www\./, '');
-      return /youtube\.com$|youtube-nocookie\.com$|youtu\.be$|tiktok\.com$|player\.vimeo\.com$/.test(h)
-        && /\/embed|\/embed\//.test(url + '/');
+      const u = new URL(url);
+      const h = u.hostname.replace(/^www\./, '');
+      const p = u.pathname || '';
+      if ((h.endsWith('youtube.com') || h === 'youtube-nocookie.com') && p.startsWith('/embed/')) return true;
+      if (h.endsWith('tiktok.com') && p.includes('/embed')) return true;
+      if (h === 'player.vimeo.com') return true;
+      return false;
     } catch { return false; }
   }
 

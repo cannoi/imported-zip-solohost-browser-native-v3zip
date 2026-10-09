@@ -1,4 +1,4 @@
-/* SoloHost Browser — elegant chrome + full-bleed WebView */
+/* SoloHost Browser chrome + full-bleed WebView — responsive */
 
 :root,
 html[data-theme="rainbow"] {
@@ -9,11 +9,12 @@ html[data-theme="rainbow"] {
   --chrome-input: rgba(255, 255, 255, 0.07);
   --chrome-hover: rgba(255, 255, 255, 0.12);
   --accent: #7dd3c0;
-  --accent-2: #a78bfa;
-  --accent-3: #f9a8d4;
   --page-bg: #ffffff;
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.06) inset;
   --rainbow: linear-gradient(105deg, #7dd3c0 0%, #60a5fa 35%, #a78bfa 65%, #f9a8d4 100%);
+  --chrome-h: 52px;
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-t: env(safe-area-inset-top, 0px);
 }
 
 html[data-theme="dark"] {
@@ -24,8 +25,6 @@ html[data-theme="dark"] {
   --chrome-input: #16181f;
   --chrome-hover: #1e212b;
   --accent: #8eb6ff;
-  --accent-2: #8eb6ff;
-  --accent-3: #8eb6ff;
   --page-bg: #111;
   --shadow: none;
   --rainbow: none;
@@ -39,44 +38,53 @@ html[data-theme="light"] {
   --chrome-input: #ffffff;
   --chrome-hover: #ebe7de;
   --accent: #2f6fed;
-  --accent-2: #2f6fed;
-  --accent-3: #2f6fed;
   --page-bg: #ffffff;
   --shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
   --rainbow: none;
 }
 
-* { box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; }
 html, body {
   margin: 0;
+  padding: 0;
+  width: 100%;
   height: 100%;
+  max-width: 100vw;
   overflow: hidden;
   background: var(--chrome-bg);
   color: var(--chrome-fg);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
 }
 
 .browser-shell {
   display: flex;
   flex-direction: column;
+  width: 100%;
   height: 100%;
   height: 100dvh;
-  min-height: 100%;
+  max-width: 100vw;
+  overflow: hidden;
+  padding-top: var(--safe-t);
+  padding-bottom: var(--safe-b);
 }
 
-/* —— Top chrome —— */
 .chrome {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 6px;
+  min-height: var(--chrome-h);
+  padding: 6px 8px;
   background: var(--chrome-bg);
   border-bottom: 1px solid var(--chrome-line);
   box-shadow: var(--shadow);
   z-index: 40;
   position: relative;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
 }
 html[data-theme="rainbow"] .chrome::after {
   content: "";
@@ -85,6 +93,7 @@ html[data-theme="rainbow"] .chrome::after {
   height: 2px;
   background: var(--rainbow);
   opacity: 0.9;
+  pointer-events: none;
 }
 
 .chrome-nav,
@@ -102,6 +111,7 @@ html[data-theme="rainbow"] .chrome::after {
   color: var(--chrome-fg);
   width: 36px;
   height: 36px;
+  min-width: 36px;
   border-radius: 10px;
   display: inline-flex;
   align-items: center;
@@ -110,16 +120,16 @@ html[data-theme="rainbow"] .chrome::after {
   text-decoration: none;
   font-size: 15px;
   line-height: 1;
-  opacity: 0.88;
-  transition: background 0.15s ease, opacity 0.15s ease;
+  opacity: 0.9;
+  transition: background 0.15s ease;
+  -webkit-tap-highlight-color: transparent;
 }
-.icon-btn:hover {
+.icon-btn:hover, .icon-btn:focus-visible {
   background: var(--chrome-hover);
   opacity: 1;
+  outline: none;
 }
-.icon-btn:active { transform: scale(0.96); }
 .icon-btn.go {
-  width: 34px;
   background: var(--chrome-hover);
   font-weight: 600;
 }
@@ -135,20 +145,17 @@ html[data-theme="rainbow"] .chrome::after {
   border-radius: 999px;
   background: var(--chrome-input);
   border: 1px solid var(--chrome-line);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  max-width: 100%;
 }
 .omnibox:focus-within {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--chrome-line));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
 }
-.omnibox-lock {
-  font-size: 11px;
-  opacity: 0.45;
-  flex: 0 0 auto;
-}
+.omnibox-lock { font-size: 11px; opacity: 0.45; flex-shrink: 0; }
 #url-input {
   flex: 1;
   min-width: 0;
+  width: 100%;
   border: 0;
   outline: none;
   background: transparent;
@@ -158,11 +165,12 @@ html[data-theme="rainbow"] .chrome::after {
 }
 #url-input::placeholder { color: var(--chrome-muted); }
 
-/* —— Full-bleed viewport —— */
 .viewport {
   position: relative;
   flex: 1 1 auto;
   min-height: 0;
+  width: 100%;
+  max-width: 100%;
   background: var(--page-bg);
   overflow: hidden;
 }
@@ -176,6 +184,8 @@ html[data-theme="rainbow"] .chrome::after {
   display: block;
   background: var(--page-bg);
   z-index: 1;
+  /* prevent mobile overscroll chaining */
+  overscroll-behavior: contain;
 }
 
 .start-screen {
@@ -187,13 +197,14 @@ html[data-theme="rainbow"] .chrome::after {
   background: var(--chrome-bg);
   color: var(--chrome-fg);
   pointer-events: none;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.2s ease, visibility 0.2s;
+  padding: 24px;
 }
 .start-screen.hidden {
   opacity: 0;
   visibility: hidden;
 }
-.start-inner { text-align: center; padding: 24px; }
+.start-inner { text-align: center; max-width: 320px; }
 .start-mark {
   width: 56px; height: 56px;
   margin: 0 auto 14px;
@@ -210,9 +221,8 @@ html[data-theme="light"] .start-mark {
 }
 .start-inner h1 {
   margin: 0 0 6px;
-  font-size: 22px;
+  font-size: clamp(1.15rem, 4vw, 1.4rem);
   font-weight: 600;
-  letter-spacing: -0.02em;
 }
 .start-inner p {
   margin: 0;
@@ -220,13 +230,32 @@ html[data-theme="light"] .start-mark {
   color: var(--chrome-muted);
 }
 
-/* AI FAB stays; reduce collision with chrome */
 .ai-fab { z-index: 50; }
 .panel-overlay { z-index: 60; }
 
-@media (max-width: 640px) {
-  .chrome { gap: 4px; padding: 6px 6px; }
-  .icon-btn { width: 32px; height: 32px; border-radius: 8px; }
+/* Phones */
+@media (max-width: 720px) {
+  :root { --chrome-h: 48px; }
+  .chrome { gap: 4px; padding: 6px 4px; }
+  .icon-btn { width: 34px; height: 34px; min-width: 34px; border-radius: 8px; font-size: 14px; }
   #btn-reader, #btn-summary, #btn-translate { display: none; }
-  .omnibox { height: 34px; }
+  .omnibox { height: 34px; padding-left: 10px; }
+  #url-input { font-size: 16px; } /* avoid iOS zoom */
+}
+
+/* Narrow */
+@media (max-width: 400px) {
+  #btn-lang { display: none; }
+  .chrome-nav .icon-btn:nth-child(2) { display: none; } /* hide forward */
+}
+
+/* Large desktop */
+@media (min-width: 1200px) {
+  .chrome { padding: 8px 16px; }
+  .omnibox { max-width: 900px; margin: 0 auto; }
+  .chrome {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+  }
 }
