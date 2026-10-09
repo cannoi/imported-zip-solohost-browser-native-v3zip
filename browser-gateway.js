@@ -62,8 +62,11 @@ function toParseSchema(raw) {
       kind: raw.kind || 'html',
       duration_ms: raw.duration_ms || null,
       truncated: !!raw.truncated,
-      extracted_at: raw.extracted_at || null
-    }
+      extracted_at: raw.extracted_at || null,
+      challenge: raw.challenge || null,
+      used_fallback: !!raw.used_fallback
+    },
+    challenge: raw.challenge || null
   };
 }
 

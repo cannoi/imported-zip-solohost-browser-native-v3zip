@@ -202,3 +202,15 @@ body { padding-bottom: 88px; }
   .workspace { padding: 16px 14px 40px; }
   .article-header h1 { font-size: calc(1.5rem * var(--reader-scale)); }
 }
+
+.challenge-banner {
+  background: color-mix(in srgb, var(--danger) 14%, var(--bg-elev));
+  border: 1px solid color-mix(in srgb, var(--danger) 35%, var(--line));
+  color: var(--text);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin: 0 0 18px;
+  font-family: var(--ui);
+  font-size: 0.95rem;
+  line-height: 1.45;
+}

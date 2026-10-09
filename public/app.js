@@ -201,6 +201,15 @@
         els.view.innerHTML = '<p class="lede">' + T.empty + '</p><p><a href="' + (data.url || '#') + '" target="_blank" rel="noopener">' + (data.url || '') + '</a></p>';
       }
     }
+    if (data.challenge || (data.diagnostics && data.diagnostics.challenge)) {
+      const ch = data.challenge || data.diagnostics.challenge;
+      const note = (lang === 'vi')
+        ? ('Trang yêu cầu xác minh người dùng (CAPTCHA). Trình duyệt headless không vượt được kiểm tra này. IP máy chủ: có thể bị Google đánh dấu lưu lượng bất thường.')
+        : (ch.message || 'This site requires a human CAPTCHA check. Headless extraction cannot pass it.');
+      if (els.view) {
+        els.view.innerHTML = '<div class="challenge-banner"><strong>⚠</strong> ' + note + '</div>' + (els.view.innerHTML || '');
+      }
+    }
     document.title = (meta.title ? meta.title + ' · ' : '') + 'SoloHost';
     setupMedia((data.media && data.media.videos) || []);
     showReader();
