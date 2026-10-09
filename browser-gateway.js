@@ -7,42 +7,44 @@
 
 const engine = require('./lib/engine-adapter');
 const engineControl = require('./lib/engine-control');
-const { ContentExtractor, ExtractorError } = require('./lib/content-extractor');
+const { ExtractorError } = require('./lib/content-extractor');
 
 const EXTRACT_TIMEOUT_MS = Math.max(5000, Math.min(30000, Number(process.env.SOLOHOST_NAV_TIMEOUT_MS || 30000)));
 
-let sharedExtractor = null;
-
-function getExtractor() {
-  if (!sharedExtractor) {
-    sharedExtractor = new ContentExtractor({ timeoutMs: EXTRACT_TIMEOUT_MS });
-  }
-  return sharedExtractor;
-}
+/**
+ * v8.5: the gateway no longer owns a private ContentExtractor. It goes through engine-control →
+ * chromium-engine, so /api/browser/parse, /api/extract and the tab UI share ONE Chromium process
+ * and ONE LRU result cache (20 min TTL).
+ */
 
 function mapMedia(list) {
   const videos = [];
-  const images = [];
   for (const item of list || []) {
     if (!item || !item.url) continue;
     if (item.type === 'm3u8') videos.push({ type: 'hls', src: item.url });
     else if (item.type === 'mp4') videos.push({ type: 'mp4', src: item.url });
-    else if (item.type === 'image' || /\.(jpe?g|png|gif|webp|avif)(\?|$)/i.test(item.url)) {
-      images.push({ src: item.url, type: item.type || 'image' });
-    }
   }
-  return { videos, images };
+  return { videos };
 }
 
+/**
+ * Normalised response for GET /api/browser/parse.
+ *
+ *   { success, mode, url, cached, metadata{title,byline,siteName}, content{clean_html,raw_text,
+ *     reading_time_min}, media{videos[]} }
+ *
+ * Extra fields (lang, data, diagnostics, challenge, metadata.favicon/publishedAt and the legacy
+ * content.reading_time_minutes) are kept so the existing Reader UI keeps working.
+ */
 function toParseSchema(raw) {
   const mode = String(raw.mode || (raw.kind === 'embed' ? 'EMBED' : raw.kind === 'webview' ? 'WEBVIEW' : 'READER')).toUpperCase();
   const media = mapMedia(raw.media);
-  const lang = raw.lang || 'en';
+  const readingMin = Number(raw.reading_minutes) || 0;
   const base = {
     success: true,
     mode,
     url: raw.final_url || raw.url,
-    lang,
+    cached: !!raw.cached,
     metadata: {
       title: raw.title || '',
       byline: raw.author || '',
@@ -50,17 +52,19 @@ function toParseSchema(raw) {
       favicon: raw.favicon || '',
       publishedAt: raw.published_at || null
     },
-    data: {},
-    // Back-compat for older Reader clients
     content: {
       clean_html: raw.clean_html || '',
       raw_text: raw.raw_text || '',
-      reading_time_minutes: Number(raw.reading_minutes) || 0,
+      reading_time_min: readingMin,
+      // legacy aliases for older Reader clients
+      reading_time_minutes: readingMin,
       excerpt: raw.excerpt || '',
       word_count: Number(raw.word_count) || 0,
       readable: !!raw.readable
     },
     media,
+    lang: raw.lang || 'en',
+    data: {},
     diagnostics: {
       http_status: raw.http_status || null,
       content_type: raw.content_type || null,
@@ -70,7 +74,10 @@ function toParseSchema(raw) {
       extracted_at: raw.extracted_at || null,
       challenge: raw.challenge || null,
       used_fallback: !!raw.used_fallback,
-      intent_reason: raw.intent_reason || null
+      intent_reason: raw.intent_reason || null,
+      tier: raw.tier || null,
+      extraction_method: raw.extraction_method || null,
+      timing: raw.timing || null
     },
     challenge: raw.challenge || null
   };
@@ -90,7 +97,7 @@ function toParseSchema(raw) {
     base.data = {
       clean_html: raw.clean_html || '',
       raw_text: raw.raw_text || '',
-      reading_time_min: Number(raw.reading_minutes) || 0
+      reading_time_min: readingMin
     };
   }
   return base;
@@ -117,6 +124,7 @@ function isValidHttpUrl(value) {
 /**
  * Parse URL → structured article. Never throws to callers that use safeParse;
  * parseUrl still throws for Express status mapping but always with code.
+ * options.noCache bypasses the 20-minute LRU cache (used by ?refresh=1).
  */
 async function parseUrl(url, options = {}) {
   const target = String(url || '').trim();
@@ -133,7 +141,7 @@ async function parseUrl(url, options = {}) {
     throw err;
   }
   try {
-    const raw = await getExtractor().extract(target, {
+    const raw = await engineControl.extract(target, {
       ...options,
       timeoutMs: Math.min(EXTRACT_TIMEOUT_MS, options.timeoutMs || EXTRACT_TIMEOUT_MS)
     });

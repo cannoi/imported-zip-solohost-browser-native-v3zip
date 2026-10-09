@@ -18,7 +18,7 @@ const { ContentExtractor } = require('../lib/content-extractor');
   try {
     const r = await extractor.extract(url, { acceptLanguage: process.env.SMOKE_LANG || 'en-US' });
     console.log(JSON.stringify({
-      ok: r.ok, final_url: r.final_url, http_status: r.http_status, kind: r.kind, readable: r.readable,
+      ok: r.ok, mode: r.mode, cached: r.cached, tier: r.tier, extraction_method: r.extraction_method, timing: r.timing, final_url: r.final_url, http_status: r.http_status, kind: r.kind, readable: r.readable,
       title: r.title, author: r.author, site_name: r.site_name, favicon: r.favicon, published_at: r.published_at, lang: r.lang,
       word_count: r.word_count, reading_minutes: r.reading_minutes,
       text_preview: String(r.raw_text || '').slice(0, 200),

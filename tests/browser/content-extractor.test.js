@@ -24,7 +24,7 @@ assert.strictEqual(X.pickLocale('???', 'en-US'), 'en-US');
 
 /* ---------- fake Playwright ---------- */
 function makeFakeChromium(scenario = {}) {
-  const log = { launches: 0, contexts: [], closedContexts: 0, routes: [], maxParallel: 0, parallel: 0 };
+  const log = { launches: 0, contexts: [], closedContexts: 0, closedPages: 0, initScripts: [], routes: [], maxParallel: 0, parallel: 0 };
   const browser = {
     connected: true,
     version: () => '120.0.6099.28',
@@ -36,6 +36,7 @@ function makeFakeChromium(scenario = {}) {
         opts,
         setDefaultTimeout() {}, setDefaultNavigationTimeout() {},
         async route(pattern, handler) { log.routes.push(handler); },
+        async addInitScript(script) { log.initScripts.push(script); },
         async newPage() {
           const handlers = {};
           return {
@@ -53,7 +54,8 @@ function makeFakeChromium(scenario = {}) {
             async waitForLoadState() {},
             url() { return scenario.finalUrl || log.lastGoto.url; },
             async content() { return '<html><body>hi</body></html>'; },
-            async title() { return 'Fallback title'; }
+            async title() { return 'Fallback title'; },
+            async close() { log.closedPages += 1; }
           };
         },
         async close() { log.closedContexts += 1; }
@@ -84,6 +86,11 @@ class Stub extends ContentExtractor {
     const out = await ex.extract('https://example.com/post', { acceptLanguage: 'vi-VN,vi;q=0.9' });
     assert.strictEqual(f.log.lastGoto.o.waitUntil, 'domcontentloaded');
     assert.strictEqual(f.log.contexts[0].opts.locale, 'vi-VN');
+    assert.strictEqual(f.log.contexts[0].opts.timezoneId, 'Asia/Ho_Chi_Minh');
+    assert.strictEqual(f.log.contexts[0].opts.extraHTTPHeaders['Accept-Language'], 'vi-VN,vi;q=0.9,en-US;q=0.8');
+    assert.ok(f.log.initScripts.some(sc => /webdriver/.test(sc)), 'stealth init script must remove navigator.webdriver');
+    assert.strictEqual(out.cached, false);
+    assert.strictEqual(f.log.closedPages, 1, 'page must be closed in finally');
     assert.ok(!/Headless/i.test(f.log.contexts[0].opts.userAgent), 'user agent must not say HeadlessChrome');
     assert.strictEqual(f.log.contexts[0].opts.acceptDownloads, false);
     assert.strictEqual(ex.parsedWith.url, 'https://example.com/final');
@@ -101,6 +108,7 @@ class Stub extends ContentExtractor {
     const ex = new Stub({ deps: { chromium: f.chromium }, settleMs: 0 });
     await assert.rejects(() => ex.extract('https://example.com/missing'), e => e.code === 'HTTP_ERROR' && e.httpStatus === 404);
     assert.strictEqual(f.log.closedContexts, 1);
+    assert.strictEqual(f.log.closedPages, 1, 'page must be closed even when the site returns an error');
   }
   /* non-HTML resources are not parsed */
   {
@@ -117,6 +125,7 @@ class Stub extends ContentExtractor {
     const ex = new Stub({ deps: { chromium: f.chromium }, settleMs: 0 });
     await assert.rejects(() => ex.extract('https://example.com/'), e => e instanceof ExtractorError && e.code === code, msg);
     assert.strictEqual(f.log.closedContexts, 1);
+    assert.strictEqual(f.log.closedPages, 1, 'page must be closed on navigation failure: ' + msg);
   }
   /* concurrency limit + queue overflow */
   {
@@ -152,7 +161,15 @@ class Stub extends ContentExtractor {
     assert.strictEqual(await run('chrome://settings', 'document'), 'abort:blockedbyclient');
     assert.strictEqual(await run('https://93.184.216.34/pic.png', 'image'), 'abort:blockedbyclient');
     assert.strictEqual(await run('https://93.184.216.34/page', 'document'), 'continue');
-    assert.strictEqual(await run('https://93.184.216.34/video.mp4', 'media'), 'continue');
+    assert.strictEqual(await run('https://93.184.216.34/video.mp4', 'media'), 'abort:blockedbyclient');
+    assert.strictEqual(await run('https://93.184.216.34/site.css', 'stylesheet'), 'abort:blockedbyclient');
+    assert.strictEqual(await run('https://93.184.216.34/f.woff2', 'font'), 'abort:blockedbyclient');
+    assert.strictEqual(await run('https://93.184.216.34/api/data.json', 'fetch'), 'continue');
+    assert.strictEqual(await run('https://93.184.216.34/app.js', 'script'), 'continue');
+    assert.strictEqual(await run('https://www.google-analytics.com/collect', 'script'), 'abort:blockedbyclient');
+    assert.strictEqual(await run('https://connect.facebook.net/en_US/fbevents.js', 'script'), 'abort:blockedbyclient');
+    assert.strictEqual(await run('https://stats.g.doubleclick.net/j/collect', 'xhr'), 'abort:blockedbyclient');
+    assert.strictEqual(await run('https://analytics.example.org/t.js', 'script'), 'abort:blockedbyclient');
   }
   /* missing dependency is reported clearly */
   {

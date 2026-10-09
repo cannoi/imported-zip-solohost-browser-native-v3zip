@@ -21,7 +21,7 @@ RUN npm install --omit=dev --no-audit --no-fund \
     && npm cache clean --force
 
 # Fail the build early if a dependency is missing or the Chromium revision does not match Playwright.
-RUN node -e "for (const m of ['playwright-core','playwright','jsdom','@mozilla/readability','express','ws']) require(m); \
+RUN node -e "for (const m of ['playwright-core','playwright','jsdom','@mozilla/readability','lru-cache','express','ws']) require(m); \
 const p = require('playwright-core').chromium.executablePath(); \
 if (!require('fs').existsSync(p)) { console.error('Chromium not found at ' + p + ' - image tag and playwright version must match'); process.exit(1); } \
 console.log('Chromium OK:', p)"

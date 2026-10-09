@@ -70,14 +70,23 @@ async function handleApiHealth(_req, res) {
   }
 }
 
-/** Phase 2 — structured article parse for clients. */
+/**
+ * GET /api/browser/parse?url={URL}[&refresh=1]
+ * Structured article parse (READER / EMBED / WEBVIEW). Results are cached in memory for 20 minutes;
+ * the JSON carries `"cached": true|false` and the X-Cache header mirrors it (HIT | MISS).
+ * `refresh=1` bypasses the cache and re-scrapes the page.
+ */
 async function handleBrowserParse(req, res) {
   const target = String((req.query && req.query.url) || '').trim();
+  const refresh = /^(1|true|yes)$/i.test(String((req.query && req.query.refresh) || ''));
+  const started = Date.now();
   try {
     const out = await browserGateway.parseUrl(target, {
-      acceptLanguage: req.get ? (req.get('accept-language') || '') : (req.headers['accept-language'] || ''),
-      timeoutMs: browserGateway.EXTRACT_TIMEOUT_MS || 30000
+      timeoutMs: browserGateway.EXTRACT_TIMEOUT_MS || 30000,
+      noCache: refresh
     });
+    res.set('X-Cache', out.cached ? 'HIT' : 'MISS');
+    res.set('X-Parse-Time-Ms', String(Date.now() - started));
     return res.status(200).json(out);
   } catch (err) {
     const map = {
@@ -95,6 +104,7 @@ async function handleBrowserParse(req, res) {
     return res.status(status).json({
       success: false,
       url: target || null,
+      cached: false,
       error: String(err.message || err || 'Extract failed'),
       code: err.code || 'EXTRACT_FAILED'
     });
@@ -428,7 +438,7 @@ app.use(async (req, res, next) => {
       const target = String(body.url || '').trim();
       if (!target) return json(res, 400, { ok: false, error: 'url required' });
       try {
-        const out = await engineControl.extract(target, { acceptLanguage: req.headers['accept-language'] || '' });
+        const out = await engineControl.extract(target, { noCache: !!body.refresh });
         return json(res, 200, out);
       } catch (err) {
         const code = err.code || 'EXTRACT_FAILED';
