@@ -402,6 +402,30 @@
       }
     });
   }
+  // Reader link navigation — relative/absolute links load next article in-app
+  if (els.view) {
+    els.view.addEventListener('click', (e) => {
+      try {
+        const a = e.target && e.target.closest ? e.target.closest('a') : null;
+        if (!a || !els.view.contains(a)) return;
+        const href = (a.getAttribute('href') || '').trim();
+        if (!href || href === '#' || /^javascript:/i.test(href)) {
+          e.preventDefault();
+          return;
+        }
+        if (/^(mailto:|tel:)/i.test(href)) return; // let browser handle
+        // Resolved absolute URL (browser expands relative against document base; we prefer href property)
+        let target = '';
+        try { target = a.href || href; } catch (_) { target = href; }
+        if (!/^https?:/i.test(target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        if (els.input) els.input.value = target;
+        openUrl(target);
+      } catch (_) { /* never break reader */ }
+    });
+  }
+
   if (els.reload) els.reload.addEventListener('click', () => openUrl(state.url || (els.input && els.input.value)));
   if (els.fontDown) els.fontDown.addEventListener('click', () => {
     state.fontScale = Math.max(0.85, Math.round((state.fontScale - 0.05) * 100) / 100);

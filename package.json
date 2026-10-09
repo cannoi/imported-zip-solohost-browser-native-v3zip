@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "8.5.3-webview-ui",
+  "version": "8.5.4-reader-links",
   "description": "SoloHost Browser \u2014 fast extract, 3-tier, LRU, auth, Dynamic GeoIP stealth",
   "main": "server.js",
   "engines": {
