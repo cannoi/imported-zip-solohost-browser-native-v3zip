@@ -1,54 +1,33 @@
-# SoloHost Browser v9.0.7 — Lightweight WebView Browser
+# SoloHost Browser v9.0.8 — Lightweight WebView + AI
 
-A lightweight bilingual (English + Vietnamese) browser shell for Pi Network SoloHost with multi-tab controls, persistent bookmarks/history and an optional Universal AI assistant.
+A compact, bilingual (English/Vietnamese) browser shell for Pi SoloHost. The app uses the user's browser WebView/iframe for display and a small Node.js proxy to improve compatibility with sites that block iframe embedding. It does **not** run a separate Chromium browser engine in Docker.
 
-> **Engine status:** this version remains a WebView/iframe + HTML proxy. It is not a full embedded Chromium browser. See `V9.0.7_BROWSER_CORE_REPORT.md` for implemented features and limitations.
+## What changed in v9.0.8
+- Rewrites common HTML resource URLs (scripts, images, posters, lazy-image attributes, `srcset`, stylesheet/icon/preload links) through the same-origin proxy.
+- Rewrites CSS `url()` and `@import` references so relative fonts/background images/stylesheets resolve more reliably.
+- Preserves the real document URL as the HTML base and injects a mobile viewport when missing.
+- Reads HTML/CSS using the declared character encoding where supported.
+- Validates redirect targets before each hop, limits redirects and response bytes while streaming, blocks private/reserved IPv4 and IPv6 destinations, and rejects URLs with embedded credentials.
+- Adds baseline security headers and removes unnecessary camera/microphone/geolocation/payment permissions from the page frame.
+- Keeps the existing tab UI, bookmarks, history, Universal AI, Feedback, provider settings, themes and EN/VI interface.
+- Removes disabled legacy server-engine stubs that are not imported by the current client-WebView runtime.
 
-## Browser core (v9.0.7)
-- `＋` opens a tab; tap a tab to switch and `×` to close. Tab list is restored for the current browser session.
-- `☆` bookmarks the current page; `☷` opens Bookmarks/History. Bookmarks persist in app data; history can be cleared.
-- History/bookmark APIs: `GET/POST /api/browser/history`, `DELETE /api/browser/history`, `GET/POST /api/browser/bookmarks`, `DELETE /api/browser/bookmarks/:id`.
-- Cookie editing/isolation and full authenticated-site compatibility are not guaranteed by the proxy architecture. Use `↗` for sites requiring a full browser session.
+## Runtime and endpoints
+- Node.js/Express listens on `0.0.0.0:8080` by default.
+- `GET /api/proxy?url=...` fetches a public HTTP(S) page/resource and rewrites HTML/CSS where appropriate.
+- `GET /api/health`, `/health`, `/ready` report app health.
+- AI and Feedback modules retain their existing routes and settings.
+- Bookmarks/history are persisted through `lib/store.js` under the app data directory.
 
-## Runtime
-- Node.js shell/API (unchanged): tabs, bookmarks, history, downloads, security policy, SoloHost app catalog
-- `lib/content-extractor.js` — `ContentExtractor`: Playwright Chromium → `page.content()` → jsdom + Readability
-- `lib/chromium-engine.js` — tab/history state, lifecycle, watchdog, restart with back-off
-- `lib/reader-view.js` — serves the article at `/view` (the iframe the shell already embeds)
-- Persistent profile folder `/app/data/webkit-profile` (name kept so existing volumes keep working)
-- Base image `mcr.microsoft.com/playwright:v1.40.0-focal`; no compiler, GTK, WebKitGTK, GStreamer, Xvfb, VNC or noVNC
+## Honest compatibility limits
+This is a lightweight WebView/iframe + HTTP proxy, not a full browser engine. It cannot fully reproduce per-site browser cookies, service workers, WebSockets, DRM, all modern SPA behavior, CAPTCHA, login flows, or CORS-sensitive APIs. For login-heavy or sensitive pages, use the ↗ Open control to hand the URL to the user's full browser. Proxying also cannot safely or correctly emulate every website's security/session behavior.
 
-## What `extract(url)` returns
-`title, author, site_name, favicon, published_at, lang, excerpt, clean_html, raw_text, word_count, reading_minutes, readable, media[], final_url, http_status, content_type, kind, extracted_at, duration_ms`
-
-`media[]` lists `.m3u8` / `.mp4` responses seen on the network (`{url, type, content_type, status, size}`).
-
-## API
-| Route | Purpose |
-|---|---|
-| `POST /api/extract` `{url}` | One-shot extraction, no tab involved |
-| `GET /api/browser/content[?id=][&summary=1]` | Content of the active/selected tab (or just its revision) |
-| `POST /api/browser/navigate` `{url}` | Navigate the active tab (shell uses this) |
-| `GET /view/` | Reader page for the active tab (EN/VI by `Accept-Language`) |
-| `GET /ready`, `/api/browser/status` | Engine state (`ready` once Chromium is launched) |
-
-## Test
-```bash
+## Build and test
+```sh
 npm install
-npm test                       # unit + contract tests (also parses a real HTML fixture with jsdom/Readability)
-npm run smoke:extract -- https://example.com   # real Chromium check — run inside the built container
+npm test
+npm start
 ```
+The tests cover JavaScript syntax, core module contracts, common HTML/CSS rewriting and SSRF address-policy cases. Live website compatibility and the final SoloHost container must still be verified in the deployment environment.
 
-## Configuration (optional env)
-`SOLOHOST_NAV_TIMEOUT_MS` (30000) · `SOLOHOST_EXTRACT_SETTLE_MS` (2500, wait for network idle after DOMContentLoaded) · `SOLOHOST_EXTRACT_CONCURRENCY` (3) · `SOLOHOST_EXTRACT_BLOCK` (`image,font`) · `SOLOHOST_CHROMIUM_PATH` · `SOLOHOST_USER_AGENT`
-
-## Security (unchanged policy, enforced for Chromium too)
-- Only `http`/`https` pages are extracted. `javascript:`, `ftp:`, `mailto:` … are rejected by the existing navigation policy.
-- Private network / localhost is blocked for the page **and every sub-request** (hostnames are also DNS-resolved and checked). This narrows, but does not fully remove, DNS-rebinding risk.
-- Fresh browser context per extraction (no shared cookies), downloads and service workers disabled, article HTML is sanitised (scripts, iframes, forms, `on*` handlers, `javascript:` URLs removed) and the reader page is served with a strict CSP.
-
-## Limits of Phase 1
-Reader mode shows article text and images only: no interactive sites, logins, forms, video playback or Find-in-page yet. Video/stream links are *detected and listed*, not played. See `V8.0_PHASE1_REPORT.md`.
-
----
-Earlier releases (v7.x: WebKitGTK + noVNC) are documented in `CHANGELOG.md` and the `V7.x_UPGRADE_REPORT.md` files.
+Historical V7/V8 reports and release notes are retained for traceability; they describe older architectures and should not be read as the v9.0.8 runtime design.

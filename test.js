@@ -35,4 +35,29 @@ assert.ok(appJs.includes('saveVisit(url)'));
 console.log('✓ package.json');
 console.log('✓ required files');
 console.log('✓ contracts');
-console.log('All static tests passed successfully.');
+
+// WebView proxy rendering/security regression tests.
+const proxy = require('./lib/frame-proxy');
+assert.strictEqual(proxy.isPrivateIp('127.0.0.1'), true);
+assert.strictEqual(proxy.isPrivateIp('10.1.2.3'), true);
+assert.strictEqual(proxy.isPrivateIp('192.168.1.1'), true);
+assert.strictEqual(proxy.isPrivateIp('169.254.169.254'), true);
+assert.strictEqual(proxy.isPrivateIp('224.0.0.1'), true);
+assert.strictEqual(proxy.isPrivateIp('::1'), true);
+assert.strictEqual(proxy.isPrivateIp('::ffff:127.0.0.1'), true);
+assert.strictEqual(proxy.isPrivateIp('8.8.8.8'), false);
+
+const rewritten = proxy.rewriteHtml('<html><head><link rel="stylesheet" href="/site.css"></head><body><img src="/hero.png"><script src="/app.js"></script><a href="https://example.com/path">Next</a></body></html>', 'https://example.org/page');
+assert.ok(rewritten.includes('/api/proxy?url='), 'HTML resource URLs should be proxied');
+assert.ok(rewritten.includes('name="viewport"'), 'mobile viewport should be present');
+assert.ok(!rewritten.includes('href="https://example.com/path"'), 'external anchors should be routed through the proxy');
+const css = proxy.rewriteCss('.hero{background:url("../img/a.png")} @import "./theme.css";', 'https://example.org/css/site.css');
+assert.ok(css.includes('/api/proxy?url='), 'CSS url() and @import should be proxied');
+(async () => {
+  await assert.rejects(proxy.assertPublicHttpUrl('file:///etc/passwd'));
+  await assert.rejects(proxy.assertPublicHttpUrl('http://127.0.0.1/'));
+  await assert.rejects(proxy.assertPublicHttpUrl('http://[::1]/'));
+  await assert.rejects(proxy.assertPublicHttpUrl('http://user:pass@example.com/'));
+  console.log('✓ proxy rendering and SSRF regression checks');
+  console.log('All static tests passed successfully.');
+})().catch(err => { console.error(err); process.exitCode = 1; });

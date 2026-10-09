@@ -19,7 +19,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = path.join(__dirname, 'data');
 const PKG = (() => {
-  try { return require('./package.json'); } catch { return { version: '9.0.6' }; }
+  try { return require('./package.json'); } catch { return { version: '9.0.8' }; }
 })();
 
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* ignore */ }
@@ -27,6 +27,16 @@ try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* ignore */ }
 const app = express();
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
+// Baseline browser-facing hardening; CSP is intentionally not forced because the existing
+// AI/Feedback panels use inline bootstrapping and remote sites are rendered through the proxy.
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('X-DNS-Prefetch-Control', 'off');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=()');
+  if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
+  next();
+});
 if (cors) app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: false, limit: '64kb' }));
@@ -36,7 +46,7 @@ function healthPayload() {
     status: 'ok',
     ok: true,
     service: 'solohost-browser',
-    version: PKG.version || '9.0.6',
+    version: PKG.version || '9.0.8',
     mode: 'webview-proxy',
     engine: { name: 'webview-proxy', ready: true },
     port: PORT,
@@ -73,7 +83,7 @@ const { createFeedbackService, mountFeedbackRoutes } = require('./lib/feedback-m
 const fbOpts = {
   appId: process.env.SHFH_APP_ID || 'solohost-browser',
   appName: 'SoloHost Browser',
-  version: PKG.version || '9.0.6'
+  version: PKG.version || '9.0.8'
 };
 if (process.env.SHFH_HUB_ID) fbOpts.hubId = process.env.SHFH_HUB_ID;
 if (process.env.SHFH_HUB_URL) fbOpts.baseUrl = process.env.SHFH_HUB_URL;
