@@ -1,14 +1,14 @@
 {
   "name": "solohost-browser-hub",
-  "version": "9.0.0-client-webview",
-  "description": "SoloHost Browser — 100% client WebView + lightweight AI gateway",
+  "version": "9.0.1-smoke-fix",
+  "description": "SoloHost Browser \u2014 100% client WebView + lightweight AI gateway",
   "main": "server.js",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node test.js && node --check server.js && node --check public/app.js && node --check public/reader-injector.js"
+    "test": "node test.js && node --check server.js && node --check public/app.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

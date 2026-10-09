@@ -14,6 +14,7 @@ assert.ok(fs.existsSync(path.join(root, 'public/app.js')));
 assert.ok(fs.existsSync(path.join(root, 'public/index.html')));
 const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
 assert.ok(server.includes('/api/ai/process'));
+assert.ok(server.includes('0.0.0.0') || server.includes("HOST"));
 assert.ok(server.includes('client-webview') || server.includes('client WebView'));
 assert.ok(!server.includes("require('./browser-gateway')"));
 const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');

@@ -1,10 +1,5 @@
 #!/bin/sh
-set -eu
-mkdir -p /app/data/webkit-profile /tmp/solohost-browser || true
-if [ "$(id -u)" = "0" ]; then
-  chown -R node:node /app/data /tmp/solohost-browser 2>/dev/null || true
-  export HOME=/tmp/solohost-browser
-  export SOLOHOST_BROWSER_DATA=/app/data/webkit-profile
-  exec su -s /bin/sh node -c "cd /app && exec node server.js"
-fi
-exec node /app/server.js
+set -e
+export HOST="${HOST:-0.0.0.0}"
+export PORT="${PORT:-8080}"
+exec node server.js
