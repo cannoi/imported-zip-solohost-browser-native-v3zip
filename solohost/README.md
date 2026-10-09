@@ -1,7 +1,14 @@
-# SoloHost kit
+# imported-zip-solohost-browser-native-v3zip — SoloHost install kit
 
-Build the application from the project root Dockerfile.
-Do not pull a remote image.
+Use the two install files:
+- docker-compose.yml
+- config_options.yml
 
+Suggested name: imported-zip-solohost-browser-native-v3zip
+Suggested description: Upgrade existing GitHub app: cannoi/imported-zip-solohost-browser-native-v3zip
 
-V7.4 adds the profile-scoped File & Protocol Engine policy and Downloads page. The existing browser engine and SoloHost package contract are retained.
+Image:
+ghcr.io/cannoi/imported-zip-solohost-browser-native-v3zip:383ca09277b497c5668931ba973d7dc2eb480c14
+
+The package was synchronized from the current application/runtime contract before publication.
+If something fails, paste the SoloHost error back into App Builder. It will diagnose the correct layer instead of blindly rewriting the app.

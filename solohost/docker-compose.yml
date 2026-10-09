@@ -1,8 +1,54 @@
 services:
   web:
-    build: .
-    restart: unless-stopped
+    image: ghcr.io/cannoi/imported-zip-solohost-browser-native-v3zip:383ca09277b497c5668931ba973d7dc2eb480c14
+    ports:
+      - "127.0.0.1:18267:8080"
+    environment:
+      PORT: "8080"
+      SOLOHOST_DEMO_APPS: "1"
+      HOME: "/tmp/solohost-browser"
+      SOLOHOST_BROWSER_DATA: "/app/data/webkit-profile"
+      SOLOHOST_DOWNLOADS: "/app/data/webkit-profile/downloads"
+      SOLOHOST_NAV_TIMEOUT_MS: "30000"
+      SOLOHOST_EXTRACT_CONCURRENCY: "3"
+      OLLAMA_URL: "http://127.0.0.1:11434"
+      AI_API_KEY: ${AI_API_KEY}
+      AI_BASE_URL: ${AI_BASE_URL}
+      AI_DEBUG: ${AI_DEBUG}
+      AI_EXTRA_HEADERS: ${AI_EXTRA_HEADERS}
+      AI_MODE: ${AI_MODE}
+      AI_MODEL: ${AI_MODEL}
+      AI_PROVIDER: ${AI_PROVIDER}
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL}
+      HUB_MODEL: ${HUB_MODEL}
+      OLLAMA_MODEL: ${OLLAMA_MODEL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      OPENAI_MODEL: ${OPENAI_MODEL}
+      PERSONAL_AI_HUB_URL: ${PERSONAL_AI_HUB_URL}
+      SHFH_APP_ID: ${SHFH_APP_ID}
+      SHFH_APP_NAME: ${SHFH_APP_NAME}
+      SHFH_APP_VERSION: ${SHFH_APP_VERSION}
+      SHFH_HUB_ID: ${SHFH_HUB_ID}
+      SHFH_HUB_URL: ${SHFH_HUB_URL}
+      SHFH_INGEST_TOKEN: ${SHFH_INGEST_TOKEN}
+      SOLOHOST_AI_HUB_URL: ${SOLOHOST_AI_HUB_URL}
+      SOLOHOST_APP_MANAGER_URL: ${SOLOHOST_APP_MANAGER_URL}
+      SOLOHOST_CHROMIUM_PATH: ${SOLOHOST_CHROMIUM_PATH}
+      SOLOHOST_DATA_DIR: ${SOLOHOST_DATA_DIR}
+      SOLOHOST_EXTRACT_BLOCK: ${SOLOHOST_EXTRACT_BLOCK}
+      SOLOHOST_REGISTRY_FILE: ${SOLOHOST_REGISTRY_FILE}
+      SOLOHOST_USER_AGENT: ${SOLOHOST_USER_AGENT}
+      SOLOHOST_USE_PROXY: ${SOLOHOST_USE_PROXY}
+    shm_size: "1gb"
+    init: true
     labels:
       pi.ui.primary: "true"
-    ports:
-      - "8080:8080"
+      pi.browser.engine: "chromium"
+    restart: unless-stopped
+    volumes:
+      - solohost-browser-data:/app/data
+volumes:
+  solohost-browser-data:
