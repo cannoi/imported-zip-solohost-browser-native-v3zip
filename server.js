@@ -79,11 +79,14 @@ async function handleApiHealth(_req, res) {
 async function handleBrowserParse(req, res) {
   const target = String((req.query && req.query.url) || '').trim();
   const refresh = /^(1|true|yes)$/i.test(String((req.query && req.query.refresh) || ''));
+  // Optional session cookies from client (header preferred; never log values).
+  const cookieHeader = (req.headers && (req.headers['x-solo-cookies'] || req.headers['x-extract-cookies'])) || '';
   const started = Date.now();
   try {
     const out = await browserGateway.parseUrl(target, {
       timeoutMs: browserGateway.EXTRACT_TIMEOUT_MS || 30000,
-      noCache: refresh
+      noCache: refresh,
+      cookies: cookieHeader || undefined
     });
     res.set('X-Cache', out.cached ? 'HIT' : 'MISS');
     res.set('X-Parse-Time-Ms', String(Date.now() - started));

@@ -45,6 +45,7 @@ function toParseSchema(raw) {
     mode,
     url: raw.final_url || raw.url,
     cached: !!raw.cached,
+    auth_required: !!raw.auth_required,
     metadata: {
       title: raw.title || '',
       byline: raw.author || '',
@@ -77,7 +78,8 @@ function toParseSchema(raw) {
       intent_reason: raw.intent_reason || null,
       tier: raw.tier || null,
       extraction_method: raw.extraction_method || null,
-      timing: raw.timing || null
+      timing: raw.timing || null,
+      geo: raw.geo || null
     },
     challenge: raw.challenge || null
   };
@@ -91,6 +93,7 @@ function toParseSchema(raw) {
   } else if (mode === 'WEBVIEW') {
     base.data = {
       webview_required: true,
+      auth_required: true,
       reason: raw.intent_reason || 'LOGIN_OR_COMPLEX_APP'
     };
   } else {

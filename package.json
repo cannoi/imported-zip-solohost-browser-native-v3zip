@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "8.5.0-fast-extract",
-  "description": "SoloHost Browser — Hybrid READER/EMBED/WEBVIEW routing, 3-tier extraction, LRU cache",
+  "version": "8.5.2-dynamic-geoip",
+  "description": "SoloHost Browser \u2014 fast extract, 3-tier, LRU, auth, Dynamic GeoIP stealth",
   "main": "server.js",
   "engines": {
     "node": ">=18"

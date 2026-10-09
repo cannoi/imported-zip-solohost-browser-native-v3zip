@@ -1,7 +1,7 @@
-title: "Imported Zip: Solohost-browser-native-v3.zip"
+title: "SoloHost Browser"
 eyebrow: SoloHost App
-description: "Imported ZIP: solohost-browser-native-v3.zip"
-footer_hint: Ready to run on Pi Desktop SoloHost.
+description: "Simple private lightweight reader browser for SoloHost."
+footer_hint: Ready to run. No configuration required.
 output_file: .env
 after_save: Saved. Start the app from SoloHost.
 fields: []
