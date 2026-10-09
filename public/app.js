@@ -214,26 +214,76 @@
       return;
     }
 
+    
     if (mode === 'WEBVIEW') {
       const reason = (d.reason || (data.diagnostics && data.diagnostics.intent_reason) || 'LOGIN_OR_COMPLEX_APP');
+      const targetUrl = data.url || '';
       const note = lang === 'vi'
-        ? 'Trang này cần đăng nhập hoặc tương tác phức tạp. SoloHost mở liên kết trên phiên của bạn (WebView / tab mới) để giữ cookie an toàn trên máy thật.'
-        : 'This site needs login or complex interaction. SoloHost opens it in your session (new tab) so cookies stay on your device.';
+        ? 'Trang cần đăng nhập hoặc tương tác phức tạp. Dùng khung bên dưới nếu site cho phép, hoặc mở full trên tab của bạn để giữ cookie an toàn.'
+        : 'This site needs login or complex interaction. Use the frame below when allowed, or open full page in your tab so cookies stay on your device.';
+      if (els.metaSite) els.metaSite.textContent = meta.siteName || '';
+      if (els.metaTitle) els.metaTitle.textContent = meta.title || targetUrl || 'WebView';
+      if (els.metaByline) els.metaByline.textContent = '';
+      if (els.metaTime) els.metaTime.textContent = '';
+      if (els.mediaBox) els.mediaBox.hidden = true;
+      destroyMedia();
       if (els.view) {
         els.view.innerHTML =
-          '<div class="webview-panel">' +
-          '<p class="challenge-banner"><strong>↗ WEBVIEW</strong> — ' + note + '</p>' +
-          '<p class="lede">' + (meta.title || data.url || '') + '</p>' +
-          '<p><button type="button" class="btn primary" id="btn-open-external">Open page</button></p>' +
-          '<p class="lede" style="font-size:13px;opacity:.75">Reason: ' + String(reason).replace(/</g,'') + '</p>' +
+          '<div class="webview-shell">' +
+            '<div class="webview-toolbar">' +
+              '<p class="webview-note">' + note + '</p>' +
+              '<div class="webview-actions">' +
+                '<a class="btn primary" id="wv-open" href="' + String(targetUrl).replace(/"/g, '&quot;') + '" target="_blank" rel="noopener noreferrer">Open page</a>' +
+                '<button type="button" class="btn" id="wv-reload" title="Reload frame">↻</button>' +
+                '<button type="button" class="btn" id="wv-copy" title="Copy URL">Copy URL</button>' +
+              '</div>' +
+              '<p class="webview-reason">Reason: ' + String(reason).replace(/</g, '') + '</p>' +
+            '</div>' +
+            '<div class="webview-frame-wrap">' +
+              '<iframe class="webview-frame" id="wv-frame" title="WebView" ' +
+                'src="' + String(targetUrl).replace(/"/g, '&quot;') + '" ' +
+                'referrerpolicy="no-referrer-when-downgrade" ' +
+                'allow="fullscreen; clipboard-read; clipboard-write" ' +
+                'sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-top-navigation-by-user-activation">' +
+              '</iframe>' +
+              '<div class="webview-frame-fallback" id="wv-fallback" hidden>' +
+                '<p>' + (lang === 'vi'
+                  ? 'Site chặn nhúng iframe (X-Frame-Options). Hãy bấm <strong>Open page</strong> để mở full trên tab của bạn — đăng nhập và cookie giữ trên máy bạn.'
+                  : 'This site blocks embedded frames (X-Frame-Options). Tap <strong>Open page</strong> for a full tab — login and cookies stay on your device.') +
+                '</p>' +
+              '</div>' +
+            '</div>' +
           '</div>';
-        const b = document.getElementById('btn-open-external');
-        if (b) b.addEventListener('click', () => {
-          try { window.open(data.url, '_blank', 'noopener,noreferrer'); } catch (_) {}
+        const frame = document.getElementById('wv-frame');
+        const fallback = document.getElementById('wv-fallback');
+        // If iframe stays blank / blocked, reveal fallback after a short wait
+        let settled = false;
+        const revealFallback = () => {
+          if (settled) return;
+          settled = true;
+          if (fallback) fallback.hidden = false;
+        };
+        if (frame) {
+          frame.addEventListener('load', () => {
+            // Cross-origin: cannot read contentDocument; treat load as ok and keep frame
+            settled = true;
+            if (fallback) fallback.hidden = true;
+          });
+          setTimeout(revealFallback, 3500);
+        }
+        const copyBtn = document.getElementById('wv-copy');
+        if (copyBtn) copyBtn.addEventListener('click', async () => {
+          try { await navigator.clipboard.writeText(targetUrl); copyBtn.textContent = 'Copied'; }
+          catch (_) { copyBtn.textContent = 'Select URL bar'; }
+        });
+        const reloadBtn = document.getElementById('wv-reload');
+        if (reloadBtn && frame) reloadBtn.addEventListener('click', () => {
+          settled = false;
+          if (fallback) fallback.hidden = true;
+          try { frame.src = targetUrl; } catch (_) {}
+          setTimeout(revealFallback, 3500);
         });
       }
-      // Auto-open once for convenience
-      try { window.open(data.url, '_blank', 'noopener,noreferrer'); } catch (_) {}
       showReader();
       document.title = (meta.title ? meta.title + ' · ' : '') + 'SoloHost';
       return;

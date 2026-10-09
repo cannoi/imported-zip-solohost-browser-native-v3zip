@@ -234,3 +234,86 @@ body { padding-bottom: 88px; }
   border: 0;
 }
 .webview-panel { max-width: var(--prose-width); margin: 0 auto; }
+
+/* —— Interactive WebView shell —— */
+.webview-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  min-height: min(70vh, 720px);
+}
+.webview-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel, rgba(255,255,255,0.04));
+}
+.webview-note { margin: 0; font-size: 14px; line-height: 1.45; opacity: 0.9; }
+.webview-reason { margin: 0; font-size: 12px; opacity: 0.55; }
+.webview-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.webview-actions .btn,
+.webview-actions a.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 10px;
+  text-decoration: none;
+  cursor: pointer;
+  font-weight: 600;
+  border: 1px solid var(--line);
+  background: var(--panel, #222);
+  color: inherit;
+}
+.webview-actions a.btn.primary,
+.webview-actions .btn.primary {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  color: #fff;
+}
+.webview-frame-wrap {
+  position: relative;
+  flex: 1;
+  min-height: min(62vh, 640px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #0b0c10;
+}
+.webview-frame {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: #fff;
+}
+.webview-frame-fallback {
+  position: absolute;
+  inset: auto 12px 12px 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: rgba(15, 18, 28, 0.92);
+  border: 1px solid var(--line);
+  font-size: 13px;
+  line-height: 1.45;
+  z-index: 2;
+}
+.webview-frame-fallback p { margin: 0; }
+
+.reader-view:has(.webview-shell),
+.reader-view:has(.embed-frame-wrap) {
+  max-width: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+.reader:has(.webview-shell) .article-header {
+  max-width: 100%;
+}
