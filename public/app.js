@@ -216,6 +216,12 @@
         return;
       }
       state.lastPayload = data;
+      window.__soloArticle = {
+        url: data.url || url,
+        title: (data.metadata && data.metadata.title) || '',
+        raw_text: (data.content && data.content.raw_text) || '',
+        clean_html: (data.content && data.content.clean_html) || ''
+      };
       renderArticle(data);
       try {
         fetch('/api/history', {

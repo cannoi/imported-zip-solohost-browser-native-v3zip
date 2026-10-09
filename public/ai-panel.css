@@ -360,3 +360,24 @@
 #aiFab[hidden] {
   display: none !important;
 }
+
+.ai-article-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 10px 0;
+}
+.ai-article-actions button {
+  border: 0;
+  background: #1a1b20;
+  color: #c8c4bc;
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.ai-article-actions button:hover { color: #fff; background: #2a2b33; }
+html[data-theme="light"] .ai-article-actions button {
+  background: #eceae4;
+  color: #333;
+}
