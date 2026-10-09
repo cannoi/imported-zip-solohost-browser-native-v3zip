@@ -1,26 +1,18 @@
 {
   "name": "solohost-browser-hub",
-  "version": "8.5.5-cheerio-normalize",
-  "description": "SoloHost Browser \u2014 cheerio link normalize + tracking-param strip for LRU",
+  "version": "9.0.0-client-webview",
+  "description": "SoloHost Browser — 100% client WebView + lightweight AI gateway",
   "main": "server.js",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "start": "node server.js",
-    "smoke:extract": "node scripts/smoke-extract.js",
-    "test": "node test.js && node tests/browser/architecture.test.js && node tests/browser/navigation-policy.test.js && node tests/browser/file-protocol.test.js && node tests/browser/media-engine.test.js && node --check server.js && node --check browser-gateway.js && node --check public/app.js && node tests/browser/security-policy.test.js && node tests/browser/performance.test.js && node --check lib/performance-monitor.js && node --check scripts/benchmark.js && node --check scripts/smoke-extract.js && node tests/browser/content-extractor.test.js && node tests/browser/chromium-engine.test.js && node tests/browser/reader-view.test.js && node --check lib/ai-agent.js && node tests/browser/ai-assistant.test.js && node tests/browser/api-gateway.test.js && node tests/browser/reader-ui.test.js && node tests/browser/ai-article.test.js && node tests/browser/extract-quality.test.js && node tests/browser/hybrid-routing.test.js && node tests/browser/extraction-tiers.test.js && node tests/browser/stealth-cache.test.js",
-    "benchmark:parse": "node scripts/benchmark-parse.js"
+    "test": "node test.js && node --check server.js && node --check public/app.js && node --check public/reader-injector.js"
   },
   "dependencies": {
-    "@mozilla/readability": "^0.5.0",
-    "express": "^4.19.2",
-    "jsdom": "^24.1.0",
-    "lru-cache": "^10.4.3",
-    "playwright": "1.40.0",
-    "playwright-core": "1.40.0",
-    "ws": "^8.18.3",
-    "cheerio": "^1.0.0",
-    "normalize-url": "^8.0.1"
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2"
   }
 }

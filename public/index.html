@@ -2,60 +2,47 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-  <meta name="theme-color" content="#0c0d10">
-  <meta name="color-scheme" content="dark light">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>SoloHost Browser</title>
-  <link rel="stylesheet" href="style.css?v=8.3.1">
-  <link rel="stylesheet" href="ai-panel.css?v=8.2.0">
+  <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/ai-panel.css">
+  <style>
+    .wv-stage{display:flex;flex-direction:column;flex:1;min-height:0;height:calc(100vh - 56px)}
+    #main-webview{flex:1;width:100%;border:0;background:#fff;min-height:50vh}
+    .wv-toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line, #333)}
+    .wv-toolbar .url-form{flex:1;display:flex;gap:8px;min-width:200px}
+    .wv-toolbar input[type="text"]{flex:1;min-width:0}
+    .wv-hint{font-size:12px;opacity:.7;padding:6px 12px}
+    .wv-actions{display:flex;flex-wrap:wrap;gap:6px}
+  </style>
 </head>
 <body>
-  <a class="skip" href="#url-input">Skip to address</a>
-  <header class="topbar" id="topbar" role="banner">
-    <div class="brand-mark" title="SoloHost Browser">◎</div>
-    <form class="url-form" id="url-form" action="javascript:void(0)" autocomplete="off">
-      <input id="url-input" type="text" inputmode="url" enterkeyhint="go"
-             placeholder="Search or enter website" spellcheck="false" aria-label="URL">
-      <button type="submit" id="btn-go" class="btn primary">Go</button>
-    </form>
-    <div class="toolbar" role="toolbar" aria-label="Reader tools">
-      <button type="button" id="btn-reload" class="btn icon" title="Reload" aria-label="Reload">↻</button>
-      <button type="button" id="btn-font-down" class="btn icon" title="Smaller text" aria-label="Smaller text">A−</button>
-      <button type="button" id="btn-font-up" class="btn icon" title="Larger text" aria-label="Larger text">A+</button>
-      <button type="button" id="btn-theme" class="btn icon" title="Toggle theme" aria-label="Toggle theme">◐</button>
-      <a class="btn icon" href="/downloads" target="_blank" rel="noopener" title="Downloads" aria-label="Downloads">↓</a>
-      <a class="btn icon" href="/security" target="_blank" rel="noopener" title="Security" aria-label="Security">🛡</a>
+  <header class="topbar">
+    <div class="brand">SoloHost</div>
+    <div class="wv-toolbar" style="flex:1;border:0;padding:0 8px">
+      <form class="url-form" id="nav-form" action="javascript:void(0)">
+        <input type="text" id="url-input" placeholder="Search or enter website" autocomplete="off" enterkeyhint="go">
+        <button type="submit" class="btn primary" id="btn-go">Go</button>
+      </form>
+      <div class="wv-actions">
+        <button type="button" class="btn" id="btn-back" title="Back">←</button>
+        <button type="button" class="btn" id="btn-fwd" title="Forward">→</button>
+        <button type="button" class="btn" id="btn-reload" title="Reload">↻</button>
+        <button type="button" class="btn" id="btn-reader" title="Reader Mode">📖</button>
+        <button type="button" class="btn" id="btn-summary" title="Summarize">⚡</button>
+        <button type="button" class="btn" id="btn-translate" title="Translate">🌐</button>
+        <button type="button" class="btn" id="btn-lang" title="Language">EN</button>
+        <a class="btn" id="btn-open-tab" href="#" target="_blank" rel="noopener">↗</a>
+      </div>
     </div>
   </header>
-  <div class="status-line" id="status-line" hidden><span id="status-text">Loading…</span></div>
-  <main class="workspace" id="workspace">
-    <section class="home-panel" id="home-panel">
-      <p class="eyebrow">SoloHost Browser</p>
-      <h1 id="greeting">Read the web, calmly</h1>
-      <p class="lede" id="lede">Enter a link for a clean article view. Private · Lightweight · Optional AI.</p>
-      <div class="quick-links" id="quick-links">
-        <button type="button" data-url="https://example.com">example.com</button>
-        <button type="button" data-url="https://en.wikipedia.org/wiki/Web_browser">Wikipedia</button>
-      </div>
-    </section>
-    <article class="reader" id="reader" hidden>
-      <header class="article-header" id="article-header">
-        <p class="site" id="meta-site"></p>
-        <h1 id="meta-title"></h1>
-        <p class="byline"><span id="meta-byline"></span> <span id="meta-time"></span></p>
-      </header>
-      <div id="media-player-container" class="media-player" hidden>
-        <video id="media-video" controls playsinline preload="metadata"></video>
-        <p class="media-caption" id="media-caption"></p>
-      </div>
-      <div id="reader-view" class="reader-view prose"></div>
-    </article>
-    <section class="error-panel" id="error-panel" hidden>
-      <h2 id="error-title">Could not open page</h2>
-      <p id="error-desc"></p>
-      <button type="button" class="btn primary" id="error-retry">Retry</button>
-    </section>
-  </main>
+  <p class="wv-hint" id="wv-hint">Client WebView — pages open in the frame. Cross-origin sites may require ↗ Open tab for login &amp; AI extract.</p>
+  <div class="wv-stage">
+    <iframe id="main-webview" name="main-webview" title="WebView" src="about:blank"
+      referrerpolicy="no-referrer-when-downgrade"
+      sandbox="allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-presentation allow-top-navigation-by-user-activation"></iframe>
+  </div>
+
   <button type="button" class="ai-fab" id="aiFab" title="AI · Feedback · Settings" aria-label="AI">
     <img src="/ai-icon.png" alt="AI" class="ai-fab-img">
     <span class="ai-fab-dot" id="aiStatusDot"></span>
@@ -79,85 +66,15 @@
           <input type="text" id="aiInput" placeholder="Ask about this page…" autocomplete="off" enterkeyhint="send">
           <button type="button" id="aiSend" aria-label="Send">➤</button>
         </div>
-        <div class="ai-status-bar" id="aiStatusBar">AI: checking…</div>
       </div>
-      <div class="tab-pane" id="tab-feedback">
-        <div class="panel-body fb-body">
-          <div id="fbNotices" class="fb-notices"></div>
-          <div id="fbDonate" class="fb-donate" hidden></div>
-          <label class="fb-label">Type</label>
-          <select id="fbType">
-            <option value="improvement">Improvement</option>
-            <option value="bug">Bug</option>
-            <option value="question">Question</option>
-          </select>
-          <label class="fb-label">Rating</label>
-          <div class="fb-stars" id="fbStars">
-            <button type="button" data-r="1">★</button>
-            <button type="button" data-r="2">★</button>
-            <button type="button" data-r="3">★</button>
-            <button type="button" data-r="4">★</button>
-            <button type="button" data-r="5">★</button>
-          </div>
-          <label class="fb-label">Message</label>
-          <textarea id="fbMessage" rows="3" placeholder="Your feedback…" maxlength="2000"></textarea>
-          <p class="fb-hint">No password or API key needed for feedback.</p>
-          <button type="button" class="fb-submit" id="fbSubmit">Send Feedback</button>
-          <p class="fb-status" id="fbStatus"></p>
-        </div>
-      </div>
-      <div class="tab-pane" id="tab-settings">
-        <div class="panel-body settings-body">
-          <label class="fb-label">Provider</label>
-          <select id="setProvider">
-            <option value="none">— None —</option>
-            <option value="openai">OpenAI</option>
-            <option value="gemini">Google Gemini</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="groq">Groq</option>
-            <option value="mistral">Mistral</option>
-            <option value="xai">xAI</option>
-            <option value="custom">Custom OpenAI-compatible</option>
-            <option value="local">Local OpenAI-compatible</option>
-          </select>
-          <label class="fb-label">API Key</label>
-          <input type="password" id="setApiKey" placeholder="sk-… (hidden after save)" autocomplete="off">
-          <p class="fb-hint" id="setKeyHint">Key: (none)</p>
-          <label class="fb-label">Base URL</label>
-          <input type="text" id="setBaseUrl" placeholder="https://api.example.com/v1">
-          <label class="fb-label">Model</label>
-          <input type="text" id="setModel" placeholder="auto" value="auto">
-          <label class="fb-label">Mode</label>
-          <select id="setMode">
-            <option value="cloud_enabled">Cloud Enabled</option>
-            <option value="prefer_local">Prefer Local</option>
-            <option value="local_only">Local Only</option>
-            <option value="balanced">Balanced</option>
-            <option value="custom">Custom</option>
-          </select>
-          <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-            <button type="button" class="fb-submit" id="setSave">Save Settings</button>
-            <button type="button" class="ws-btn" id="setTest">Check token</button>
-            <button type="button" class="ws-btn" id="setModels">Load models</button>
-          </div>
-          <p class="fb-status" id="setStatus"></p>
-        </div>
-      </div>
-      <div class="tab-pane" id="tab-logs">
-        <div class="panel-body" id="aiLogs" style="font-family:ui-monospace,monospace;font-size:11px;white-space:pre-wrap"></div>
-        <div class="panel-footer">
-          <button type="button" class="ws-btn" id="logsRefresh">Refresh</button>
-          <button type="button" class="ws-btn" id="logsClear">Clear</button>
-        </div>
-      </div>
+      <div class="tab-pane" id="tab-feedback" hidden></div>
+      <div class="tab-pane" id="tab-settings" hidden></div>
+      <div class="tab-pane" id="tab-logs" hidden></div>
     </div>
   </div>
-  <img class="paf-made-by" src="made-by.png" alt="">
-  <script src="app.js?v=8.3.1"></script>
-  <script src="/ai-module/ai-module.js?v=8.2.0"></script>
-  <script src="/feedback-module/feedback-module.js?v=8.2.0"></script>
-  <script src="/ai-panel.js?v=8.2.0"></script>
+
+  <script src="/reader-injector.js"></script>
+  <script src="/app.js"></script>
+  <script src="/ai-panel.js"></script>
 </body>
 </html>
