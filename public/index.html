@@ -49,12 +49,13 @@
     </div>
   </main>
 
-  <button type="button" class="ai-fab" id="aiFab" title="AI" aria-label="AI">
-    <img src="/ai-icon.png" alt="" class="ai-fab-img">
+  <!-- Universal AI FAB + Panel (Snake Arcade pattern) -->
+  <button type="button" class="ai-fab" id="aiFab" title="AI · Feedback · Settings" aria-label="AI">
+    <img src="/ai-icon.png" alt="AI" class="ai-fab-img">
     <span class="ai-fab-dot" id="aiStatusDot"></span>
     <span class="ai-badge" id="aiBadge" hidden style="display:none"></span>
   </button>
-  <div class="panel-overlay" id="aiOverlay" hidden>
+  <div class="panel-overlay" id="aiOverlay" hidden style="z-index:400">
     <div class="panel ai-panel" id="aiPanel">
       <div class="panel-header">
         <span class="panel-title">✦ AI</span>
@@ -69,42 +70,92 @@
       <div class="tab-pane active" id="tab-chat">
         <div class="panel-body" id="aiChat"></div>
         <div class="panel-footer">
-          <input type="text" id="aiInput" placeholder="Ask…" autocomplete="off" enterkeyhint="send">
+          <input type="text" id="aiInput" placeholder="Ask about browsing, privacy, AI…" autocomplete="off" enterkeyhint="send">
           <button type="button" id="aiSend" aria-label="Send">➤</button>
         </div>
+        <div class="ai-status-bar" id="aiStatusBar">AI: checking…</div>
       </div>
-      <div class="tab-pane" id="tab-feedback" hidden></div>
-      <div class="tab-pane" id="tab-settings" hidden></div>
-      <div class="tab-pane" id="tab-logs" hidden></div>
+      <div class="tab-pane" id="tab-feedback">
+        <div class="panel-body fb-body">
+          <div id="fbNotices" class="fb-notices"></div>
+          <div id="fbDonate" class="fb-donate" hidden></div>
+          <label class="fb-label">Type</label>
+          <select id="fbType">
+            <option value="improvement">Improvement</option>
+            <option value="bug">Bug</option>
+            <option value="question">Question</option>
+          </select>
+          <label class="fb-label">Rating</label>
+          <div class="fb-stars" id="fbStars">
+            <button type="button" data-r="1">★</button>
+            <button type="button" data-r="2">★</button>
+            <button type="button" data-r="3">★</button>
+            <button type="button" data-r="4">★</button>
+            <button type="button" data-r="5">★</button>
+          </div>
+          <label class="fb-label">Message</label>
+          <textarea id="fbMessage" rows="4" placeholder="Your feedback…"></textarea>
+          <button type="button" class="fb-submit" id="fbSubmit">Send feedback</button>
+          <p class="fb-status" id="fbStatus"></p>
+        </div>
+      </div>
+      <div class="tab-pane" id="tab-settings">
+        <div class="panel-body fb-body">
+          <label class="fb-label">Provider</label>
+          <select id="setProvider">
+            <option value="none">— None —</option>
+            <option value="openai">OpenAI</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="deepseek">DeepSeek</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="openrouter">OpenRouter</option>
+            <option value="groq">Groq</option>
+            <option value="mistral">Mistral</option>
+            <option value="xai">xAI</option>
+            <option value="custom">Custom OpenAI-compatible</option>
+            <option value="local">Local OpenAI-compatible</option>
+          </select>
+          <label class="fb-label">API Key</label>
+          <input type="password" id="setApiKey" placeholder="sk-… (hidden after save)" autocomplete="off">
+          <p class="fb-hint" id="setKeyHint">Current key: (none)</p>
+          <label class="fb-label">Base URL <small>(required for Custom / Local)</small></label>
+          <input type="text" id="setBaseUrl" placeholder="https://api.example.com/v1">
+          <label class="fb-label">Model</label>
+          <input type="text" id="setModel" placeholder="auto" value="auto">
+          <label class="fb-label">Mode</label>
+          <select id="setMode">
+            <option value="cloud_enabled">Cloud Enabled</option>
+            <option value="prefer_local">Prefer Local</option>
+            <option value="local_only">Local Only</option>
+            <option value="balanced">Balanced</option>
+            <option value="custom">Custom</option>
+          </select>
+          <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+            <button type="button" class="fb-submit" id="setSave">Save Settings</button>
+            <button type="button" class="ws-btn" id="setTest">Check token</button>
+            <button type="button" class="ws-btn" id="setModels">Load models</button>
+            <button type="button" class="ws-btn" id="setRefreshModels">Refresh models</button>
+          </div>
+          <p class="fb-status" id="setStatus"></p>
+          <p class="fb-hint" id="setModelsHint"></p>
+        </div>
+      </div>
+      <div class="tab-pane" id="tab-logs">
+        <div class="panel-body logs-body">
+          <div class="logs-toolbar">
+            <button type="button" class="ws-btn" id="logsRefresh">Refresh</button>
+            <button type="button" class="ws-btn" id="logsClear">Clear</button>
+          </div>
+          <pre id="logsView" class="logs-view">Loading…</pre>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Order matters: UniversalAI/Feedback before ai-panel.js -->
   <script src="/ai-module/ai-module.js"></script>
   <script src="/feedback-module/feedback-module.js"></script>
   <script src="/reader-injector.js"></script>
   <script src="/app.js"></script>
   <script src="/ai-panel.js"></script>
-  <script>
-    /* Hard fallback if UniversalAI failed to load — FAB still opens panel */
-    (function () {
-      var fab = document.getElementById('aiFab');
-      var ov = document.getElementById('aiOverlay');
-      var closeBtn = document.getElementById('aiClose');
-      function openP() { if (ov) { ov.hidden = false; ov.removeAttribute('hidden'); } }
-      function closeP() { if (ov) { ov.hidden = true; ov.setAttribute('hidden', ''); } }
-      if (fab) {
-        fab.addEventListener('click', function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          openP();
-        }, true);
-      }
-      if (closeBtn) closeBtn.addEventListener('click', closeP);
-      if (ov) ov.addEventListener('click', function (e) {
-        if (e.target === ov) closeP();
-      });
-    })();
-  </script>
 </body>
 </html>

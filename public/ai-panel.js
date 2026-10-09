@@ -1,96 +1,12 @@
 'use strict';
 /**
  * Reference AI panel controller (from Snake Arcade).
- * Host app may copy to public/ai-panel.js and adapt gameContext() / executeActions().
+ * Host app may copy to public/ai-panel.js and adapt browserContext() / executeActions().
  * Depends on: UniversalAI, UniversalFeedback, markup in example/ui/ai-panel.html, styles in ai-panel.css.
  */
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
-
-
-
-function currentArticle() {
-  try {
-    if (window.__soloArticle && (window.__soloArticle.raw_text || window.__soloArticle.clean_html)) {
-      return window.__soloArticle;
-    }
-  } catch (e) {}
-  return { url: '', title: '', raw_text: '', clean_html: '' };
-}
-
-async function runArticleSkill(skill) {
-  const art = currentArticle();
-  const labelMap = {
-    summarize: 'Tóm tắt nhanh / Quick summary',
-    translate: 'Dịch sang Tiếng Việt / Translate VI',
-    analyze: 'Phân tích bài viết / Analyze'
-  };
-  const label = labelMap[skill] || skill;
-  const bubble = typeof appendMsg === 'function' ? appendMsg('user', escapeHtml(label)) : null;
-  const thinking = typeof appendMsg === 'function' ? appendMsg('ai', '…') : null;
-  try {
-    let res;
-    if (skill === 'summarize') {
-      res = await fetch('/api/ai/summarize', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept-Language': navigator.language || '' },
-        body: JSON.stringify({
-          raw_text: art.raw_text,
-          lang: (navigator.language || '').toLowerCase().startsWith('vi') ? 'vi' : 'en'
-        })
-      });
-    } else if (skill === 'translate') {
-      res = await fetch('/api/ai/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          clean_html: art.clean_html || art.raw_text,
-          targetLang: 'Vietnamese'
-        })
-      });
-    } else {
-      const q = (navigator.language || '').toLowerCase().startsWith('vi')
-        ? 'Phân tích bài viết: ý chính, góc nhìn, và điểm đáng chú ý.'
-        : 'Analyze this article: main points, perspective, and notable takeaways.';
-      res = await fetch('/api/ai/ask', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept-Language': navigator.language || '' },
-        body: JSON.stringify({ raw_text: art.raw_text, question: q })
-      });
-    }
-    const data = await res.json().catch(function () { return {}; });
-    const reply = data.reply || data.error || '—';
-    const html = escapeHtml(reply).replace(/\n/g, '<br>');
-    if (thinking) thinking.innerHTML = html;
-    if (skill === 'translate' && data.reply && data.ok !== false) {
-      const view = document.getElementById('reader-view');
-      if (view && /<[a-z][\s\S]*>/i.test(data.reply)) view.innerHTML = data.reply;
-    }
-  } catch (e) {
-    if (thinking) thinking.textContent = String(e.message || e);
-  }
-}
-
-function ensureArticleQuickActions() {
-  const chatPane = document.getElementById('tab-chat');
-  if (!chatPane || document.getElementById('ai-article-actions')) return;
-  const bar = document.createElement('div');
-  bar.id = 'ai-article-actions';
-  bar.className = 'ai-article-actions';
-  bar.innerHTML =
-    '<button type="button" data-skill="summarize" title="Summarize">∑ Tóm tắt</button>' +
-    '<button type="button" data-skill="translate" title="Translate to Vietnamese">文 Dịch VI</button>' +
-    '<button type="button" data-skill="analyze" title="Analyze article">◎ Phân tích</button>';
-  const body = document.getElementById('aiChat');
-  if (body && body.parentNode) body.parentNode.insertBefore(bar, body);
-  bar.querySelectorAll('[data-skill]').forEach(function (btn) {
-    btn.addEventListener('click', function () {
-      runArticleSkill(btn.getAttribute('data-skill'));
-    });
-  });
-}
-
 function flatten(src, prefix, out) {
   if (src == null) return;
   if (typeof src === 'string' || typeof src === 'number') {
@@ -143,32 +59,28 @@ function setFabVisible(visible) {
   fab.hidden = !visible;
   fab.style.display = visible ? '' : 'none';
 }
-function gameContext() {
-  const input = document.getElementById('url-input');
-  const title = document.getElementById('meta-title');
-  const reader = document.getElementById('reader');
+function browserContext() {
+  // Non-secret live state for AI
+  const st = (window.SoloBrowser && window.SoloBrowser.state) || {};
   return {
-    screen: reader && !reader.hidden ? 'reader' : 'home',
-    url: input && input.value ? input.value : '',
-    title: (title && title.textContent) || document.title || 'SoloHost Browser',
-    engine: 'chromium-extract'
+    screen: st.url ? 'webview' : 'home',
+    url: st.url || '',
+    theme: st.theme || document.documentElement.getAttribute('data-theme') || 'rainbow',
+    lang: st.lang || 'en',
+    mode: 'webview-proxy'
   };
 }
 function executeActions(actions) {
   (actions || []).forEach(a => {
     if (!a || a.ok === false) return;
     const name = a.action || a.name;
-    const args = a.args || {};
-    const value = a.value || args.value || args.url || '';
-    if (name === 'open_url' && value && typeof window.openUrl === 'function') window.openUrl(value);
-    else if (name === 'open_url' && value) {
-      const input = document.getElementById('search-input');
-      const form = document.getElementById('search-form');
-      if (input) { input.value = value; if (form) form.requestSubmit(); }
+    const value = a.value || (a.args && (a.args.url || a.args.value)) || '';
+    if (name === 'open_url' && value && window.SoloBrowser && typeof window.SoloBrowser.navigate === 'function') {
+      window.SoloBrowser.navigate(String(value));
     }
-    if (name === 'go_home') document.body.classList.remove('browsing');
-    if (name === 'open_security') window.open('/security', '_blank');
-    if (name === 'reload_page') document.getElementById('btn-reload')?.click();
+    if (name === 'open_security') window.open('/security.html', '_blank');
+    if (name === 'toggle_theme') document.getElementById('btn-theme')?.click();
+    if (name === 'open_tab') document.querySelector('.tab[data-tab="' + (value || 'chat') + '"]')?.click();
   });
 }
 
@@ -182,39 +94,17 @@ function appendMsg(role, html) {
   return div;
 }
 
-const ai = (window.UniversalAI && typeof window.UniversalAI.create === 'function')
-  ? window.UniversalAI.create({
-      button: document.getElementById('aiFab'),
-      onOpen() {
-        const ov = document.getElementById('aiOverlay');
-        if (ov) { ov.hidden = false; ov.removeAttribute('hidden'); }
-        setFabVisible(false);
-        try { refreshStatus(); } catch (e) {}
-        try { loadSettings(); } catch (e) {}
-      },
-      onActions: executeActions
-    })
-  : {
-      status: async () => ({ ok: false }),
-      settings: async () => ({}),
-      models: async () => ({ models: [] }),
-      testConnection: async () => ({ ok: false }),
-      saveSettings: async () => ({}),
-      catalog: async () => ({ providers: [] }),
-      chat: async () => ({ reply: 'AI module not loaded' })
-    };
-
-// Ensure FAB opens panel even when UniversalAI.create did not bind
-(function ensureFab() {
-  const fab = document.getElementById('aiFab');
-  if (!fab || fab.dataset.soloBound === '1') return;
-  fab.dataset.soloBound = '1';
-  fab.addEventListener('click', function () {
+const ai = window.UniversalAI.create({
+  button: document.getElementById('aiFab'),
+  onOpen() {
     const ov = document.getElementById('aiOverlay');
-    if (ov) { ov.hidden = false; ov.removeAttribute('hidden'); }
-    try { setFabVisible(false); } catch (e) {}
-  });
-})();
+    if (ov) ov.hidden = false;
+    setFabVisible(false);
+    refreshStatus();
+    loadSettings();
+  },
+  onActions: executeActions
+});
 
 function closeAIPanel() {
   const ov = document.getElementById('aiOverlay');
@@ -256,7 +146,7 @@ async function sendAI() {
   appendMsg('user', escapeHtml(text));
   const loading = appendMsg('ai', '…');
   try {
-    const out = await ai.chat(text, gameContext());
+    const out = await ai.chat(text, browserContext());
     loading.remove();
     executeActions(out.actions);
     const local = out.source === 'local' || out.configured === false;
