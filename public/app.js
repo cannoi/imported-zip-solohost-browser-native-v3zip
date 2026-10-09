@@ -36,6 +36,19 @@
 
 
   /** Sites that block top-level iframe: map to official embed URL when possible. */
+  function isDirectEmbed(url) {
+    try {
+      const h = new URL(url).hostname.replace(/^www\./, '');
+      return /youtube\.com$|youtube-nocookie\.com$|youtu\.be$|tiktok\.com$|player\.vimeo\.com$/.test(h)
+        && /\/embed|\/embed\//.test(url + '/');
+    } catch { return false; }
+  }
+
+  function proxyFrameUrl(url) {
+    // Same-origin proxy — required because almost all sites send X-Frame-Options
+    return '/api/proxy?url=' + encodeURIComponent(url);
+  }
+
   function toPlayableUrl(url) {
     let u;
     try { u = new URL(url); } catch { return url; }
@@ -104,21 +117,26 @@
     url = toPlayableUrl(url);
     state.url = url;
     state.readerOn = false;
+    // Omnibox shows the real site URL; iframe loads via same-origin proxy (or direct embed)
     if (input) input.value = url;
     if (btnOpen) btnOpen.href = url;
     hideStart();
-    // Reset then assign — more reliable than only setting src on some WebViews
+    const frameSrc = isDirectEmbed(url) ? url : proxyFrameUrl(url);
     try {
       frame.removeAttribute('srcdoc');
-      frame.src = 'about:blank';
-      // next tick to force reload path
-      requestAnimationFrame(() => {
-        frame.src = url;
-      });
+      frame.src = frameSrc;
     } catch (e) {
-      try { frame.src = url; } catch (_) {}
+      try { frame.src = frameSrc; } catch (_) {}
     }
   }
+
+  // Links inside proxied pages postMessage to navigate without leaving the shell
+  window.addEventListener('message', (ev) => {
+    try {
+      const d = ev.data;
+      if (d && d.type === 'solohost-navigate' && d.url) navigate(d.url);
+    } catch (_) {}
+  });
 
   function extractPage() {
     if (!window.SoloReader) return { ok: false, error: 'NO_INJECTOR' };

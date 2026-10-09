@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "9.0.3-embed-ai-fix",
+  "version": "9.0.4-frame-proxy",
   "description": "SoloHost Browser \u2014 100% client WebView + lightweight AI gateway",
   "main": "server.js",
   "engines": {

@@ -39,8 +39,8 @@ function healthPayload() {
     ok: true,
     service: 'solohost-browser',
     version: PKG.version || '9.0.0',
-    mode: 'client-webview',
-    engine: { name: 'client-webview', ready: true },
+    mode: 'webview-proxy',
+    engine: { name: 'webview-proxy', ready: true },
     port: PORT,
     timestamp: new Date().toISOString()
   };
@@ -49,6 +49,17 @@ app.get('/api/health', (_req, res) => res.status(200).json(healthPayload()));
 app.get('/health', (_req, res) => res.status(200).json(healthPayload()));
 app.get('/ready', (_req, res) => res.status(200).json({ ready: true, ok: true }));
 app.get('/api/ready', (_req, res) => res.status(200).json({ ready: true, ok: true }));
+
+// Same-origin HTML proxy so iframe can display sites that set X-Frame-Options
+try {
+  const { handleProxy } = require('./lib/frame-proxy');
+  app.get('/api/proxy', (req, res) => { handleProxy(req, res); });
+  app.get('/proxy', (req, res) => { handleProxy(req, res); });
+} catch (err) {
+  console.error('[warn] frame-proxy unavailable:', err.message);
+  app.get('/api/proxy', (_req, res) => res.status(503).send('proxy unavailable'));
+}
+
 
 // --- AI + Feedback (Express-native routers) ---
 let aiService = null;
