@@ -1,20 +1,32 @@
 FROM node:22-trixie-slim AS build
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+    CC=gcc \
+    CXX=g++
+# build-essential provides make + g++/gcc (CMAKE_MAKE_PROGRAM / CMAKE_CXX_COMPILER)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libwebkit2gtk-4.1-dev \
-    libgtk-3-dev \
+    build-essential \
+    make \
     g++ \
+    gcc \
     pkg-config \
     cmake \
+    libwebkit2gtk-4.1-dev \
+    libgtk-3-dev \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && command -v make && command -v g++ && command -v cmake
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts
 COPY . .
-RUN cmake -S /app/native/webkit-engine -B /tmp/solohost-webkit-build \
+RUN cmake -S /app/native/webkit-engine -B /tmp/solohost-webkit-build -G "Unix Makefiles" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_CXX_COMPILER=g++ \
+        -DCMAKE_C_COMPILER=gcc \
+        -DCMAKE_MAKE_PROGRAM="$(command -v make)" \
     && cmake --build /tmp/solohost-webkit-build --config Release -j2 \
-    && install -m 0755 /tmp/solohost-webkit-build/solohost-webkit-engine /tmp/solohost-webkit-engine
+    && install -m 0755 /tmp/solohost-webkit-build/solohost-webkit-engine /tmp/solohost-webkit-engine \
+    && test -x /tmp/solohost-webkit-engine
 
 FROM node:22-trixie-slim
 ENV NODE_ENV=production \
