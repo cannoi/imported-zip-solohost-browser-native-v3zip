@@ -2,7 +2,7 @@ services:
   web:
     build: .
     ports:
-      - "127.0.0.1:18080:8080"
+      - "8080:8080"
     environment:
       PORT: "8080"
       SOLOHOST_DEMO_APPS: "1"
@@ -10,8 +10,9 @@ services:
       SOLOHOST_BROWSER_DATA: "/app/data/webkit-profile"
       SOLOHOST_DOWNLOADS: "/app/data/webkit-profile/downloads"
       SOLOHOST_NAV_TIMEOUT_MS: "30000"
-      SOLOHOST_EXTRACT_CONCURRENCY: "3"
-      OLLAMA_URL: "http://127.0.0.1:11434"
+      SOLOHOST_EXTRACT_CONCURRENCY: "2"
+      PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
     shm_size: "1gb"
     init: true
     labels:

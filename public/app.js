@@ -37,7 +37,8 @@
     theme: localStorage.getItem('shb-theme') || 'dark',
     loading: false,
     lastPayload: null,
-    hls: null
+    hls: null,
+    abort: null
   };
 
   const i18n = {
@@ -46,20 +47,22 @@
       go: 'Go',
       greeting: 'Read the web, calmly',
       lede: 'Enter a link for a clean article view. Private · Lightweight · Optional AI.',
-      loading: 'Extracting page…',
+      loading: 'Opening page…',
       error: 'Could not open page',
       retry: 'Retry',
-      min: 'min read'
+      min: 'min read',
+      empty: 'Page opened but no readable article was found. Try another URL.'
     },
     vi: {
       placeholder: 'Tìm kiếm hoặc nhập địa chỉ',
       go: 'Đi',
       greeting: 'Đọc web thật nhẹ nhàng',
       lede: 'Nhập liên kết để xem bài sạch. Riêng tư · Nhẹ · AI tùy chọn.',
-      loading: 'Đang trích trang…',
+      loading: 'Đang mở trang…',
       error: 'Không mở được trang',
       retry: 'Thử lại',
-      min: 'phút đọc'
+      min: 'phút đọc',
+      empty: 'Đã mở trang nhưng không tìm thấy bài đọc được. Thử địa chỉ khác.'
     }
   };
 
@@ -106,6 +109,7 @@
   }
 
   function showError(message) {
+    // Keep workspace (not "silent home"): show explicit error panel.
     if (els.home) els.home.hidden = true;
     if (els.reader) els.reader.hidden = true;
     if (els.errorPanel) els.errorPanel.hidden = false;
@@ -116,8 +120,13 @@
     let u = String(raw || '').trim();
     if (!u) return '';
     if (/^https?:\/\//i.test(u)) return u;
-    if (/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(u) || /^localhost(:\d+)?/i.test(u)) return 'https://' + u;
+    if (/^[\w.-]+\.[a-z]{2,}(\/.*)?$/i.test(u) || /^localhost(:\d+)?(\/.*)?$/i.test(u)) return 'https://' + u;
     return 'https://www.google.com/search?q=' + encodeURIComponent(u);
+  }
+
+  /** API base: same origin as the UI (SoloHost proxies the container). */
+  function apiUrl(path) {
+    return path;
   }
 
   function destroyMedia() {
@@ -136,7 +145,7 @@
     if (els.mediaCaption) els.mediaCaption.textContent = '';
   }
 
-  function loadHls(src) {
+  function loadHls() {
     return new Promise((resolve, reject) => {
       if (window.Hls) return resolve(window.Hls);
       const s = document.createElement('script');
@@ -154,12 +163,10 @@
     const preferred = videos.find(v => v.type === 'hls') || videos.find(v => v.type === 'mp4') || videos[0];
     if (!preferred || !preferred.src) return;
     els.mediaBox.hidden = false;
-    if (els.mediaCaption) {
-      els.mediaCaption.textContent = preferred.type === 'hls' ? 'HLS stream' : 'Video';
-    }
+    if (els.mediaCaption) els.mediaCaption.textContent = preferred.type === 'hls' ? 'HLS stream' : 'Video';
     if (preferred.type === 'hls') {
       try {
-        const Hls = await loadHls(preferred.src);
+        const Hls = await loadHls();
         if (Hls && Hls.isSupported()) {
           state.hls = new Hls({ enableWorker: true });
           state.hls.loadSource(preferred.src);
@@ -170,9 +177,7 @@
           els.mediaVideo.src = preferred.src;
           return;
         }
-      } catch (_) {
-        /* fall through to direct src */
-      }
+      } catch (_) {}
     }
     els.mediaVideo.src = preferred.src;
   }
@@ -180,7 +185,7 @@
   function renderArticle(data) {
     const meta = data.metadata || {};
     const content = data.content || {};
-    if (els.metaSite) els.metaSite.textContent = meta.siteName || (data.url ? new URL(data.url).hostname : '');
+    if (els.metaSite) els.metaSite.textContent = meta.siteName || (data.url ? (() => { try { return new URL(data.url).hostname; } catch { return ''; } })() : '');
     if (els.metaTitle) els.metaTitle.textContent = meta.title || data.url || '';
     if (els.metaByline) els.metaByline.textContent = meta.byline || '';
     if (els.metaTime) {
@@ -188,7 +193,13 @@
       els.metaTime.textContent = mins ? ` · ${mins} ${T.min}` : '';
     }
     if (els.view) {
-      els.view.innerHTML = content.clean_html || `<p>${content.raw_text || ''}</p>`;
+      if (content.clean_html) {
+        els.view.innerHTML = content.clean_html;
+      } else if (content.raw_text) {
+        els.view.innerHTML = '<p>' + String(content.raw_text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/\n/g,'</p><p>') + '</p>';
+      } else {
+        els.view.innerHTML = '<p class="lede">' + T.empty + '</p><p><a href="' + (data.url || '#') + '" target="_blank" rel="noopener">' + (data.url || '') + '</a></p>';
+      }
     }
     document.title = (meta.title ? meta.title + ' · ' : '') + 'SoloHost';
     setupMedia((data.media && data.media.videos) || []);
@@ -198,21 +209,37 @@
 
   async function openUrl(raw) {
     const url = normalizeUrl(raw);
-    if (!url || state.loading) return;
+    if (!url) return;
+    if (state.loading && state.url === url) return;
+
+    if (state.abort) {
+      try { state.abort.abort(); } catch (_) {}
+    }
+    state.abort = typeof AbortController !== 'undefined' ? new AbortController() : null;
     state.url = url;
     if (els.input) els.input.value = url;
+
     state.loading = true;
     if (els.go) els.go.disabled = true;
     setStatus(T.loading, true);
     if (els.errorPanel) els.errorPanel.hidden = true;
+    // Keep previous reader visible while loading (less "jump to home").
+    if (els.home) els.home.hidden = true;
+
     try {
-      const res = await fetch('/api/browser/parse?url=' + encodeURIComponent(url), {
-        headers: { 'Accept': 'application/json', 'Accept-Language': navigator.language || 'en' }
+      const res = await fetch(apiUrl('/api/browser/parse?url=' + encodeURIComponent(url)), {
+        headers: {
+          'Accept': 'application/json',
+          'Accept-Language': navigator.language || 'en'
+        },
+        signal: state.abort ? state.abort.signal : undefined
       });
       let data = null;
       try { data = await res.json(); } catch (_) { data = null; }
-      if (!data || data.success === false) {
-        showError((data && data.error) || ('HTTP ' + res.status));
+
+      if (!res.ok || !data || data.success === false) {
+        const msg = (data && (data.error || data.message)) || ('HTTP ' + res.status);
+        showError(msg);
         return;
       }
       state.lastPayload = data;
@@ -224,14 +251,15 @@
       };
       renderArticle(data);
       try {
-        fetch('/api/history', {
+        fetch(apiUrl('/api/history'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ url: data.url || url, title: (data.metadata && data.metadata.title) || url })
         }).catch(() => {});
       } catch (_) {}
     } catch (err) {
-      showError(String(err.message || err));
+      if (err && err.name === 'AbortError') return;
+      showError(String((err && err.message) || err));
     } finally {
       state.loading = false;
       if (els.go) els.go.disabled = false;
@@ -239,15 +267,31 @@
     }
   }
 
-  // Expose for AI panel actions
   window.openUrl = openUrl;
 
   function onSubmit(e) {
-    e.preventDefault();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     openUrl(els.input && els.input.value);
+    return false;
   }
 
-  if (els.form) els.form.addEventListener('submit', onSubmit);
+  if (els.form) {
+    els.form.setAttribute('action', 'javascript:void(0)');
+    els.form.addEventListener('submit', onSubmit);
+  }
+  if (els.input) {
+    // type=text avoids HTML5 URL validation rejecting bare domains
+    els.input.setAttribute('type', 'text');
+    els.input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        onSubmit(e);
+      }
+    });
+  }
   if (els.reload) els.reload.addEventListener('click', () => openUrl(state.url || (els.input && els.input.value)));
   if (els.fontDown) els.fontDown.addEventListener('click', () => {
     state.fontScale = Math.max(0.85, Math.round((state.fontScale - 0.05) * 100) / 100);
@@ -273,7 +317,6 @@
   applyFont();
   showHome();
 
-  // Deep link ?url=
   try {
     const q = new URLSearchParams(location.search).get('url');
     if (q) openUrl(q);

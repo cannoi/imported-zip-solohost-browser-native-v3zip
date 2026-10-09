@@ -1,8 +1,25 @@
 services:
   web:
     build: .
-    restart: unless-stopped
-    labels:
-      pi.ui.primary: "true"
     ports:
       - "8080:8080"
+    environment:
+      PORT: "8080"
+      SOLOHOST_DEMO_APPS: "1"
+      HOME: "/tmp/solohost-browser"
+      SOLOHOST_BROWSER_DATA: "/app/data/webkit-profile"
+      SOLOHOST_DOWNLOADS: "/app/data/webkit-profile/downloads"
+      SOLOHOST_NAV_TIMEOUT_MS: "30000"
+      SOLOHOST_EXTRACT_CONCURRENCY: "2"
+      PLAYWRIGHT_BROWSERS_PATH: "/ms-playwright"
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    shm_size: "1gb"
+    init: true
+    labels:
+      pi.ui.primary: "true"
+      pi.browser.engine: "chromium"
+    restart: unless-stopped
+    volumes:
+      - solohost-browser-data:/app/data
+volumes:
+  solohost-browser-data:

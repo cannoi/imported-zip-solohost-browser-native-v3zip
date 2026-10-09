@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "8.3.0-ai-reader",
+  "version": "8.3.1-nav-fix",
   "description": "SoloHost Browser \u2014 Reader extract + AI summarize/translate/ask",
   "main": "server.js",
   "engines": {
