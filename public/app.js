@@ -118,20 +118,37 @@
   });
   if(els.aiBtn){
     const add=(cls,s)=>{const p=document.createElement('p');p.className=cls;p.textContent=s;els.aiLog.appendChild(p);els.aiLog.scrollTop=els.aiLog.scrollHeight;};
+    async function askAi(q,skill){
+      if(!q)return;
+      add('me',q);
+      try{
+        const activeTab=state.tabs.find(t=>t.id===state.active)||{};
+        const r=await fetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json','Accept-Language':navigator.language||''},body:JSON.stringify({message:q,skill:skill||'',url:activeTab.url||'',title:activeTab.title||''})});
+        const d=await r.json();
+        if(d.skill||d.provider) add('meta',[d.skill,d.provider].filter(Boolean).join(' · '));
+        add('', d.text || d.error || d.hint || '—');
+        if(d.navigate) openUrl(d.navigate);
+      }catch{ add('','AI unavailable — browser still works'); }
+    }
     els.aiBtn.onclick=()=>{els.aiDock.hidden=!els.aiDock.hidden;if(!els.aiDock.hidden)els.aiInput.focus();};
     els.aiClose.onclick=()=>{els.aiDock.hidden=true;};
+    const skills=document.getElementById('ai-skills');
+    if(skills){
+      skills.querySelectorAll('[data-skill]').forEach(btn=>{
+        btn.onclick=()=>{
+          const skill=btn.getAttribute('data-skill');
+          const presets={summarize:'Summarize this page',translate:'Translate this page',explain:'Explain this page',extract:'Extract key points from this page',search:els.aiInput.value.trim()||'Search the web'};
+          const q=presets[skill]||skill;
+          askAi(q,skill);
+        };
+      });
+    }
     els.aiForm.onsubmit=async e=>{
       e.preventDefault();
       const q=els.aiInput.value.trim();
       if(!q)return;
       els.aiInput.value='';
-      add('me',q);
-      try{
-        const r=await fetch('/api/ai/chat',{method:'POST',headers:{'Content-Type':'application/json','Accept-Language':navigator.language||''},body:JSON.stringify({message:q})});
-        const d=await r.json();
-        add('', d.text || d.error || '—');
-        if(d.navigate) openUrl(d.navigate);
-      }catch{ add('','AI unavailable'); }
+      askAi(q);
     };
   }
   applyLanguage(); loadApps();loadBookmarks();loadHistory();renderTabs(); restoreSession();

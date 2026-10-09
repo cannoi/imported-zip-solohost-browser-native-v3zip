@@ -63,3 +63,32 @@ This is source-level/media-stack preparation, not proof that every YouTube strea
 - `/api/performance` reports Node memory, an interval CPU sample, cgroup memory where available, tab count, and best-effort RSS for tracked process trees.
 - The internal noVNC HTTP asset proxy reuses keep-alive connections. The WebSocket/VNC tunnel is unchanged.
 - No forced lazy-loading or background-tab freezing is enabled: these can change site semantics, notifications, media playback and responsiveness. No speed or RAM reduction is claimed until a before/after run is captured on SoloHost.
+
+
+## V7.7 Display Engine
+
+```text
+WebKitGTK (native render)
+  → Xvfb framebuffer
+  → x11vnc RFB (fps/wait/defer/ncache tuned)
+  → websockify
+  → noVNC iframe in SoloHost shell
+```
+
+Constraint: the SoloHost shell is opened inside Pi Browser, so a native WebKit surface cannot be composed into the DOM. A transport remains mandatory.
+
+Default mode: `SOLOHOST_DISPLAY_MODE=novnc`.
+Optional off: `SOLOHOST_DISPLAY_MODE=off` (engine only; no view stream).
+
+Alternatives (WebRTC, KasmVNC, offscreen WS frames) stay documented experimental until SoloHost benchmarks show net gain on CPU, RAM, latency, and image size.
+
+
+## V7.8 AI Browser
+
+```text
+User → SoloHost Browser shell → AI Assistant (optional)
+  skills: search | summarize | explain | translate | navigate | extract | assist
+Providers (priority): Personal AI Hub → Ollama local → OpenAI-compatible → Anthropic
+```
+
+AI never owns rendering. WebKit remains the engine. If no provider is available, Assist returns a soft error and the browser continues.

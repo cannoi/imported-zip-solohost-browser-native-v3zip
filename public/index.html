@@ -119,9 +119,16 @@
 
   <aside class="ai-dock" id="ai-dock" hidden>
     <header>
-      <span>◎</span>
+      <span>◎ Assist</span>
       <button type="button" id="ai-close" title="Close" aria-label="Close">×</button>
     </header>
+    <div class="ai-skills" id="ai-skills" role="toolbar" aria-label="AI skills">
+      <button type="button" data-skill="summarize" title="Summarize">∑</button>
+      <button type="button" data-skill="translate" title="Translate">文</button>
+      <button type="button" data-skill="explain" title="Explain">?</button>
+      <button type="button" data-skill="extract" title="Extract">▤</button>
+      <button type="button" data-skill="search" title="Search">🔍</button>
+    </div>
     <div class="ai-log" id="ai-log"></div>
     <form id="ai-form">
       <input id="ai-input" type="text" placeholder="Ask" autocomplete="off" enterkeyhint="send">
@@ -130,7 +137,7 @@
   </aside>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
   
-  <script src="app.js?v=7.6.0"></script>
+  <script src="app.js?v=7.8.0"></script>
   <img class="paf-made-by" src="made-by.png" alt="">
 </body>
 </html>

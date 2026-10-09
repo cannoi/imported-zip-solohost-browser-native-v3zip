@@ -682,9 +682,16 @@ body.browsing .atmosphere .radial { opacity: .45; }
 .ai-dock[hidden] { display: none !important; }
 .ai-dock header { display:flex; justify-content:space-between; align-items:center; padding:10px 12px; font-size:13px; color:#9a9790; }
 .ai-dock header button { background:none; border:0; color:inherit; font-size:18px; cursor:pointer; }
+.ai-skills { display:flex; gap:6px; padding:0 10px 8px; flex-wrap:wrap; }
+.ai-skills button {
+  border:0; background:#1a1b20; color:#c8c4bc; border-radius:999px;
+  width:32px; height:32px; cursor:pointer; font-size:13px;
+}
+.ai-skills button:hover { color:#fff; background:#25262c; }
 .ai-log { flex:1; overflow:auto; padding:0 12px 8px; font-size:13px; line-height:1.45; }
 .ai-log p { margin:0 0 8px; }
 .ai-log .me { color:#c8c4bc; }
+.ai-log .meta { color:#6f6c66; font-size:11px; }
 .ai-dock form { display:flex; gap:6px; padding:8px 10px 10px; }
 .ai-dock input { flex:1; border:0; background:#1a1b20; color:inherit; border-radius:12px; padding:8px 10px; }
 .ai-dock form button { border:0; background:transparent; color:inherit; cursor:pointer; }

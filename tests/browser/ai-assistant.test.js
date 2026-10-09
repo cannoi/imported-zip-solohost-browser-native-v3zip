@@ -1,0 +1,14 @@
+const assert = require('assert');
+const path = require('path');
+const fs = require('fs');
+const root = path.join(__dirname, '..', '..');
+const ai = require(path.join(root, 'lib/ai-agent.js'));
+assert.ok(Array.isArray(ai.SKILLS));
+assert.ok(ai.SKILLS.includes('summarize'));
+assert.strictEqual(ai.detectSkill('tóm tắt trang này'), 'summarize');
+assert.strictEqual(ai.detectSkill('open https://example.com'), 'navigate');
+assert.strictEqual(ai.detectSkill('hello'), 'assist');
+const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+assert.ok(server.includes('/api/ai/skills'));
+assert.ok(server.includes('required: false') || server.includes('required:false'));
+console.log('PASS ai-assistant');

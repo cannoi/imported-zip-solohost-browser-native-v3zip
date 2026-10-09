@@ -1,0 +1,16 @@
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const root = path.join(__dirname, '..', '..');
+const dm = require(path.join(root, 'lib/display-manager.js'));
+assert.strictEqual(typeof dm.x11vncArgs, 'function');
+const args = dm.x11vncArgs();
+assert.ok(args.includes('-fps'));
+assert.ok(args.includes('-ncache') || args.includes('-speeds'));
+const snap = dm.snapshot();
+assert.ok(snap.path);
+assert.ok(snap.mode === 'novnc' || snap.mode === 'off');
+assert.ok(fs.existsSync(path.join(root, 'lib/display-manager.js')));
+const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+assert.ok(server.includes('/api/display/status'));
+console.log('PASS display-engine');

@@ -16,6 +16,7 @@ const engineManager = require('./lib/engine-adapter');
 const displayProxy = require('./lib/display-proxy');
 const securityPolicy = require('./lib/security-policy');
 const performanceMonitor = require('./lib/performance-monitor');
+const displayManager = require('./lib/display-manager');
 
 const PORT = Number(process.env.PORT || 8080);
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -290,6 +291,14 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/browser/status') {
       return json(res, 200, engineManager.snapshot());
     }
+    if (p === '/api/display/status') {
+      const eng = engineManager.snapshot();
+      return json(res, 200, displayManager.snapshot({
+        engineStatus: eng.status,
+        processIds: eng.processIds || {},
+        screen: eng.screen || null
+      }));
+    }
     if (p === '/api/performance' || p === '/api/diagnostics/performance') {
       return json(res, 200, performanceMonitor.sample(engineManager.snapshot()));
     }
@@ -332,18 +341,28 @@ const server = http.createServer(async (req, res) => {
     if (p === '/api/ai' && method === 'GET') {
       return json(res, 200, await aiAgent.probe());
     }
+    if (p === '/api/ai/skills' && method === 'GET') {
+      return json(res, 200, { skills: aiAgent.SKILLS, required: false });
+    }
     if (p === '/api/ai/chat' && method === 'POST') {
       const body = await readBody(req, 20000);
       try {
+        let page = {};
+        try { page = browserGateway.pageSnapshot() || {}; } catch { page = {}; }
+        if (body.url) page.url = String(body.url);
+        if (body.title) page.title = String(body.title);
+        if (body.excerpt) page.excerpt = String(body.excerpt).slice(0, 8000);
         const out = await aiAgent.chat({
           message: body.message || body.q || '',
-          page: browserGateway.pageSnapshot(),
+          skill: body.skill || '',
+          page,
           acceptLanguage: req.headers['accept-language'] || '',
           navigate: (url) => browserGateway.navigate(url)
         });
-        return json(res, out.ok ? 200 : 400, out);
+        // AI is optional: never 5xx only because no provider is configured.
+        return json(res, out.ok ? 200 : 200, out);
       } catch (err) {
-        return json(res, 503, { ok: false, error: String(err.message || err), state: 'FAILED' });
+        return json(res, 200, { ok: false, required: false, error: String(err.message || err), state: 'FAILED' });
       }
     }
     if (p === '/api/engine' && method === 'GET') {
@@ -354,7 +373,7 @@ const server = http.createServer(async (req, res) => {
         name: 'SoloHost Browser',
         status: 'active',
         version: require('./package.json').version,
-        features: ['WebKit', 'HTTP/HTTPS', 'WebSocket/WebRTC', 'HTML5 Media', 'Safe Downloads', 'Profile-Scoped Files', 'Security Policy', 'Safe Downloads', 'PDF/Images/Text/JSON/Archives', 'Live Display', 'Persistent Profile', 'Tabs', 'App Discovery', 'Bookmarks', 'History']
+        features: ['WebKit', 'HTTP/HTTPS', 'WebSocket/WebRTC', 'HTML5 Media', 'Safe Downloads', 'Profile-Scoped Files', 'Security Policy', 'PDF/Images/Text/JSON/Archives', 'Live Display', 'Persistent Profile', 'Tabs', 'App Discovery', 'Bookmarks', 'History', 'AI Assistant (optional)', 'Search', 'Summarize', 'Explain', 'Translate', 'Navigate', 'Extract', 'Assist']
       });
     }
     if (p === '/api/status') {
