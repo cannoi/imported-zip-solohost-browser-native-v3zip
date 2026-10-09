@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "8.4.0-hybrid-routing",
+  "version": "8.4.1-compose-layout",
   "description": "SoloHost Browser \u2014 Hybrid READER/EMBED/WEBVIEW routing",
   "main": "server.js",
   "engines": {
