@@ -38,6 +38,7 @@
       src="about:blank"
       referrerpolicy="no-referrer-when-downgrade"
       allow="accelerometer; autoplay; clipboard-read; clipboard-write; encrypted-media; fullscreen; geolocation; microphone; camera; payment; picture-in-picture"
+      allowfullscreen
     ></iframe>
     <div class="start-screen" id="start-screen">
       <div class="start-inner">
@@ -78,8 +79,32 @@
     </div>
   </div>
 
+  <!-- Order matters: UniversalAI/Feedback before ai-panel.js -->
+  <script src="/ai-module/ai-module.js"></script>
+  <script src="/feedback-module/feedback-module.js"></script>
   <script src="/reader-injector.js"></script>
   <script src="/app.js"></script>
   <script src="/ai-panel.js"></script>
+  <script>
+    /* Hard fallback if UniversalAI failed to load — FAB still opens panel */
+    (function () {
+      var fab = document.getElementById('aiFab');
+      var ov = document.getElementById('aiOverlay');
+      var closeBtn = document.getElementById('aiClose');
+      function openP() { if (ov) { ov.hidden = false; ov.removeAttribute('hidden'); } }
+      function closeP() { if (ov) { ov.hidden = true; ov.setAttribute('hidden', ''); } }
+      if (fab) {
+        fab.addEventListener('click', function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          openP();
+        }, true);
+      }
+      if (closeBtn) closeBtn.addEventListener('click', closeP);
+      if (ov) ov.addEventListener('click', function (e) {
+        if (e.target === ov) closeP();
+      });
+    })();
+  </script>
 </body>
 </html>

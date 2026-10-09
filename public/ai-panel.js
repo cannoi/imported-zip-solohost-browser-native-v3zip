@@ -182,17 +182,39 @@ function appendMsg(role, html) {
   return div;
 }
 
-const ai = window.UniversalAI.create({
-  button: document.getElementById('aiFab'),
-  onOpen() {
+const ai = (window.UniversalAI && typeof window.UniversalAI.create === 'function')
+  ? window.UniversalAI.create({
+      button: document.getElementById('aiFab'),
+      onOpen() {
+        const ov = document.getElementById('aiOverlay');
+        if (ov) { ov.hidden = false; ov.removeAttribute('hidden'); }
+        setFabVisible(false);
+        try { refreshStatus(); } catch (e) {}
+        try { loadSettings(); } catch (e) {}
+      },
+      onActions: executeActions
+    })
+  : {
+      status: async () => ({ ok: false }),
+      settings: async () => ({}),
+      models: async () => ({ models: [] }),
+      testConnection: async () => ({ ok: false }),
+      saveSettings: async () => ({}),
+      catalog: async () => ({ providers: [] }),
+      chat: async () => ({ reply: 'AI module not loaded' })
+    };
+
+// Ensure FAB opens panel even when UniversalAI.create did not bind
+(function ensureFab() {
+  const fab = document.getElementById('aiFab');
+  if (!fab || fab.dataset.soloBound === '1') return;
+  fab.dataset.soloBound = '1';
+  fab.addEventListener('click', function () {
     const ov = document.getElementById('aiOverlay');
-    if (ov) ov.hidden = false;
-    setFabVisible(false);
-    refreshStatus();
-    loadSettings();
-  },
-  onActions: executeActions
-});
+    if (ov) { ov.hidden = false; ov.removeAttribute('hidden'); }
+    try { setFabVisible(false); } catch (e) {}
+  });
+})();
 
 function closeAIPanel() {
   const ov = document.getElementById('aiOverlay');
