@@ -412,8 +412,10 @@
   if (btnTheme) btnTheme.addEventListener('click', () => {
     const i = THEMES.indexOf(state.theme);
     state.theme = THEMES[(i + 1) % THEMES.length];
-    
-  // Home → start screen
+    applyTheme();
+  });
+
+  // Home
   if ($('btn-home')) $('btn-home').addEventListener('click', () => {
     state.url = '';
     if (input) input.value = '';
@@ -424,38 +426,25 @@
     if (active) { active.url = ''; active.title = 'New Tab'; renderTabs(); }
   });
 
-  // Tabs button focuses tab strip / new tab if empty
-  if ($('btn-tabs')) $('btn-tabs').addEventListener('click', () => {
-    const strip = $('tab-strip');
-    if (strip && state.tabs.length > 1) {
-      strip.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    } else {
-      newTab();
-    }
-  });
-
-  // Overflow more menu
-  function closeMore() {
-    const m = $('more-menu'); const b = $('more-backdrop');
+  // Settings menu (☰)
+  function closeSettings() {
+    const m = $('settings-menu'); const b = $('settings-backdrop');
     if (m) m.hidden = true; if (b) b.hidden = true;
-    const btn = $('btn-more'); if (btn) btn.setAttribute('aria-expanded', 'false');
+    const btn = $('btn-menu'); if (btn) btn.setAttribute('aria-expanded', 'false');
   }
-  function openMore() {
-    const m = $('more-menu'); const b = $('more-backdrop');
+  function openSettings() {
+    const m = $('settings-menu'); const b = $('settings-backdrop');
     if (m) m.hidden = false; if (b) b.hidden = false;
-    const btn = $('btn-more'); if (btn) btn.setAttribute('aria-expanded', 'true');
+    const btn = $('btn-menu'); if (btn) btn.setAttribute('aria-expanded', 'true');
   }
-  if ($('btn-more')) $('btn-more').addEventListener('click', () => {
-    const m = $('more-menu');
-    if (m && m.hidden) openMore(); else closeMore();
+  if ($('btn-menu')) $('btn-menu').addEventListener('click', () => {
+    const m = $('settings-menu');
+    if (m && m.hidden) openSettings(); else closeSettings();
   });
-  if ($('more-backdrop')) $('more-backdrop').addEventListener('click', closeMore);
-  ['btn-new-tab','btn-bookmark','btn-library','btn-reader','btn-summary','btn-translate','btn-theme','btn-lang'].forEach(id => {
+  if ($('settings-backdrop')) $('settings-backdrop').addEventListener('click', closeSettings);
+  ['btn-theme','btn-library','btn-reader','btn-summary','btn-translate','btn-lang'].forEach(id => {
     const el = $(id);
-    if (el) el.addEventListener('click', () => setTimeout(closeMore, 0));
-  });
-
-  applyTheme();
+    if (el) el.addEventListener('click', () => setTimeout(closeSettings, 0));
   });
 
   applyTheme();

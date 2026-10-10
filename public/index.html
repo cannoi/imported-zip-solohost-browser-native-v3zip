@@ -2,24 +2,24 @@
 <html lang="en" data-theme="rainbow">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="color-scheme" content="dark light">
-  <meta name="theme-color" content="#0f1220">
   <title>SoloHost Browser</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/ai-panel.css">
 </head>
 <body class="browser-shell">
-  <!-- Top bar: address only (Opera-like) -->
   <header class="chrome chrome-top" role="banner">
     <form class="omnibox" id="nav-form" action="javascript:void(0)" autocomplete="off">
       <span class="omnibox-lock" aria-hidden="true">◎</span>
-      <input type="text" id="url-input" placeholder="Search or enter address" spellcheck="false" enterkeyhint="go" inputmode="url">
+      <input type="text" id="url-input" placeholder="Search or enter address" spellcheck="false" enterkeyhint="go">
       <button type="submit" class="icon-btn go" id="btn-go" title="Go" aria-label="Go">→</button>
     </form>
-    <div class="chrome-actions chrome-actions-top">
-      <a class="icon-btn" id="btn-open-tab" href="#" target="_blank" rel="noopener noreferrer" title="Open in system browser" aria-label="Open">↗</a>
-      <button type="button" class="icon-btn" id="btn-more" title="More" aria-label="More" aria-expanded="false" aria-controls="more-menu">⋯</button>
+    <div class="chrome-actions">
+      <button type="button" class="icon-btn" id="btn-new-tab" title="New tab" aria-label="New tab">＋</button>
+      <button type="button" class="icon-btn" id="btn-bookmark" title="Bookmark" aria-label="Bookmark">☆</button>
+      <button type="button" class="icon-btn" id="btn-menu" title="Settings" aria-label="Settings" aria-expanded="false" aria-controls="settings-menu">☰</button>
+      <a class="icon-btn" id="btn-open-tab" href="#" target="_blank" rel="noopener noreferrer" title="Open" aria-label="Open">↗</a>
     </div>
   </header>
 
@@ -44,27 +44,22 @@
     </div>
   </main>
 
-  <!-- Bottom navigation (Opera / mobile browser standard) -->
-  <nav class="chrome chrome-bottom" role="navigation" aria-label="Browser controls">
+  <nav class="chrome chrome-bottom" role="navigation" aria-label="Navigation">
     <button type="button" class="icon-btn" id="btn-back" title="Back" aria-label="Back">←</button>
-    <button type="button" class="icon-btn" id="btn-fwd" title="Forward" aria-label="Forward">→</button>
+    <button type="button" class="icon-btn" id="btn-fwd" title="Next" aria-label="Next">→</button>
     <button type="button" class="icon-btn" id="btn-home" title="Home" aria-label="Home">⌂</button>
-    <button type="button" class="icon-btn" id="btn-tabs" title="Tabs" aria-label="Tabs"><span id="tab-count">1</span></button>
     <button type="button" class="icon-btn" id="btn-reload" title="Reload" aria-label="Reload">↻</button>
   </nav>
 
-  <!-- Overflow menu -->
-  <div class="more-menu" id="more-menu" hidden>
-    <button type="button" id="btn-new-tab">＋ New tab</button>
-    <button type="button" id="btn-bookmark">☆ Bookmark</button>
-    <button type="button" id="btn-library">☷ Library</button>
-    <button type="button" id="btn-reader">📖 Reader</button>
-    <button type="button" id="btn-summary">⚡ Summarize</button>
-    <button type="button" id="btn-translate">🌐 Translate</button>
-    <button type="button" id="btn-theme">◐ Theme</button>
-    <button type="button" id="btn-lang">EN</button>
+  <div class="more-backdrop" id="settings-backdrop" hidden></div>
+  <div class="more-menu" id="settings-menu" hidden role="menu">
+    <button type="button" id="btn-theme" role="menuitem">◐ Theme</button>
+    <button type="button" id="btn-library" role="menuitem">☷ History &amp; bookmarks</button>
+    <button type="button" id="btn-reader" role="menuitem">📖 Reader</button>
+    <button type="button" id="btn-summary" role="menuitem">⚡ Summarize</button>
+    <button type="button" id="btn-translate" role="menuitem">🌐 Translate</button>
+    <button type="button" id="btn-lang" role="menuitem">EN</button>
   </div>
-  <div class="more-backdrop" id="more-backdrop" hidden></div>
 
   <div class="library-overlay" id="library-overlay" hidden>
     <section class="library-panel" role="dialog" aria-modal="true" aria-labelledby="library-title">
