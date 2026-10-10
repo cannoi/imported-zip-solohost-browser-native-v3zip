@@ -3,6 +3,23 @@
 
   const $ = (id) => document.getElementById(id);
   const frame = $('main-webview');
+  const input = $('url-input');
+  const btnOpen = $('btn-open-tab');
+  const btnLang = $('btn-lang');
+  const btnTheme = $('btn-theme');
+  const THEMES = ['rainbow', 'dark', 'light'];
+  const state = {
+    url: '',
+    lang: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_lang')) || 'en',
+    theme: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_theme')) || 'rainbow',
+    tabs: [],
+    activeTabId: null,
+    history: [],
+    readerOn: false,
+    lastNavAt: 0,
+    libraryMode: 'bookmarks'
+  };
+
 
   /** Per-tab navigation mode + bridge session isolation */
   const MODE = { ENGINE: 'ENGINE', PROXY: 'PROXY', DIRECT: 'DIRECT', EXTERNAL: 'EXTERNAL' };
@@ -230,8 +247,10 @@
 
   function applyTheme() {
     if (!THEMES.includes(state.theme)) state.theme = 'rainbow';
-    root.setAttribute('data-theme', state.theme);
-    localStorage.setItem('solo_theme', state.theme);
+    try {
+      document.documentElement.setAttribute('data-theme', state.theme);
+      localStorage.setItem('solo_theme', state.theme);
+    } catch (_) {}
   }
 
   function applyLang() {
@@ -331,6 +350,7 @@
   }
 
   function hideStart() {
+    const startScreen = $('start-screen');
     if (startScreen) startScreen.classList.add('hidden');
   }
 
@@ -367,6 +387,7 @@
 
 
   function showStart() {
+    const startScreen = $('start-screen');
     if (startScreen) startScreen.classList.remove('hidden');
   }
 

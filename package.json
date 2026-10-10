@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.2.1-bridge-ui",
+  "version": "10.2.2-ui-runtime-fix",
   "description": "SoloHost Browser V10 \u2014 hybrid proxy engine (honest SoloHost web-app architecture) + Universal AI",
   "main": "server.js",
   "engines": {
