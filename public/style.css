@@ -321,3 +321,116 @@ html[data-theme="light"] .start-mark {
   cursor: pointer;
   font-size: 16px;
 }
+
+/* —— Opera-like chrome: top address + bottom nav —— */
+.chrome-top {
+  border-bottom: 1px solid var(--chrome-line);
+  padding: 8px 10px;
+  gap: 8px;
+}
+.chrome-top .omnibox { flex: 1; }
+.chrome-actions-top { gap: 4px; }
+
+.chrome-bottom {
+  border-top: 1px solid var(--chrome-line);
+  border-bottom: 0;
+  min-height: 52px;
+  padding: 6px 8px calc(6px + var(--safe-b));
+  justify-content: space-around;
+  gap: 0;
+  z-index: 45;
+}
+html[data-theme="rainbow"] .chrome-bottom::after {
+  content: "";
+  position: absolute;
+  left: 0; right: 0; top: 0;
+  height: 2px;
+  background: var(--rainbow);
+  opacity: 0.9;
+  pointer-events: none;
+}
+html[data-theme="rainbow"] .chrome-top::after {
+  bottom: 0; top: auto;
+}
+.chrome-bottom .icon-btn {
+  width: 44px;
+  height: 44px;
+  font-size: 18px;
+  border-radius: 12px;
+}
+#tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border: 1.5px solid currentColor;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.tab-strip {
+  flex: 0 0 auto;
+  display: flex;
+  gap: 6px;
+  padding: 6px 10px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--chrome-line);
+  background: var(--chrome-bg);
+  scrollbar-width: none;
+}
+.tab-strip::-webkit-scrollbar { display: none; }
+.tab-strip:empty { display: none; }
+
+/* More menu */
+.more-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.35);
+  z-index: 60;
+}
+.more-menu {
+  position: fixed;
+  right: 12px;
+  top: calc(var(--safe-t) + 56px);
+  z-index: 70;
+  min-width: 200px;
+  max-width: min(280px, 92vw);
+  padding: 8px;
+  border-radius: 14px;
+  background: var(--chrome-bg);
+  border: 1px solid var(--chrome-line);
+  box-shadow: 0 12px 40px rgba(0,0,0,.35);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.more-menu[hidden], .more-backdrop[hidden] { display: none !important; }
+.more-menu button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--chrome-fg);
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+.more-menu button:hover, .more-menu button:focus-visible {
+  background: var(--chrome-hover);
+  outline: none;
+}
+
+/* FAB sits above bottom chrome */
+.ai-fab {
+  bottom: calc(64px + var(--safe-b)) !important;
+}
+
+@media (min-width: 900px) {
+  .chrome-top { padding: 8px 16px; }
+  .chrome-bottom { max-width: 560px; margin: 0 auto; width: 100%; border-radius: 16px 16px 0 0; }
+  .browser-shell { max-width: 100%; }
+}

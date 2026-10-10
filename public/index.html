@@ -2,38 +2,29 @@
 <html lang="en" data-theme="rainbow">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
   <meta name="color-scheme" content="dark light">
+  <meta name="theme-color" content="#0f1220">
   <title>SoloHost Browser</title>
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/ai-panel.css">
 </head>
 <body class="browser-shell">
-  <header class="chrome" role="banner">
-    <div class="chrome-nav">
-      <button type="button" class="icon-btn" id="btn-back" title="Back" aria-label="Back">←</button>
-      <button type="button" class="icon-btn" id="btn-fwd" title="Forward" aria-label="Forward">→</button>
-      <button type="button" class="icon-btn" id="btn-reload" title="Reload" aria-label="Reload">↻</button>
-    </div>
+  <!-- Top bar: address only (Opera-like) -->
+  <header class="chrome chrome-top" role="banner">
     <form class="omnibox" id="nav-form" action="javascript:void(0)" autocomplete="off">
       <span class="omnibox-lock" aria-hidden="true">◎</span>
-      <input type="text" id="url-input" placeholder="Search or enter address" spellcheck="false" enterkeyhint="go">
+      <input type="text" id="url-input" placeholder="Search or enter address" spellcheck="false" enterkeyhint="go" inputmode="url">
       <button type="submit" class="icon-btn go" id="btn-go" title="Go" aria-label="Go">→</button>
     </form>
-    <div class="chrome-actions">
-      <button type="button" class="icon-btn" id="btn-bookmark" title="Bookmark" aria-label="Bookmark">☆</button>
-      <button type="button" class="icon-btn" id="btn-library" title="History and bookmarks" aria-label="History and bookmarks">☷</button>
-      <button type="button" class="icon-btn" id="btn-new-tab" title="New tab" aria-label="New tab">＋</button>
-      <button type="button" class="icon-btn" id="btn-reader" title="Reader" aria-label="Reader">📖</button>
-      <button type="button" class="icon-btn" id="btn-summary" title="Summarize" aria-label="Summarize">⚡</button>
-      <button type="button" class="icon-btn" id="btn-translate" title="Translate" aria-label="Translate">🌐</button>
-      <button type="button" class="icon-btn" id="btn-theme" title="Theme" aria-label="Theme">◐</button>
-      <button type="button" class="icon-btn" id="btn-lang" title="Language" aria-label="Language">EN</button>
-      <a class="icon-btn" id="btn-open-tab" href="#" target="_blank" rel="noopener noreferrer" title="Open" aria-label="Open">↗</a>
+    <div class="chrome-actions chrome-actions-top">
+      <a class="icon-btn" id="btn-open-tab" href="#" target="_blank" rel="noopener noreferrer" title="Open in system browser" aria-label="Open">↗</a>
+      <button type="button" class="icon-btn" id="btn-more" title="More" aria-label="More" aria-expanded="false" aria-controls="more-menu">⋯</button>
     </div>
   </header>
 
   <nav class="tab-strip" id="tab-strip" aria-label="Browser tabs"></nav>
+
   <main class="viewport" id="viewport">
     <iframe
       id="main-webview"
@@ -53,6 +44,28 @@
     </div>
   </main>
 
+  <!-- Bottom navigation (Opera / mobile browser standard) -->
+  <nav class="chrome chrome-bottom" role="navigation" aria-label="Browser controls">
+    <button type="button" class="icon-btn" id="btn-back" title="Back" aria-label="Back">←</button>
+    <button type="button" class="icon-btn" id="btn-fwd" title="Forward" aria-label="Forward">→</button>
+    <button type="button" class="icon-btn" id="btn-home" title="Home" aria-label="Home">⌂</button>
+    <button type="button" class="icon-btn" id="btn-tabs" title="Tabs" aria-label="Tabs"><span id="tab-count">1</span></button>
+    <button type="button" class="icon-btn" id="btn-reload" title="Reload" aria-label="Reload">↻</button>
+  </nav>
+
+  <!-- Overflow menu -->
+  <div class="more-menu" id="more-menu" hidden>
+    <button type="button" id="btn-new-tab">＋ New tab</button>
+    <button type="button" id="btn-bookmark">☆ Bookmark</button>
+    <button type="button" id="btn-library">☷ Library</button>
+    <button type="button" id="btn-reader">📖 Reader</button>
+    <button type="button" id="btn-summary">⚡ Summarize</button>
+    <button type="button" id="btn-translate">🌐 Translate</button>
+    <button type="button" id="btn-theme">◐ Theme</button>
+    <button type="button" id="btn-lang">EN</button>
+  </div>
+  <div class="more-backdrop" id="more-backdrop" hidden></div>
+
   <div class="library-overlay" id="library-overlay" hidden>
     <section class="library-panel" role="dialog" aria-modal="true" aria-labelledby="library-title">
       <header class="library-header"><strong id="library-title">Library</strong><button type="button" id="library-close" class="icon-btn" aria-label="Close">×</button></header>
@@ -62,7 +75,6 @@
     </section>
   </div>
 
-  <!-- Universal AI FAB + Panel (Snake Arcade pattern) -->
   <button type="button" class="ai-fab" id="aiFab" title="AI · Feedback · Settings" aria-label="AI">
     <img src="/ai-icon.png" alt="AI" class="ai-fab-img">
     <span class="ai-fab-dot" id="aiStatusDot"></span>
@@ -80,86 +92,19 @@
         <button type="button" class="tab" data-tab="settings">Settings</button>
         <button type="button" class="tab" data-tab="logs">Logs</button>
       </div>
-      <div class="tab-pane active" id="tab-chat">
-        <div class="panel-body" id="aiChat"></div>
-        <div class="panel-footer">
-          <input type="text" id="aiInput" placeholder="Ask about browsing, privacy, AI…" autocomplete="off" enterkeyhint="send">
-          <button type="button" id="aiSend" aria-label="Send">➤</button>
+      <div class="panel-body">
+        <div class="tab-pane active" id="pane-chat">
+          <div class="chat-log" id="chatLog"></div>
+          <form class="chat-form" id="chatForm">
+            <input type="text" id="chatInput" placeholder="Ask anything…" autocomplete="off">
+            <button type="submit" id="chatSend">Send</button>
+          </form>
         </div>
-        <div class="ai-status-bar" id="aiStatusBar">AI: checking…</div>
-      </div>
-      <div class="tab-pane" id="tab-feedback">
-        <div class="panel-body fb-body">
-          <div id="fbNotices" class="fb-notices"></div>
-          <div id="fbDonate" class="fb-donate" hidden></div>
-          <label class="fb-label">Type</label>
-          <select id="fbType">
-            <option value="improvement">Improvement</option>
-            <option value="bug">Bug</option>
-            <option value="question">Question</option>
-          </select>
-          <label class="fb-label">Rating</label>
-          <div class="fb-stars" id="fbStars">
-            <button type="button" data-r="1">★</button>
-            <button type="button" data-r="2">★</button>
-            <button type="button" data-r="3">★</button>
-            <button type="button" data-r="4">★</button>
-            <button type="button" data-r="5">★</button>
-          </div>
-          <label class="fb-label">Message</label>
-          <textarea id="fbMessage" rows="4" placeholder="Your feedback…"></textarea>
-          <button type="button" class="fb-submit" id="fbSubmit">Send feedback</button>
-          <p class="fb-status" id="fbStatus"></p>
-        </div>
-      </div>
-      <div class="tab-pane" id="tab-settings">
-        <div class="panel-body fb-body">
-          <label class="fb-label">Provider</label>
-          <select id="setProvider">
-            <option value="none">— None —</option>
-            <option value="openai">OpenAI</option>
-            <option value="gemini">Google Gemini</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="anthropic">Anthropic</option>
-            <option value="openrouter">OpenRouter</option>
-            <option value="groq">Groq</option>
-            <option value="mistral">Mistral</option>
-            <option value="xai">xAI</option>
-            <option value="custom">Custom OpenAI-compatible</option>
-            <option value="local">Local OpenAI-compatible</option>
-          </select>
-          <label class="fb-label">API Key</label>
-          <input type="password" id="setApiKey" placeholder="sk-… (hidden after save)" autocomplete="off">
-          <p class="fb-hint" id="setKeyHint">Current key: (none)</p>
-          <label class="fb-label">Base URL <small>(required for Custom / Local)</small></label>
-          <input type="text" id="setBaseUrl" placeholder="https://api.example.com/v1">
-          <label class="fb-label">Model</label>
-          <input type="text" id="setModel" placeholder="auto" value="auto">
-          <label class="fb-label">Mode</label>
-          <select id="setMode">
-            <option value="cloud_enabled">Cloud Enabled</option>
-            <option value="prefer_local">Prefer Local</option>
-            <option value="local_only">Local Only</option>
-            <option value="balanced">Balanced</option>
-            <option value="custom">Custom</option>
-          </select>
-          <div class="row" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
-            <button type="button" class="fb-submit" id="setSave">Save Settings</button>
-            <button type="button" class="ws-btn" id="setTest">Check token</button>
-            <button type="button" class="ws-btn" id="setModels">Load models</button>
-            <button type="button" class="ws-btn" id="setRefreshModels">Refresh models</button>
-          </div>
-          <p class="fb-status" id="setStatus"></p>
-          <p class="fb-hint" id="setModelsHint"></p>
-        </div>
-      </div>
-      <div class="tab-pane" id="tab-logs">
-        <div class="panel-body logs-body">
-          <div class="logs-toolbar">
-            <button type="button" class="ws-btn" id="logsRefresh">Refresh</button>
-            <button type="button" class="ws-btn" id="logsClear">Clear</button>
-          </div>
-          <pre id="logsView" class="logs-view">Loading…</pre>
+        <div class="tab-pane" id="pane-feedback" hidden></div>
+        <div class="tab-pane" id="pane-settings" hidden></div>
+        <div class="tab-pane" id="pane-logs" hidden>
+          <div class="logs-toolbar"><button type="button" id="logsRefresh">Refresh</button><button type="button" id="logsClear">Clear</button></div>
+          <pre class="logs-view" id="logsView"></pre>
         </div>
       </div>
     </div>
@@ -168,7 +113,7 @@
   <script src="/ai-module/ai-module.js"></script>
   <script src="/feedback-module/feedback-module.js"></script>
   <script src="/reader-injector.js"></script>
-  <script src="/app.js"></script>
   <script src="/ai-panel.js"></script>
+  <script src="/app.js"></script>
 </body>
 </html>
