@@ -375,7 +375,39 @@
     x.type = 'button';
     x.textContent = '×';
     x.addEventListener('click', () => { el.hidden = true; });
-    el.append(span, a, x);
+    const aiBtn = document.createElement('button');
+    aiBtn.type = 'button';
+    aiBtn.textContent = state.lang === 'vi' ? 'AI gợi ý' : 'Ask AI';
+    aiBtn.style.marginLeft = '8px';
+    aiBtn.addEventListener('click', async () => {
+      aiBtn.disabled = true;
+      aiBtn.textContent = '…';
+      try {
+        const tab = getActiveTab();
+        const nav = ensureTabNav(tab);
+        const r = await fetch('/api/browser/ai-compat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: state.url || '',
+            mode: (nav && nav.mode) || '',
+            reason: (nav && nav.reason) || msg,
+            lang: state.lang,
+            textSnippet: msg,
+            structureHtml: ''
+          })
+        });
+        const j = await r.json();
+        const lines = [j.summary || ''].concat(j.suggestions || []).filter(Boolean);
+        span.textContent = lines.join(' · ').slice(0, 400);
+        if (j.recommendedMode === 'EXTERNAL' && btnOpen && state.url) btnOpen.href = state.url;
+      } catch (_) {
+        span.textContent = (state.lang === 'vi' ? 'AI không khả dụng — dùng ↗ hoặc Reload.' : 'AI unavailable — use ↗ or Reload.');
+      }
+      aiBtn.disabled = false;
+      aiBtn.textContent = state.lang === 'vi' ? 'AI gợi ý' : 'Ask AI';
+    });
+    el.append(span, a, aiBtn, x);
     el.hidden = false;
     clientLog('error', 'proxy_hint', { url: state.url, detail: msg });
   }

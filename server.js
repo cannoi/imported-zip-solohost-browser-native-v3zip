@@ -22,6 +22,7 @@ const appLog = require('./lib/app-log');
 const engineCaps = require('./lib/engine/capabilities');
 const { webkitManager, installShutdownHooks } = require('./lib/engine/webkit-manager');
 const domBridge = require('./lib/engine/dom-bridge');
+const aiCompat = require('./lib/ai-compat');
 installShutdownHooks();
 appLog.configure(DATA_DIR);
 const PKG = (() => {
@@ -173,6 +174,26 @@ const ai = createAIService({
   adapter
 });
 mountAIRoutes(app, ai);
+
+// Optional AI compatibility assist (never required for browsing)
+app.post('/api/browser/ai-compat', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const out = await aiCompat.analyze(ai, body);
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(200).json({
+      ok: true,
+      summary: 'AI assist unavailable',
+      category: 'unknown',
+      suggestions: ['Try Reload or Open ↗'],
+      recommendedMode: 'UNCHANGED',
+      confidence: 0,
+      source: 'error_fallback'
+    });
+  }
+});
+
 
 // Universal Feedback — hub credentials default inside feedback-service.js
 const { createFeedbackService, mountFeedbackRoutes } = require('./lib/feedback-module/feedback-service');
