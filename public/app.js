@@ -48,10 +48,9 @@
     // Google/YouTube SPA: PROXY shell immediately (skip WebKit wait — was causing multi-second delay + white screens)
     if (/youtube\.com|youtu\.be/.test(h)) return MODE.PROXY;
     if (/google\./.test(h)) return MODE.PROXY;
-    // News / static-friendly — engine then proxy
-    if (/(thanhnien|tuoitre|vnexpress|wikipedia|example)\./.test(h)) return MODE.ENGINE;
-    // Default: try engine bridge, fall back proxy
-    return MODE.ENGINE;
+    // Default PROXY (fast). Bridge/WebKit only when user enables or engine proven ready.
+    // Log evidence: ENGINE path caused 20–40s js_timeout/ipc_timeout before proxy.
+    return MODE.PROXY;
   }
 
   function modeLabel(mode, lang) {
@@ -93,14 +92,22 @@
   async function tabBridgeSession(tab) {
     const nav = ensureTabNav(tab);
     if (nav.bridge && nav.bridge.sessionId && nav.bridge.token) return nav.bridge;
+    const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ac ? setTimeout(() => ac.abort(), 2500) : null;
     try {
-      const r = await fetch('/api/browser/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const r = await fetch('/api/browser/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+        signal: ac ? ac.signal : undefined
+      });
       const j = await r.json();
       if (j && j.ok && j.sessionId && j.token) {
         nav.bridge = { sessionId: j.sessionId, token: j.token, backend: j.backend };
         return nav.bridge;
       }
     } catch (_) {}
+    finally { if (timer) clearTimeout(timer); }
     return null;
   }
 
@@ -114,29 +121,46 @@
   }
 
   async function loadViaBridge(tab, url) {
-    const b = await tabBridgeSession(tab);
-    if (!b) return { ok: false, reason: 'bridge_session_failed' };
-    const r = await fetch('/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '/navigate', {
-      method: 'POST', headers: bridgeHeaders(b), body: JSON.stringify({ url, token: b.token })
-    });
-    const j = await r.json().catch(() => null);
-    if (!j || !j.ok) return { ok: false, reason: (j && j.error) || 'bridge_navigate_failed', detail: j };
-    if (!j.hasContent && j.error) return { ok: false, reason: j.error, detail: j };
-    const view = bridgeViewUrl(b);
-    if (!frame || !view) return { ok: false, reason: 'no_viewport' };
+    // Hard client timeout — never block UI for WebKit IPC (logs showed 35s+ ipc_timeout)
+    const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = ac ? setTimeout(() => ac.abort(), 4000) : null;
     try {
-      frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups');
-      frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
-    } catch (_) {
-      return { ok: false, reason: 'frame_error' };
+      const b = await tabBridgeSession(tab);
+      if (!b) return { ok: false, reason: 'bridge_session_failed' };
+      const r = await fetch('/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '/navigate', {
+        method: 'POST',
+        headers: bridgeHeaders(b),
+        body: JSON.stringify({ url, token: b.token }),
+        signal: ac ? ac.signal : undefined
+      });
+      const j = await r.json().catch(() => null);
+      if (!j || !j.ok) return { ok: false, reason: (j && j.error) || 'bridge_navigate_failed', detail: j };
+      if (!j.hasContent && j.error) return { ok: false, reason: j.error, detail: j };
+      // If backend fell back to proxy inside server, treat as proxy success without bridge view
+      if (j.backend === 'proxy' && j.hasContent === false) {
+        return { ok: false, reason: 'bridge_empty', detail: j };
+      }
+      const view = bridgeViewUrl(b);
+      if (!frame || !view) return { ok: false, reason: 'no_viewport' };
+      try {
+        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups');
+        frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
+      } catch (_) {
+        return { ok: false, reason: 'frame_error' };
+      }
+      return {
+        ok: true,
+        mode: MODE.ENGINE,
+        backend: j.backend || b.backend,
+        url: j.url || url,
+        title: j.title || ''
+      };
+    } catch (e) {
+      const reason = (e && e.name === 'AbortError') ? 'bridge_client_timeout' : String((e && e.message) || e);
+      return { ok: false, reason };
+    } finally {
+      if (timer) clearTimeout(timer);
     }
-    return {
-      ok: true,
-      mode: MODE.ENGINE,
-      backend: j.backend || b.backend,
-      url: j.url || url,
-      title: j.title || ''
-    };
   }
 
   function loadViaProxy(url) {

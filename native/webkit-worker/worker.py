@@ -30,7 +30,7 @@ for _d in (os.environ["HOME"], os.environ["XDG_CACHE_HOME"], os.environ["XDG_CON
         os.makedirs(_d, exist_ok=True)
     except Exception:
         pass
-NAV_TIMEOUT_MS = int(os.environ.get("SOLOHOST_WEBKIT_NAV_TIMEOUT_MS", "30000"))
+NAV_TIMEOUT_MS = int(os.environ.get("SOLOHOST_WEBKIT_NAV_TIMEOUT_MS", "8000"))
 WORKER_ID = os.environ.get("SOLOHOST_WEBKIT_WORKER_ID", "wk1")
 
 _lock = threading.Lock()
@@ -274,7 +274,7 @@ def session_close(args: Dict[str, Any]) -> Dict[str, Any]:
     return {"closed": True, "sessionId": sid}
 
 
-def _run_js(webview, script: str, timeout_s: float = 10.0):
+def _run_js(webview, script: str, timeout_s: float = 5.0):
     """Run JS in WebKit and return string result (best-effort)."""
     GLib = globals()["GLib"]
     result_box = {"done": False, "value": None, "error": None}
@@ -359,7 +359,7 @@ def session_get_content(args):
     while state.get("loading") and time.time() < deadline:
         GLib.MainContext.default().iteration(False)
         time.sleep(0.03)
-    raw = _run_js(webview, CONTENT_JS, timeout_s=12.0)
+    raw = _run_js(webview, CONTENT_JS, timeout_s=5.0)
     data = json.loads(raw) if raw else {}
     state["url"] = data.get("url") or state.get("url")
     state["title"] = data.get("title") or state.get("title")

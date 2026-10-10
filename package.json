@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.3.2-fast-proxy-search",
+  "version": "10.3.3-proxy-first-bridge",
   "description": "SoloHost Browser V10 \u2014 hybrid proxy engine (honest SoloHost web-app architecture) + Universal AI",
   "main": "server.js",
   "engines": {

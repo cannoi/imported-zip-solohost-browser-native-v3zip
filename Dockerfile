@@ -7,6 +7,7 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     HOME=/tmp/solohost-browser \
     SOLOHOST_WEBKIT=1 \
+    SOLOHOST_WEBKIT_BRIDGE=0 \
     SOLOHOST_WEBKIT_DISPLAY=:99 \
     XDG_CACHE_HOME=/tmp/solohost-browser/.cache \
     XDG_CONFIG_HOME=/tmp/solohost-browser/.config \
