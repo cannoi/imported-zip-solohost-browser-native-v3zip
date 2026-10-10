@@ -60,14 +60,14 @@ function setFabVisible(visible) {
   fab.style.display = visible ? '' : 'none';
 }
 function browserContext() {
-  // Non-secret live state for AI
   const st = (window.SoloBrowser && window.SoloBrowser.state) || {};
   return {
-    screen: st.url ? 'webview' : 'home',
-    url: st.url || '',
+    url: st.url || document.getElementById('url-input')?.value || '',
+    currentUrl: st.url || '',
+    lang: st.lang || (document.documentElement.lang || 'en'),
     theme: st.theme || document.documentElement.getAttribute('data-theme') || 'rainbow',
-    lang: st.lang || 'en',
-    mode: 'webview-proxy'
+    app: 'SoloHost Browser',
+    version: '9.0.17'
   };
 }
 function executeActions(actions) {
@@ -148,6 +148,25 @@ async function refreshStatus() {
   }
 }
 
+async function applyAiActions(actions) {
+  if (!Array.isArray(actions)) return;
+  for (const a of actions) {
+    const name = a.name || a.action;
+    const args = a.args || {};
+    try {
+      if (name === 'open_url' && args.url && window.SoloBrowser && window.SoloBrowser.navigate) {
+        window.SoloBrowser.navigate(args.url);
+      } else if (name === 'toggle_theme') {
+        document.getElementById('btn-theme')?.click();
+      } else if (name === 'diagnose_logs') {
+        // Already answered in reply; optional refresh logs tab
+        document.querySelector('.tab[data-tab="logs"]')?.click();
+        if (typeof loadLogs === 'function') loadLogs();
+      }
+    } catch (_) {}
+  }
+}
+
 async function sendAI() {
   const text = (aiInput.value || '').trim();
   if (!text) return;
@@ -155,7 +174,14 @@ async function sendAI() {
   appendMsg('user', escapeHtml(text));
   const loading = appendMsg('ai', '…');
   try {
-    const out = await ai.chat(text, browserContext());
+    let logs = [];
+    try {
+      const lr = await fetch('/api/logs').then(r => r.json());
+      logs = (lr.logs || []).filter(l => l && l.level !== 'debug').slice(-40);
+    } catch (_) {}
+    const ctx = Object.assign(browserContext(), { logs });
+    const out = await ai.chat(text, ctx);
+    if (out && Array.isArray(out.actions)) await applyAiActions(out.actions);
     loading.remove();
     executeActions(out.actions);
     const local = out.source === 'local' || out.configured === false;

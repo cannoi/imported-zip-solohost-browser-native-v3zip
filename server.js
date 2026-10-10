@@ -55,6 +55,17 @@ function healthPayload() {
     timestamp: new Date().toISOString()
   };
 }
+app.get('/api/browser/diagnose', (_req, res) => {
+  try {
+    const appLog = require('./lib/app-log');
+    const { analyzeLogs } = require('./lib/app-adapter');
+    const logs = appLog.readLogs(100);
+    res.json({ ok: true, ...analyzeLogs(logs) });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
 app.get('/api/health', (_req, res) => res.status(200).json(healthPayload()));
 app.get('/health', (_req, res) => res.status(200).json(healthPayload()));
 app.get('/ready', (_req, res) => res.status(200).json({ ready: true, ok: true }));
