@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.0.0-hybrid-engine",
+  "version": "10.2.0-dom-bridge",
   "description": "SoloHost Browser V10 \u2014 hybrid proxy engine (honest SoloHost web-app architecture) + Universal AI",
   "main": "server.js",
   "engines": {
@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node test.js && node --check server.js && node --check public/app.js"
+    "test": "node test.js && node test-engine.js && node test-bridge.js && node --check server.js && node --check public/app.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

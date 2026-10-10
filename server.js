@@ -20,6 +20,9 @@ const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = path.join(__dirname, 'data');
 const appLog = require('./lib/app-log');
 const engineCaps = require('./lib/engine/capabilities');
+const { webkitManager, installShutdownHooks } = require('./lib/engine/webkit-manager');
+const domBridge = require('./lib/engine/dom-bridge');
+installShutdownHooks();
 appLog.configure(DATA_DIR);
 const PKG = (() => {
   try { return require('./package.json'); } catch { return { version: '9.0.8' }; }
@@ -60,6 +63,7 @@ app.get('/api/browser/diagnose', (_req, res) => {
   try {
     const appLog = require('./lib/app-log');
 const engineCaps = require('./lib/engine/capabilities');
+
     const { analyzeLogs } = require('./lib/app-adapter');
     const logs = appLog.readLogs(100);
     res.json({ ok: true, ...analyzeLogs(logs) });
@@ -68,8 +72,64 @@ const engineCaps = require('./lib/engine/capabilities');
   }
 });
 
-app.get('/api/engine/status', (_req, res) => {
-  res.json({ ok: true, ...engineCaps.detect() });
+app.get('/api/engine/status', async (_req, res) => {
+  try {
+    const base = engineCaps.detect();
+    const wk = await webkitManager.status();
+    res.json({
+      ok: true,
+      ...base,
+      webkitWorker: wk,
+      mode: (wk && wk.ready) ? 'webkit-worker+proxy-fallback' : base.mode
+    });
+  } catch (e) {
+    res.json({ ok: true, ...engineCaps.detect(), webkitWorker: { ready: false, error: String(e.message || e) } });
+  }
+});
+
+app.post('/api/engine/session', async (req, res) => {
+  try {
+    const out = await webkitManager.createSession();
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(503).json({ ok: false, error: String(e.message || e), fallback: 'proxy' });
+  }
+});
+
+app.post('/api/engine/session/:id/navigate', async (req, res) => {
+  try {
+    const url = String((req.body && req.body.url) || req.query.url || '').trim();
+    if (!url) return res.status(400).json({ ok: false, error: 'url required' });
+    // SSRF guard: reuse proxy assert when possible
+    try {
+      const { assertPublicHttpUrl } = require('./lib/frame-proxy');
+      if (url !== 'about:blank') await assertPublicHttpUrl(url);
+    } catch (se) {
+      return res.status(403).json({ ok: false, error: se.message || 'blocked', code: se.code });
+    }
+    const out = await webkitManager.navigate(req.params.id, url);
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: String(e.message || e), fallback: 'proxy' });
+  }
+});
+
+app.get('/api/engine/session/:id', async (req, res) => {
+  try {
+    const out = await webkitManager.getState(req.params.id);
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(404).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.delete('/api/engine/session/:id', async (req, res) => {
+  try {
+    const out = await webkitManager.closeSession(req.params.id);
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
 });
 
 app.get('/api/health', (_req, res) => res.status(200).json(healthPayload()));
@@ -129,6 +189,98 @@ mountFeedbackRoutes(app, fb);
 
 // Lightweight persistent browser library: history and bookmarks (JSON fallback, optional SQLite).
 const browserStore = require('./lib/store');
+
+// —— Interactive DOM Bridge (versioned browser sessions) ——
+app.post('/api/browser/sessions', async (req, res) => {
+  try {
+    const ip = req.ip || req.socket.remoteAddress || 'anon';
+    if (!domBridge.rateOk('create:' + ip)) {
+      return res.status(429).json({ ok: false, error: 'rate_limited' });
+    }
+    const out = await domBridge.createSession({ clientKey: ip });
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.post('/api/browser/sessions/:id/navigate', async (req, res) => {
+  try {
+    const tok = req.get('x-session-token') || (req.body && req.body.token) || '';
+    const session = domBridge.authSession(req.params.id, tok);
+    if (!session) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const ip = req.ip || 'anon';
+    if (!domBridge.rateOk('nav:' + ip)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    const url = String((req.body && req.body.url) || '').trim();
+    if (!url) return res.status(400).json({ ok: false, error: 'url required' });
+    try {
+      const { assertPublicHttpUrl } = require('./lib/frame-proxy');
+      if (!url.startsWith('about:')) await assertPublicHttpUrl(url);
+    } catch (se) {
+      return res.status(403).json({ ok: false, error: se.message || 'blocked', code: se.code });
+    }
+    const out = await domBridge.navigate(session, url);
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.get('/api/browser/sessions/:id/state', (req, res) => {
+  const tok = req.get('x-session-token') || req.query.token || '';
+  const session = domBridge.authSession(req.params.id, tok);
+  if (!session) return res.status(401).json({ ok: false, error: 'unauthorized' });
+  res.json({ ok: true, ...domBridge.publicState(session, true) });
+});
+
+app.get('/api/browser/sessions/:id/content', (req, res) => {
+  const tok = req.get('x-session-token') || req.query.token || '';
+  const session = domBridge.authSession(req.params.id, tok);
+  if (!session) return res.status(401).json({ ok: false, error: 'unauthorized' });
+  const c = domBridge.getContent(session);
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.json({ ok: true, ...c });
+});
+
+/** HTML document for iframe src (token required). Origin is SoloHost app — site JS stripped. */
+app.get('/api/browser/sessions/:id/view', (req, res) => {
+  const tok = req.get('x-session-token') || req.query.token || '';
+  const session = domBridge.authSession(req.params.id, tok);
+  if (!session) return res.status(401).type('html').send('<!doctype html><p>Unauthorized</p>');
+  const html = session.html || '<!doctype html><p>Empty</p>';
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline' https: http:; font-src https: http: data:; media-src https: http:; frame-src 'none'; script-src 'none'; base-uri 'self'");
+  res.send(html);
+});
+
+app.post('/api/browser/sessions/:id/events', async (req, res) => {
+  try {
+    const tok = req.get('x-session-token') || (req.body && req.body.token) || '';
+    const session = domBridge.authSession(req.params.id, tok);
+    if (!session) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    const ip = req.ip || 'anon';
+    if (!domBridge.rateOk('ev:' + session.id)) return res.status(429).json({ ok: false, error: 'rate_limited' });
+    const event = req.body || {};
+    if (!event.type) return res.status(400).json({ ok: false, error: 'type required' });
+    const out = await domBridge.dispatchEvent(session, event);
+    res.json(out);
+  } catch (e) {
+    res.status(502).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+app.delete('/api/browser/sessions/:id', async (req, res) => {
+  const tok = req.get('x-session-token') || req.query.token || '';
+  const session = domBridge.authSession(req.params.id, tok);
+  if (!session) return res.status(401).json({ ok: false, error: 'unauthorized' });
+  await domBridge.destroySession(session.id);
+  res.json({ ok: true, closed: true });
+});
+
+
 app.get('/api/browser/history', async (_req, res, next) => {
   try { res.json({ ok: true, items: await browserStore.listHistory() }); } catch (e) { next(e); }
 });

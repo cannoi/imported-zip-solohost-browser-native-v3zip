@@ -3,6 +3,102 @@
 
   const $ = (id) => document.getElementById(id);
   const frame = $('main-webview');
+  const bridge = { sessionId: null, token: null, backend: null, enabled: true };
+
+  async function ensureBridgeSession() {
+    if (bridge.sessionId && bridge.token) return bridge;
+    try {
+      const r = await fetch('/api/browser/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const j = await r.json();
+      if (j && j.ok && j.sessionId && j.token) {
+        bridge.sessionId = j.sessionId;
+        bridge.token = j.token;
+        bridge.backend = j.backend;
+        return bridge;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  function bridgeHeaders() {
+    return { 'Content-Type': 'application/json', 'X-Session-Token': bridge.token || '' };
+  }
+
+  function bridgeViewUrl() {
+    if (!bridge.sessionId || !bridge.token) return null;
+    return '/api/browser/sessions/' + encodeURIComponent(bridge.sessionId) + '/view?token=' + encodeURIComponent(bridge.token);
+  }
+
+  async function bridgeNavigate(url) {
+    const s = await ensureBridgeSession();
+    if (!s) return false;
+    const r = await fetch('/api/browser/sessions/' + encodeURIComponent(bridge.sessionId) + '/navigate', {
+      method: 'POST', headers: bridgeHeaders(), body: JSON.stringify({ url, token: bridge.token })
+    });
+    const j = await r.json();
+    if (!j || !j.ok) return false;
+    const view = bridgeViewUrl();
+    if (frame && view) {
+      frame.removeAttribute('sandbox'); // same-origin controlled HTML; CSP on response blocks scripts
+      frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups');
+      frame.src = view;
+    }
+    if (j.url) state.url = j.url;
+    if (j.title && getActiveTab()) { getActiveTab().title = j.title; renderTabs(); }
+    return true;
+  }
+
+  async function bridgeEvent(ev) {
+    if (!bridge.sessionId || !bridge.token) return;
+    try {
+      const r = await fetch('/api/browser/sessions/' + encodeURIComponent(bridge.sessionId) + '/events', {
+        method: 'POST', headers: bridgeHeaders(), body: JSON.stringify(Object.assign({ token: bridge.token }, ev))
+      });
+      const j = await r.json();
+      if (j && j.ok && frame) {
+        const view = bridgeViewUrl();
+        // reload view to pick up new snapshot
+        if (view) frame.src = view + '&t=' + Date.now();
+        if (j.url) {
+          state.url = j.url;
+          if (input) input.value = j.url;
+          if (btnOpen) btnOpen.href = j.url;
+          const active = getActiveTab();
+          if (active) { active.url = j.url; if (j.title) active.title = j.title; renderTabs(); }
+        }
+      }
+      return j;
+    } catch (_) { return null; }
+  }
+
+  // Click/map bridge: same-origin view document
+  if (frame) {
+    frame.addEventListener('load', () => {
+      try {
+        const doc = frame.contentDocument;
+        if (!doc || !bridge.sessionId) return;
+        doc.addEventListener('click', (e) => {
+          const el = e.target && e.target.closest && e.target.closest('[data-sh-id]');
+          if (!el) return;
+          const tag = (el.tagName || '').toLowerCase();
+          if (tag === 'a' || tag === 'button' || el.getAttribute('role') === 'button') {
+            e.preventDefault();
+            e.stopPropagation();
+            bridgeEvent({ type: 'click', targetId: el.getAttribute('data-sh-id') });
+          }
+        }, true);
+        doc.addEventListener('submit', (e) => {
+          const form = e.target;
+          if (!form || !form.getAttribute) return;
+          const id = form.getAttribute('data-sh-id');
+          if (!id) return;
+          e.preventDefault();
+          bridgeEvent({ type: 'submit', targetId: id });
+        }, true);
+      } catch (_) { /* cross-origin proxy frame */ }
+    });
+  }
+
   const input = $('url-input');
   const startScreen = $('start-screen');
   const btnLang = $('btn-lang');
@@ -236,6 +332,34 @@
   }
 
   function navigate(raw) {
+    // Prefer interactive DOM bridge when available; fall back to proxy iframe.
+    (async () => {
+      try {
+        let url = String(raw || '').trim();
+        if (!url) return;
+        if (!/^https?:\/\//i.test(url) && url.indexOf('.') > 0 && url.indexOf(' ') < 0) url = 'https://' + url;
+        else if (!/^https?:\/\//i.test(url) && url && !url.startsWith('about:')) {
+          url = 'https://www.google.com/search?q=' + encodeURIComponent(url);
+        }
+        if (bridge.enabled && /^https?:\/\//i.test(url)) {
+          const ok = await bridgeNavigate(url);
+          if (ok) {
+            state.url = url;
+            if (input) input.value = url;
+            if (btnOpen) btnOpen.href = url;
+            hideStart && hideStart();
+            const active = getActiveTab && getActiveTab();
+            if (active) { active.url = url; try { active.title = new URL(url).hostname; } catch (_) {} renderTabs && renderTabs(); }
+            try { fetch('/api/browser/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) }); } catch (_) {}
+            return;
+          }
+        }
+      } catch (_) {}
+      navigateProxyFallback(raw);
+    })();
+    return;
+  }
+  function navigateProxyFallback(raw) {
     let url = normalizeUrl(raw);
     if (!url || !frame) return;
     url = toPlayableUrl(url);
