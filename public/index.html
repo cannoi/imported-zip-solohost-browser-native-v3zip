@@ -95,8 +95,48 @@
             <button type="submit" id="chatSend">Send</button>
           </form>
         </div>
-        <div class="tab-pane" id="pane-feedback" hidden></div>
-        <div class="tab-pane" id="pane-settings" hidden></div>
+        <div class="tab-pane" id="pane-feedback" hidden>
+          <div class="fb-body" style="padding:10px;overflow:auto;flex:1;min-height:0">
+            <p style="opacity:.8;font-size:13px;margin:0 0 8px">Send feedback to the author. Notices from the Hub appear below.</p>
+            <label style="display:block;font-size:12px;opacity:.75;margin-top:8px">Type</label>
+            <select id="fbType" style="width:100%;min-height:40px;margin:4px 0 8px;padding:8px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445">
+              <option value="improvement">Improvement</option>
+              <option value="bug">Bug</option>
+              <option value="question">Question</option>
+              <option value="praise">Praise</option>
+            </select>
+            <label style="display:block;font-size:12px;opacity:.75">Message</label>
+            <textarea id="fbMessage" rows="4" style="width:100%;margin:4px 0 8px;padding:8px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445;resize:vertical"></textarea>
+            <button type="button" id="fbSend" style="min-height:40px;padding:0 16px;border-radius:10px;border:0;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer">Send feedback</button>
+            <p id="fbStatus" style="font-size:13px;opacity:.85;margin-top:8px"></p>
+            <div id="fbDonate" class="fb-donate" hidden></div>
+            <div id="fbNotices" class="fb-notes"></div>
+          </div>
+        </div>
+        <div class="tab-pane" id="pane-settings" hidden>
+          <div class="settings-body" style="padding:10px;overflow:auto;flex:1;min-height:0">
+            <label style="display:block;font-size:12px;opacity:.75">Provider</label>
+            <select id="setProvider" style="width:100%;min-height:40px;margin:4px 0 8px;padding:8px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445"></select>
+            <label style="display:block;font-size:12px;opacity:.75">API key</label>
+            <input type="password" id="setApiKey" placeholder="sk-…" autocomplete="off" style="width:100%;min-height:40px;margin:4px 0 8px;padding:8px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445">
+            <p id="setKeyHint" style="font-size:12px;opacity:.65;margin:0 0 8px"></p>
+            <label style="display:block;font-size:12px;opacity:.75">Base URL (custom / local)</label>
+            <input type="text" id="setBaseUrl" placeholder="https://…" style="width:100%;min-height:40px;margin:4px 0 8px;padding:8px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445">
+            <label style="display:block;font-size:12px;opacity:.75">Model</label>
+            <select id="setModel" style="width:100%;min-height:40px;margin:4px 0 8px;padding:8px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445"><option value="auto">auto</option></select>
+            <label style="display:block;font-size:12px;opacity:.75">Mode</label>
+            <select id="setMode" style="width:100%;min-height:40px;margin:4px 0 8px;padding:8px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445">
+              <option value="cloud_enabled">Cloud enabled</option>
+              <option value="local_only">Local only</option>
+            </select>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+              <button type="button" id="setSave" style="min-height:40px;padding:0 14px;border-radius:10px;border:0;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer">Save</button>
+              <button type="button" id="setTest" style="min-height:40px;padding:0 14px;border-radius:10px;border:1px solid #445;background:#1a1a24;color:#fff;cursor:pointer">Test</button>
+              <button type="button" id="setModels" style="min-height:40px;padding:0 14px;border-radius:10px;border:1px solid #445;background:#1a1a24;color:#fff;cursor:pointer">Models</button>
+            </div>
+            <p id="setStatus" style="font-size:13px;opacity:.85;margin-top:10px"></p>
+          </div>
+        </div>
         <div class="tab-pane" id="pane-logs" hidden>
           <div class="logs-toolbar"><button type="button" id="logsRefresh">Refresh</button><button type="button" id="logsClear">Clear</button></div>
           <pre class="logs-view" id="logsView"></pre>

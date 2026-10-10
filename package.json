@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "9.0.15-chrome-minimal-fix",
+  "version": "9.0.16-ai-panel-mobile",
   "description": "SoloHost Browser \u2014 lightweight client WebView shell, hardened HTML/CSS proxy and Universal AI",
   "main": "server.js",
   "engines": {

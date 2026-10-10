@@ -360,3 +360,35 @@
 #aiFab[hidden] {
   display: none !important;
 }
+
+/* Fix pane visibility: [hidden] must win; active panes on mobile */
+.tab-pane[hidden] { display: none !important; }
+.tab-pane.active:not([hidden]) { display: flex !important; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+.panel.ai-panel {
+  width: min(100vw - 16px, 420px) !important;
+  max-height: min(88dvh, 640px) !important;
+  display: flex;
+  flex-direction: column;
+}
+.panel-body { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.panel-tabs { flex-wrap: wrap; gap: 4px; }
+.chat-log, #chatLog, #aiChat { flex: 1; min-height: 120px; overflow: auto; -webkit-overflow-scrolling: touch; }
+.logs-view { flex: 1; min-height: 140px; overflow: auto; font-size: 11px; white-space: pre-wrap; word-break: break-word; }
+.chat-form { display: flex; gap: 8px; padding: 8px 0 0; flex-shrink: 0; }
+.chat-form input { flex: 1; min-width: 0; min-height: 40px; font-size: 16px; }
+.chat-form button { min-height: 40px; padding: 0 14px; }
+@media (max-width: 640px) {
+  .panel-overlay {
+    align-items: flex-end !important;
+    justify-content: center !important;
+    padding: 0 !important;
+  }
+  .panel.ai-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: min(85dvh, 100%) !important;
+    border-radius: 16px 16px 0 0 !important;
+    margin: 0 !important;
+  }
+  .ai-fab { bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; right: 12px !important; }
+}

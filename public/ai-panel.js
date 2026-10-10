@@ -84,8 +84,8 @@ function executeActions(actions) {
   });
 }
 
-const aiChat = document.getElementById('aiChat');
-const aiInput = document.getElementById('aiInput');
+const aiChat = document.getElementById('chatLog') || document.getElementById('aiChat');
+const aiInput = document.getElementById('chatInput') || document.getElementById('aiInput');
 function appendMsg(role, html) {
   const div = document.createElement('div');
   div.className = 'msg ' + role;
@@ -117,12 +117,21 @@ document.getElementById('aiOverlay')?.addEventListener('click', e => {
 });
 document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => {
   document.querySelectorAll('.tab').forEach(x => x.classList.remove('active'));
-  document.querySelectorAll('.tab-pane').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(x => {
+    x.classList.remove('active');
+    x.hidden = true;
+  });
   t.classList.add('active');
-  document.getElementById('tab-' + t.dataset.tab)?.classList.add('active');
-  if (t.dataset.tab === 'settings') loadSettings();
-  if (t.dataset.tab === 'logs') loadLogs();
-  if (t.dataset.tab === 'feedback') setUnread(0);
+  // Support both id patterns: pane-chat (current) and tab-chat (legacy)
+  const name = t.dataset.tab;
+  const pane = document.getElementById('pane-' + name) || document.getElementById('tab-' + name);
+  if (pane) {
+    pane.classList.add('active');
+    pane.hidden = false;
+  }
+  if (name === 'settings') loadSettings();
+  if (name === 'logs') loadLogs();
+  if (name === 'feedback') setUnread(0);
 }));
 
 async function refreshStatus() {
@@ -158,6 +167,10 @@ async function sendAI() {
   }
 }
 document.getElementById('aiSend')?.addEventListener('click', sendAI);
+document.getElementById('chatSend')?.addEventListener('click', (e) => { e.preventDefault(); sendAI(); });
+document.getElementById('chatForm')?.addEventListener('submit', (e) => { e.preventDefault(); sendAI(); });
+document.getElementById('aiInput')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAI(); } });
+document.getElementById('chatInput')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAI(); } });
 aiInput?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendAI(); } });
 
 function fillModelSelect(models, current) {
@@ -357,3 +370,22 @@ fb.sync().catch(e => {
 });
 setUnread(0);
 setFabVisible(true);
+
+// Feedback form (SoloHost Browser panel)
+document.getElementById('fbSend')?.addEventListener('click', async () => {
+  const status = document.getElementById('fbStatus');
+  const msg = (document.getElementById('fbMessage')?.value || '').trim();
+  if (!msg) { if (status) status.textContent = 'Please enter a message'; return; }
+  if (status) status.textContent = 'Sending…';
+  try {
+    if (!window.SoloFeedback || !window.SoloFeedback.send) throw new Error('Feedback module unavailable');
+    const type = document.getElementById('fbType')?.value || 'improvement';
+    const r = await window.SoloFeedback.send({ type, message: msg });
+    if (status) status.textContent = r && r.ok === false ? (r.error || 'Failed') : 'Sent ✓';
+    if (r && r.ok !== false) {
+      const ta = document.getElementById('fbMessage'); if (ta) ta.value = '';
+    }
+  } catch (e) {
+    if (status) status.textContent = e.message || String(e);
+  }
+});
