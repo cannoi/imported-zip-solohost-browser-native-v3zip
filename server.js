@@ -44,8 +44,21 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
   next();
 });
-if (cors) app.use(cors());
-app.use(express.json({ limit: '2mb' }));
+// Same-origin style CORS only (no open *). SoloHost UI and API share origin.
+if (cors) {
+  app.use(cors({
+    origin: false, // reflect disabled — browser same-origin needs no CORS
+    credentials: false
+  }));
+}
+app.use(express.json({ limit: '1mb' }));
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
 app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
 function healthPayload() {
@@ -84,8 +97,6 @@ app.get('/api/browser/go', (req, res) => {
 app.get('/api/browser/diagnose', (_req, res) => {
   try {
     const appLog = require('./lib/app-log');
-const engineCaps = require('./lib/engine/capabilities');
-
     const { analyzeLogs } = require('./lib/app-adapter');
     const logs = appLog.readLogs(100);
     res.json({ ok: true, ...analyzeLogs(logs) });
@@ -93,6 +104,19 @@ const engineCaps = require('./lib/engine/capabilities');
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
 });
+
+
+function requireEngineEnabled(req, res, next) {
+  if (process.env.SOLOHOST_WEBKIT_BRIDGE !== '1') {
+    return res.status(403).json({ ok: false, error: 'engine_disabled', hint: 'Set SOLOHOST_WEBKIT_BRIDGE=1 to enable' });
+  }
+  const need = process.env.SOLOHOST_ENGINE_TOKEN;
+  if (need) {
+    const got = req.get('x-engine-token') || '';
+    if (got !== need) return res.status(401).json({ ok: false, error: 'unauthorized' });
+  }
+  next();
+}
 
 app.get('/api/engine/status', async (_req, res) => {
   try {
@@ -109,7 +133,7 @@ app.get('/api/engine/status', async (_req, res) => {
   }
 });
 
-app.post('/api/engine/session', async (req, res) => {
+app.post('/api/engine/session', requireEngineEnabled, async (req, res) => {
   try {
     const out = await webkitManager.createSession();
     res.json({ ok: true, ...out });
@@ -118,7 +142,7 @@ app.post('/api/engine/session', async (req, res) => {
   }
 });
 
-app.post('/api/engine/session/:id/navigate', async (req, res) => {
+app.post('/api/engine/session/:id/navigate', requireEngineEnabled, async (req, res) => {
   try {
     const url = String((req.body && req.body.url) || req.query.url || '').trim();
     if (!url) return res.status(400).json({ ok: false, error: 'url required' });
@@ -136,7 +160,7 @@ app.post('/api/engine/session/:id/navigate', async (req, res) => {
   }
 });
 
-app.get('/api/engine/session/:id', async (req, res) => {
+app.get('/api/engine/session/:id', requireEngineEnabled, async (req, res) => {
   try {
     const out = await webkitManager.getState(req.params.id);
     res.json({ ok: true, ...out });
@@ -145,7 +169,7 @@ app.get('/api/engine/session/:id', async (req, res) => {
   }
 });
 
-app.delete('/api/engine/session/:id', async (req, res) => {
+app.delete('/api/engine/session/:id', requireEngineEnabled, async (req, res) => {
   try {
     const out = await webkitManager.closeSession(req.params.id);
     res.json({ ok: true, ...out });

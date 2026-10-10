@@ -1,0 +1,15 @@
+{
+  "measuredAt": "2026-10-10T13:27:01.196Z",
+  "environment": "linux x64",
+  "gstreamer": {
+    "available": false,
+    "note": "gst-inspect-1.0 not in PATH"
+  },
+  "webkitPackages": "none",
+  "playPauseSeekFullscreen": "NOT TESTED — requires WebKitGTK display + user interaction",
+  "tabSwitchMedia": "NOT TESTED",
+  "downloadUpload": "NOT TESTED in automated suite",
+  "webrtc": "NOT TESTED",
+  "drmWidevine": "NOT CLAIMED — not verified",
+  "note": "Proxy path can pass through media URLs as links/embeds; successful network fetch ≠ successful decode/playback."
+}
