@@ -118,6 +118,37 @@
     if (startScreen) startScreen.classList.add('hidden');
   }
 
+  function showProxyHint(msg) {
+    let el = document.getElementById('proxy-hint');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'proxy-hint';
+      el.className = 'proxy-hint';
+      const vp = document.getElementById('viewport');
+      if (vp) vp.appendChild(el);
+    }
+    el.innerHTML = '';
+    const span = document.createElement('span');
+    span.textContent = msg;
+    const a = document.createElement('a');
+    a.href = state.url || '#';
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    a.textContent = state.lang === 'vi' ? 'Mở tab ↗' : 'Open tab ↗';
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.textContent = '×';
+    x.addEventListener('click', () => { el.hidden = true; });
+    el.append(span, a, x);
+    el.hidden = false;
+  }
+
+  function hideProxyHint() {
+    const el = document.getElementById('proxy-hint');
+    if (el) el.hidden = true;
+  }
+
+
   function showStart() {
     if (startScreen) startScreen.classList.remove('hidden');
   }
@@ -199,6 +230,7 @@
     if (input) input.value = url;
     if (btnOpen) btnOpen.href = url;
     hideStart();
+    hideProxyHint();
     const frameSrc = isDirectEmbed(url) ? url : proxyFrameUrl(url);
     try {
       frame.removeAttribute('srcdoc');
@@ -280,6 +312,18 @@
   // Keep omnibox in sync when iframe navigates (same-origin only)
   if (frame) {
     frame.addEventListener('load', () => {
+      hideProxyHint();
+      try {
+        const doc = frame.contentDocument;
+        if (doc && doc.body) {
+          const text = (doc.body.innerText || '').slice(0, 200).toLowerCase();
+          if (text.includes('page unavailable') || text.includes('host not allowed') || text.includes('private address')) {
+            showProxyHint(state.lang === 'vi'
+              ? 'Không tải được trang qua proxy.'
+              : 'Page could not load through the proxy.');
+          }
+        }
+      } catch (_) { /* cross-origin direct embed */ }
       try {
         const href = frame.contentWindow && frame.contentWindow.location && frame.contentWindow.location.href;
         if (href && href !== 'about:blank' && !href.startsWith('about:')) {
