@@ -55,7 +55,8 @@ app.use(express.json({ limit: '1mb' }));
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-  res.setHeader('Referrer-Policy', 'no-referrer');
+  // 'no-referrer' breaks YouTube embeds (player error 153 needs a Referer origin)
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   next();
 });
@@ -83,6 +84,8 @@ app.get('/api/browser/go', (req, res) => {
     let target;
     if (engine === 'youtube') {
       target = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
+    } else if (engine === 'ddg' || engine === 'duckduckgo') {
+      target = 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q);
     } else {
       target = 'https://www.google.com/search?gbv=1&hl=en&q=' + encodeURIComponent(q);
     }

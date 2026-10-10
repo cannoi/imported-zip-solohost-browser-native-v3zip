@@ -317,23 +317,8 @@
     const path = u.pathname || '';
     const href = u.href;
 
-    // YouTube (youtube.com, m.youtube.com, youtu.be, shorts)
-    let vid = null;
-    if (host === 'youtu.be') {
-      vid = path.split('/').filter(Boolean)[0] || null;
-    } else if (host.endsWith('youtube.com') || host === 'm.youtube.com' || host === 'youtube-nocookie.com') {
-      if (path.startsWith('/embed/')) return href; // already embed
-      const mWatch = href.match(/[?&]v=([\w-]{6,})/);
-      const mShort = path.match(/\/shorts\/([\w-]{6,})/);
-      const mLive = path.match(/\/live\/([\w-]{6,})/);
-      vid = (mWatch && mWatch[1]) || (mShort && mShort[1]) || (mLive && mLive[1]) || null;
-      if (!vid && path.startsWith('/watch')) {
-        vid = u.searchParams.get('v');
-      }
-    }
-    if (vid) {
-      return 'https://www.youtube.com/embed/' + encodeURIComponent(vid) + '?rel=0&modestbranding=1';
-    }
+    // YouTube watch/shorts/youtu.be: left to the server proxy, which renders a native player page.
+    // (Direct /embed/ URLs typed by the user still load as DIRECT.)
 
     // TikTok
     const tt = path.match(/\/@[\w.-]+\/video\/(\d+)/);

@@ -1,14 +1,14 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.3.4-security-hardening",
-  "description": "SoloHost Browser V10 \u2014 hybrid proxy engine (honest SoloHost web-app architecture) + Universal AI",
+  "version": "10.3.5-browse-fix",
+  "description": "SoloHost Browser V10 — hybrid proxy engine (honest SoloHost web-app architecture) + Universal AI",
   "main": "server.js",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node test.js && node test-security.js && node test-engine.js && node test-bridge.js && node test-ai-compat.js"
+    "test": "node test.js && node test-security.js && node test-engine.js && node test-bridge.js && node test-ai-compat.js && node test-youtube.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
