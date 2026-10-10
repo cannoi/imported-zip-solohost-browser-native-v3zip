@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "9.0.20-web-compat",
-  "description": "SoloHost Browser — lightweight client WebView shell, improved website/media proxy compatibility and Universal AI",
+  "version": "10.0.0-hybrid-engine",
+  "description": "SoloHost Browser V10 \u2014 hybrid proxy engine (honest SoloHost web-app architecture) + Universal AI",
   "main": "server.js",
   "engines": {
     "node": ">=18"

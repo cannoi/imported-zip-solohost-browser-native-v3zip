@@ -19,6 +19,7 @@ const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = path.join(__dirname, 'data');
 const appLog = require('./lib/app-log');
+const engineCaps = require('./lib/engine/capabilities');
 appLog.configure(DATA_DIR);
 const PKG = (() => {
   try { return require('./package.json'); } catch { return { version: '9.0.8' }; }
@@ -49,8 +50,8 @@ function healthPayload() {
     ok: true,
     service: 'solohost-browser',
     version: PKG.version || '9.0.8',
-    mode: 'webview-proxy',
-    engine: { name: 'webview-proxy', ready: true },
+    mode: 'hybrid-proxy',
+    engine: engineCaps.detect(),
     port: PORT,
     timestamp: new Date().toISOString()
   };
@@ -58,12 +59,17 @@ function healthPayload() {
 app.get('/api/browser/diagnose', (_req, res) => {
   try {
     const appLog = require('./lib/app-log');
+const engineCaps = require('./lib/engine/capabilities');
     const { analyzeLogs } = require('./lib/app-adapter');
     const logs = appLog.readLogs(100);
     res.json({ ok: true, ...analyzeLogs(logs) });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
+});
+
+app.get('/api/engine/status', (_req, res) => {
+  res.json({ ok: true, ...engineCaps.detect() });
 });
 
 app.get('/api/health', (_req, res) => res.status(200).json(healthPayload()));

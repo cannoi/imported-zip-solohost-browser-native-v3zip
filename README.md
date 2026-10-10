@@ -1,3 +1,32 @@
+# SoloHost Browser V10
+
+Lightweight private browser for **Pi Network SoloHost**.
+
+## Engine (honest)
+
+**Mode:** hybrid-proxy (Node UI + same-origin HTML proxy in an iframe).
+
+Native **WebKitGTK cannot** paint into the remote SoloHost web page without a display transport. See `docs/V10_ARCHITECTURE.md`.
+
+## Features preserved
+
+Address bar, tabs, back/forward/home/reload, bookmarks, history, AI panel, Feedback, Settings, Logs.
+
+## Run
+
+```bash
+docker compose up -d --build
+```
+
+Health: `GET /api/health`  
+Engine: `GET /api/engine/status`
+
+## Limits
+
+Google/Facebook full SPA, DRM video: use **Open ↗**. News sites usually work via proxy.
+
+
+
 # SoloHost Browser v9.0.8 — Lightweight WebView + AI
 
 A compact, bilingual (English/Vietnamese) browser shell for Pi SoloHost. The app uses the user's browser WebView/iframe for display and a small Node.js proxy to improve compatibility with sites that block iframe embedding. It does **not** run a separate Chromium browser engine in Docker.
