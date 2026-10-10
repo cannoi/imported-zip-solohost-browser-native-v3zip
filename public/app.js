@@ -15,7 +15,7 @@
   const state = {
     lang: localStorage.getItem('solo_lang') || ((navigator.language || '').toLowerCase().startsWith('vi') ? 'vi' : 'en'),
     theme: localStorage.getItem('solo_theme') || 'rainbow',
-    readerOn: false,
+    readerOn: false, navLock: false, lastNavAt: 0,
     url: '',
     history: [],
     tabs: [],
@@ -234,6 +234,13 @@
     let url = normalizeUrl(raw);
     if (!url || !frame) return;
     url = toPlayableUrl(url);
+    // Break reload loops (same URL within 1.2s)
+    const now = Date.now();
+    if (state.url === url && now - (state.lastNavAt || 0) < 1200) {
+      clientLog('warn', 'navigate_deduped', { url: url });
+      return;
+    }
+    state.lastNavAt = now;
     state.url = url;
     const active = getActiveTab(); if (active) { active.url = url; try { active.title = new URL(url).hostname; } catch (_) {} renderTabs(); }
     saveVisit(url);
