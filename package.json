@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "9.0.18-google-white-screen",
+  "version": "9.0.19-ddg-redirect-400",
   "description": "SoloHost Browser \u2014 lightweight client WebView shell, hardened HTML/CSS proxy and Universal AI",
   "main": "server.js",
   "engines": {
