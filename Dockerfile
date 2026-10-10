@@ -8,6 +8,10 @@ ENV NODE_ENV=production \
     HOME=/tmp/solohost-browser \
     SOLOHOST_WEBKIT=1 \
     SOLOHOST_WEBKIT_DISPLAY=:99 \
+    XDG_CACHE_HOME=/tmp/solohost-browser/.cache \
+    XDG_CONFIG_HOME=/tmp/solohost-browser/.config \
+    XDG_RUNTIME_DIR=/tmp/solohost-browser/run \
+    GSETTINGS_BACKEND=memory \
     npm_config_update_notifier=false \
     DEBIAN_FRONTEND=noninteractive
 
@@ -34,7 +38,7 @@ COPY native ./native
 COPY config_options.yml ./
 COPY docs ./docs
 
-RUN mkdir -p /app/data && chown -R node:node /app
+RUN mkdir -p /app/data /tmp/solohost-browser/.cache /tmp/solohost-browser/.config /tmp/solohost-browser/.local/share /tmp/solohost-browser/run && chown -R node:node /app /tmp/solohost-browser
 
 # Xvfb needs to start as same user; node user runs start.sh
 USER node

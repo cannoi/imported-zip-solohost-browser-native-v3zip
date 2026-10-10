@@ -19,6 +19,17 @@ from typing import Any, Dict, Optional
 # Fail soft if WebKit not installed — report engine unavailable.
 
 MAX_SESSIONS = int(os.environ.get("SOLOHOST_WEBKIT_MAX_SESSIONS", "3"))
+# Container-safe defaults (avoid Fontconfig/dconf permission spam)
+os.environ.setdefault("HOME", "/tmp/solohost-browser")
+os.environ.setdefault("XDG_CACHE_HOME", os.path.join(os.environ["HOME"], ".cache"))
+os.environ.setdefault("XDG_CONFIG_HOME", os.path.join(os.environ["HOME"], ".config"))
+os.environ.setdefault("XDG_RUNTIME_DIR", os.path.join(os.environ["HOME"], "run"))
+os.environ.setdefault("GSETTINGS_BACKEND", "memory")
+for _d in (os.environ["HOME"], os.environ["XDG_CACHE_HOME"], os.environ["XDG_CONFIG_HOME"], os.environ["XDG_RUNTIME_DIR"]):
+    try:
+        os.makedirs(_d, exist_ok=True)
+    except Exception:
+        pass
 NAV_TIMEOUT_MS = int(os.environ.get("SOLOHOST_WEBKIT_NAV_TIMEOUT_MS", "30000"))
 WORKER_ID = os.environ.get("SOLOHOST_WEBKIT_WORKER_ID", "wk1")
 
@@ -92,7 +103,15 @@ def session_create(args: Dict[str, Any]) -> Dict[str, Any]:
         raise RuntimeError("engine_unavailable:" + (_webkit_error or "unknown"))
     with _lock:
         if len(_sessions) >= MAX_SESSIONS:
-            raise RuntimeError("max_sessions")
+            # Close oldest instead of hard-fail (zombie leak recovery)
+            oldest = sorted(_sessions.items(), key=lambda kv: kv[1].get("createdAt") or 0)
+            if oldest:
+                try:
+                    session_close({"sessionId": oldest[0][0]})
+                except Exception:
+                    _sessions.pop(oldest[0][0], None)
+            if len(_sessions) >= MAX_SESSIONS:
+                raise RuntimeError("max_sessions")
         _session_seq += 1
         sid = "s%d" % _session_seq
 

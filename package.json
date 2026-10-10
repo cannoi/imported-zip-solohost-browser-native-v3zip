@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.3.0-ai-compat",
+  "version": "10.3.1-yt-google-diag",
   "description": "SoloHost Browser V10 \u2014 hybrid proxy engine (honest SoloHost web-app architecture) + Universal AI",
   "main": "server.js",
   "engines": {
