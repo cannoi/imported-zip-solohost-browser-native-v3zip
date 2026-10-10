@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.3.5-browse-fix",
+  "version": "10.4.0-ai-agent",
   "description": "SoloHost Browser V10 — hybrid proxy engine (honest SoloHost web-app architecture) + Universal AI",
   "main": "server.js",
   "engines": {
@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node test.js && node test-security.js && node test-engine.js && node test-bridge.js && node test-ai-compat.js && node test-youtube.js"
+    "test": "node test.js && node test-security.js && node test-engine.js && node test-bridge.js && node test-ai-compat.js && node test-youtube.js && node test-agent.js",
+    "test:e2e": "node test-agent-e2e.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

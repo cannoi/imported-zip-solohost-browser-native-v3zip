@@ -75,6 +75,13 @@
     <span class="ai-fab-dot" id="aiStatusDot"></span>
     <span class="ai-badge" id="aiBadge" hidden style="display:none"></span>
   </button>
+  <div class="agent-bar" id="agentBar" hidden role="status" aria-live="polite">
+    <div class="agent-bar-row"><span class="agent-spin" aria-hidden="true"></span><span id="agentStatus">…</span><button type="button" id="agentStop">Stop</button></div>
+    <div class="agent-confirm" id="agentConfirm" hidden>
+      <div id="agentConfirmText"></div>
+      <div class="agent-confirm-btns"><button type="button" id="agentYes">Allow</button><button type="button" id="agentNo">Deny</button></div>
+    </div>
+  </div>
   <div class="panel-overlay" id="aiOverlay" hidden style="z-index:400">
     <div class="panel ai-panel" id="aiPanel">
       <div class="panel-header">
@@ -90,7 +97,9 @@
       <div class="panel-body">
         <div class="tab-pane active" id="pane-chat">
           <div class="chat-log" id="chatLog"></div>
+          <p class="agent-hint" id="agentHint" hidden></p>
           <form class="chat-form" id="chatForm">
+            <button type="button" id="agentToggle" class="agent-toggle" title="Agent mode: AI operates the open page" aria-pressed="false">🤖</button>
             <input type="text" id="chatInput" placeholder="Ask anything…" autocomplete="off">
             <button type="submit" id="chatSend">Send</button>
           </form>
@@ -148,6 +157,7 @@
   <script src="/ai-module/ai-module.js"></script>
   <script src="/feedback-module/feedback-module.js"></script>
   <script src="/reader-injector.js"></script>
+  <script src="/browser-agent.js"></script>
   <script src="/ai-panel.js"></script>
   <script src="/app.js"></script>
 </body>

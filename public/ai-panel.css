@@ -392,3 +392,21 @@
   }
   .ai-fab { bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; right: 12px !important; }
 }
+
+/* ---- Browser Agent (AI task mode) ---- */
+.agent-toggle{flex:0 0 auto;min-width:40px;padding:0 8px!important;border-radius:10px;border:1px solid #445;background:#1a1a24;color:#fff;cursor:pointer;font-size:18px;opacity:.6}
+.agent-toggle.on{opacity:1;background:#14532d;border-color:#22c55e;box-shadow:0 0 0 2px rgba(34,197,94,.25)}
+.agent-hint{margin:0 0 6px;padding:6px 8px;border-radius:8px;background:#0f2a1a;border:1px solid #14532d;color:#bbf7d0;font-size:12px;line-height:1.4;flex-shrink:0}
+.msg.agent-step{font-size:12px;opacity:.85;background:#10261a;border-left:3px solid #22c55e;padding:5px 8px}
+.msg.agent-step small{display:block;opacity:.7}
+.agent-bar{position:fixed;left:8px;right:8px;bottom:78px;z-index:450;max-width:520px;margin:0 auto;background:rgba(10,18,14,.96);border:1px solid #22c55e;border-radius:14px;padding:10px 12px;color:#eafff1;box-shadow:0 6px 28px rgba(0,0,0,.5);font-size:13px}
+.agent-bar[hidden],.agent-confirm[hidden],.agent-hint[hidden]{display:none}
+.agent-bar-row{display:flex;align-items:center;gap:10px}
+.agent-bar-row #agentStatus{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.agent-bar button{min-height:36px;padding:0 14px;border-radius:10px;border:0;font-weight:600;cursor:pointer}
+#agentStop,#agentNo{background:#dc2626;color:#fff}
+#agentYes{background:#22c55e;color:#04210f}
+.agent-confirm{margin-top:8px;padding-top:8px;border-top:1px solid #14532d}
+.agent-confirm-btns{display:flex;gap:8px;margin-top:8px}
+.agent-spin{width:14px;height:14px;border-radius:50%;border:2px solid #22c55e;border-top-color:transparent;animation:agentspin .8s linear infinite;flex:0 0 auto}
+@keyframes agentspin{to{transform:rotate(360deg)}}

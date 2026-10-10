@@ -60,3 +60,8 @@ npm start
 The tests cover JavaScript syntax, core module contracts, common HTML/CSS rewriting and SSRF address-policy cases. Live website compatibility and the final SoloHost container must still be verified in the deployment environment.
 
 Historical V7/V8 reports and release notes are retained for traceability; they describe older architectures and should not be read as the v9.0.8 runtime design.
+
+
+## AI Agent mode (v10.4.0)
+
+In the AI panel → Chat, tap 🤖 and give a task; the AI operates the open page step by step (open/search/click/type/scroll) with Allow/Deny for sensitive actions and a Stop button. Needs a configured AI provider (offline: simple commands only). Details, safety model and limits: `docs/AGENT.md`.

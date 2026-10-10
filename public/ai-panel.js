@@ -172,6 +172,7 @@ async function sendAI() {
   if (!text) return;
   aiInput.value = '';
   appendMsg('user', escapeHtml(text));
+  if (agentOn()) { await runAgentTask(text); return; }
   const loading = appendMsg('ai', '…');
   try {
     let logs = [];
@@ -415,3 +416,93 @@ document.getElementById('fbSend')?.addEventListener('click', async () => {
     if (status) status.textContent = e.message || String(e);
   }
 });
+
+
+// ---------------------------------------------------------------------------
+// Browser Agent mode (AI operates the open page). Logic lives in browser-agent.js + lib/browser-agent.js.
+// ---------------------------------------------------------------------------
+let agentCtx = null; // { task, history } kept after ask_user so the next message continues the task
+function agentLang() { return ((window.SoloBrowser && window.SoloBrowser.state && window.SoloBrowser.state.lang) || 'en') === 'vi' ? 'vi' : 'en'; }
+function agentOn() {
+  return !!document.getElementById('agentToggle')?.classList.contains('on') && !!window.SoloAgent;
+}
+function applyAgentMode(on) {
+  const btn = document.getElementById('agentToggle');
+  const hint = document.getElementById('agentHint');
+  if (btn) { btn.classList.toggle('on', !!on); btn.setAttribute('aria-pressed', on ? 'true' : 'false'); }
+  if (aiInput) {
+    aiInput.placeholder = on
+      ? (agentLang() === 'vi' ? 'Giao nhiệm vụ: vd. "tìm phim hay trên youtube và mở video đầu"' : 'Give a task: e.g. "search cats on youtube and open the first video"')
+      : 'Ask anything…';
+  }
+  if (hint) {
+    hint.hidden = !on;
+    hint.textContent = agentLang() === 'vi'
+      ? 'Chế độ Agent: AI tự thao tác trên trang đang mở (mở link, gõ, bấm, cuộn). Việc nhạy cảm cần bạn xác nhận; không bao giờ nhập mật khẩu/thẻ. Bấm Stop để dừng.'
+      : 'Agent mode: the AI operates the open page (open links, type, click, scroll). Sensitive steps need your confirmation; it never enters passwords/cards. Tap Stop to halt.';
+  }
+  try { localStorage.setItem('solo_agent_mode', on ? '1' : '0'); } catch (_) {}
+}
+document.getElementById('agentToggle')?.addEventListener('click', () => {
+  applyAgentMode(!document.getElementById('agentToggle').classList.contains('on'));
+  agentCtx = null;
+});
+try { if (localStorage.getItem('solo_agent_mode') === '1') applyAgentMode(true); } catch (_) {}
+
+function agentUi(show) {
+  const bar = document.getElementById('agentBar');
+  if (bar) bar.hidden = !show;
+  const ov = document.getElementById('aiOverlay');
+  if (show) { if (ov) ov.hidden = true; setFabVisible(false); }
+  else { if (ov) ov.hidden = false; setFabVisible(false); }
+}
+document.getElementById('agentStop')?.addEventListener('click', () => window.SoloAgent && window.SoloAgent.stop());
+
+async function runAgentTask(text) {
+  const vi = agentLang() === 'vi';
+  if (!window.SoloAgent) { appendMsg('ai', escapeHtml(vi ? 'Module Agent chưa tải.' : 'Agent module not loaded.')); return; }
+  if (window.SoloAgent.isRunning()) { appendMsg('ai', escapeHtml(vi ? 'Agent đang chạy.' : 'Agent is already running.')); return; }
+  let task = text;
+  let history = [];
+  if (/^\/new\s+/i.test(text)) { agentCtx = null; task = text.replace(/^\/new\s+/i, ''); }
+  else if (agentCtx) { task = agentCtx.task + '\nUser follow-up/answer: ' + text; history = agentCtx.history; }
+  agentCtx = null;
+
+  const statusEl = document.getElementById('agentStatus');
+  const confirmBox = document.getElementById('agentConfirm');
+  const confirmText = document.getElementById('agentConfirmText');
+  const yes = document.getElementById('agentYes');
+  const no = document.getElementById('agentNo');
+  let answerFn = null;
+  const onYes = () => { if (answerFn) answerFn(true); };
+  const onNo = () => { if (answerFn) answerFn(false); };
+  yes?.addEventListener('click', onYes);
+  no?.addEventListener('click', onNo);
+  agentUi(true);
+  if (statusEl) statusEl.textContent = vi ? 'Bắt đầu…' : 'Starting…';
+
+  const out = await window.SoloAgent.run(task, {
+    onStatus(t) { if (statusEl) statusEl.textContent = t; },
+    onStep(s) {
+      appendMsg('agent-step ai', '<b>' + s.n + '.</b> ' + escapeHtml(s.text) + (s.thought ? '<small>' + escapeHtml(s.thought) + '</small>' : ''));
+    },
+    onConfirm(t, answer) {
+      answerFn = (v) => { answerFn = null; if (confirmBox) confirmBox.hidden = true; answer(v); };
+      if (confirmText) confirmText.textContent = (vi ? 'AI muốn: ' : 'AI wants to: ') + t + (vi ? '. Cho phép?' : '. Allow?');
+      if (confirmBox) confirmBox.hidden = false;
+    }
+  }, { history });
+
+  yes?.removeEventListener('click', onYes);
+  no?.removeEventListener('click', onNo);
+  if (confirmBox) confirmBox.hidden = true;
+  agentUi(false);
+
+  const msg = out.message ? escapeHtml(out.message).replace(/\n/g, '<br>') : '';
+  if (out.status === 'done') appendMsg('ai', '✅ ' + (msg || (vi ? 'Xong.' : 'Done.')));
+  else if (out.status === 'ask') { agentCtx = { task, history: out.history }; appendMsg('ai', '❓ ' + msg); }
+  else if (out.status === 'stopped') appendMsg('ai', '⏹ ' + escapeHtml(vi ? 'Đã dừng theo yêu cầu.' : 'Stopped.'));
+  else if (out.status === 'limit') appendMsg('ai', '⏱ ' + msg);
+  else if (out.status === 'fail') appendMsg('ai', '⚠️ ' + msg);
+  else appendMsg('ai', '⚠️ ' + (msg || escapeHtml(vi ? 'Agent lỗi.' : 'Agent error.')));
+}

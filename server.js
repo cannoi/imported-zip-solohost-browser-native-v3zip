@@ -243,6 +243,33 @@ app.post('/api/browser/ai-compat', async (req, res) => {
 });
 
 
+// Browser Agent planner: observation + task -> next validated action (executed by public/browser-agent.js)
+const browserAgent = require('./lib/browser-agent');
+const agentHits = new Map();
+function agentRateOk(key) {
+  const now = Date.now();
+  const arr = (agentHits.get(key) || []).filter((t) => now - t < 60000);
+  if (arr.length >= 60) { agentHits.set(key, arr); return false; }
+  arr.push(now); agentHits.set(key, arr);
+  if (agentHits.size > 500) agentHits.delete(agentHits.keys().next().value);
+  return true;
+}
+app.post('/api/browser/agent/step', async (req, res) => {
+  try {
+    if (!agentRateOk(req.ip || 'anon')) return res.status(429).json({ ok: false, code: 'RATE_LIMIT', error: 'Too many agent steps, wait a minute.' });
+    const out = await browserAgent.planStep(ai, req.body || {});
+    if (out && out.ok) {
+      appLog.log('info', 'agent.step', { action: out.action && out.action.type, provider: out.provider, offline: out.offline || undefined });
+      return res.json(out);
+    }
+    appLog.log('warn', 'agent.step.reject', { code: out && out.code, error: String((out && out.error) || '').slice(0, 200) });
+    return res.status(out && out.code === 'AI_NOT_CONFIGURED' ? 200 : 400).json(out || { ok: false, error: 'agent failed' });
+  } catch (e) {
+    appLog.log('error', 'agent.step.fail', { error: String(e.message || e).slice(0, 300) });
+    res.status(502).json({ ok: false, code: e.code || 'AI_PROVIDER_ERROR', error: String(e.message || e).replace(/Bearer\s+[^\s]+/ig, 'Bearer [REDACTED]').slice(0, 500) });
+  }
+});
+
 // Universal Feedback — hub credentials default inside feedback-service.js
 const { createFeedbackService, mountFeedbackRoutes } = require('./lib/feedback-module/feedback-service');
 const fbOpts = {
