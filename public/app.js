@@ -100,6 +100,17 @@
     return url;
   }
 
+
+  function clientLog(level, msg, extra) {
+    try {
+      fetch('/api/logs/client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ level: level || 'info', msg: msg || '', url: (extra && extra.url) || state.url || '', error: extra && extra.error, detail: extra && extra.detail })
+      }).catch(function () {});
+    } catch (_) {}
+  }
+
   function normalizeUrl(raw) {
     let s = String(raw || '').trim();
     if (!s) return '';
@@ -141,6 +152,7 @@
     x.addEventListener('click', () => { el.hidden = true; });
     el.append(span, a, x);
     el.hidden = false;
+    clientLog('error', 'proxy_hint', { url: state.url, detail: msg });
   }
 
   function hideProxyHint() {
@@ -231,6 +243,7 @@
     if (btnOpen) btnOpen.href = url;
     hideStart();
     hideProxyHint();
+    clientLog('info', 'navigate', { url: url });
     const frameSrc = isDirectEmbed(url) ? url : proxyFrameUrl(url);
     try {
       frame.removeAttribute('srcdoc');

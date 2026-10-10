@@ -18,6 +18,8 @@ const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = path.join(__dirname, 'data');
+const appLog = require('./lib/app-log');
+appLog.configure(DATA_DIR);
 const PKG = (() => {
   try { return require('./package.json'); } catch { return { version: '9.0.8' }; }
 })();
@@ -57,6 +59,23 @@ app.get('/api/health', (_req, res) => res.status(200).json(healthPayload()));
 app.get('/health', (_req, res) => res.status(200).json(healthPayload()));
 app.get('/ready', (_req, res) => res.status(200).json({ ready: true, ok: true }));
 app.get('/api/ready', (_req, res) => res.status(200).json({ ready: true, ok: true }));
+
+// Client-side diagnostic logs (shown in AI Logs tab via shared app.log)
+app.post('/api/logs/client', (req, res) => {
+  try {
+    const body = req.body || {};
+    const level = String(body.level || 'info');
+    const msg = String(body.msg || body.message || 'client');
+    appLog.log(level, 'client.' + msg, {
+      url: body.url ? String(body.url).slice(0, 300) : undefined,
+      error: body.error ? String(body.error).slice(0, 400) : undefined,
+      detail: body.detail ? String(body.detail).slice(0, 400) : undefined
+    });
+    res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ ok: false });
+  }
+});
 
 // Frame proxy
 try {
@@ -152,6 +171,7 @@ app.use((err, _req, res, _next) => {
 const server = http.createServer(app);
 server.listen(PORT, HOST, () => {
   console.log(`SoloHost Browser v${PKG.version} listening on http://${HOST}:${PORT}`);
+  appLog.log('info', 'server.listen', { host: HOST, port: PORT, version: PKG.version });
 });
 server.on('error', (err) => {
   console.error('Server listen error:', err);
