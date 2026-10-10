@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "9.0.17-ai-diagnose",
+  "version": "9.0.18-google-white-screen",
   "description": "SoloHost Browser \u2014 lightweight client WebView shell, hardened HTML/CSS proxy and Universal AI",
   "main": "server.js",
   "engines": {
