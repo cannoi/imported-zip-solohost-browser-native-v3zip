@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "9.0.19-ddg-redirect-400",
-  "description": "SoloHost Browser \u2014 lightweight client WebView shell, hardened HTML/CSS proxy and Universal AI",
+  "version": "9.0.20-web-compat",
+  "description": "SoloHost Browser — lightweight client WebView shell, improved website/media proxy compatibility and Universal AI",
   "main": "server.js",
   "engines": {
     "node": ">=18"

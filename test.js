@@ -49,6 +49,16 @@ assert.strictEqual(proxy.isPrivateIp('::1'), true);
 assert.strictEqual(proxy.isPrivateIp('::ffff:127.0.0.1'), true);
 assert.strictEqual(proxy.isPrivateIp('8.8.8.8'), false);
 
+// Regression coverage for normal website navigation and media assets.
+delete process.env.SOLOHOST_GOOGLE_HTML_MODE;
+const googleUrl = proxy.normalizeTargetUrl('https://www.google.com/search?q=Phim%20hay&client=browser&source=hp');
+assert.ok(googleUrl.includes('q=Phim%20hay'), 'Google query must be preserved');
+assert.ok(googleUrl.includes('client=browser'), 'Google parameters must not be silently stripped');
+assert.ok(!googleUrl.includes('gbv=1'), 'legacy Google HTML mode must be opt-in');
+assert.strictEqual(proxy.specialShell('https://www.iq.com/movie?lang=vi_vn'), null, 'streaming site must not be replaced by a fake shell');
+const srcsetHtml = proxy.rewriteHtml('<html><head></head><body><img srcset="/a.webp 1x, /b.webp 2x"></body></html>', 'https://example.org/page');
+assert.ok(srcsetHtml.includes('srcset="https://example.org/a.webp 1x, https://example.org/b.webp 2x"'), 'srcset image URLs must stay direct to origin');
+assert.ok(!/srcset="[^"]*api\/proxy/i.test(srcsetHtml), 'srcset must not route image variants through proxy');
 const rewritten = proxy.rewriteHtml('<html><head><link rel="stylesheet" href="/site.css"></head><body><img src="/hero.png"><script src="/app.js"></script><a href="https://example.com/path">Next</a></body></html>', 'https://example.org/page');
 // Navigation links stay on proxy; static assets use absolute origin URLs (avoids nested proxy + log flood).
 assert.ok(rewritten.includes('/api/proxy?url='), 'anchors should be routed through the proxy');
