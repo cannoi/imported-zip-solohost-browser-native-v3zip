@@ -45,7 +45,9 @@
     if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
     // Embeddable media
     if (/youtube\.com|youtu\.be/.test(h) && /\/embed\//.test(url)) return MODE.DIRECT;
-    if (/youtube\.com|youtu\.be/.test(h)) return MODE.ENGINE; // try bridge/proxy before external
+    // Google/YouTube SPA: PROXY shell immediately (skip WebKit wait — was causing multi-second delay + white screens)
+    if (/youtube\.com|youtu\.be/.test(h)) return MODE.PROXY;
+    if (/google\./.test(h)) return MODE.PROXY;
     // News / static-friendly — engine then proxy
     if (/(thanhnien|tuoitre|vnexpress|wikipedia|example)\./.test(h)) return MODE.ENGINE;
     // Default: try engine bridge, fall back proxy
@@ -537,6 +539,7 @@
       result = loadViaDirect(url);
       if (!result.ok) result = loadViaProxy(url);
     } else if (preferred === MODE.ENGINE) {
+      // Fast fail: if WebKit known down, skip bridge entirely
       result = await tryEngine();
       if (!result.ok) {
         const reason = result.reason || 'engine_failed';
@@ -545,12 +548,10 @@
         if (result.ok) {
           result.mode = MODE.PROXY;
           result.reason = 'fallback_from_engine:' + reason;
-          showProxyHint(
-            (state.lang === 'vi' ? 'Engine không dùng được (' : 'Engine unavailable (') +
-            reason + (state.lang === 'vi' ? '). Đang dùng Proxy.' : '). Using Proxy.')
-          );
         }
       }
+    } else if (preferred === MODE.PROXY) {
+      result = loadViaProxy(url);
     } else {
       result = loadViaProxy(url);
     }

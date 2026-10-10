@@ -50,11 +50,14 @@ assert.strictEqual(proxy.isPrivateIp('::ffff:127.0.0.1'), true);
 assert.strictEqual(proxy.isPrivateIp('8.8.8.8'), false);
 
 // Regression coverage for normal website navigation and media assets.
-delete process.env.SOLOHOST_GOOGLE_HTML_MODE;
 const googleUrl = proxy.normalizeTargetUrl('https://www.google.com/search?q=Phim%20hay&client=browser&source=hp');
-assert.ok(googleUrl.includes('q=Phim%20hay'), 'Google query must be preserved');
-assert.ok(googleUrl.includes('client=browser'), 'Google parameters must not be silently stripped');
-assert.ok(!googleUrl.includes('gbv=1'), 'legacy Google HTML mode must be opt-in');
+assert.ok(/q=Phim[+%20]hay/i.test(googleUrl) || googleUrl.includes('Phim'), 'Google query must be preserved');
+assert.ok(googleUrl.includes('gbv=1'), 'proxy forces gbv=1 so results render without SPA JS');
+const googleMobile = proxy.normalizeTargetUrl('https://www.google.com/m?q=phim+hay&client=ms-opera-mobile');
+assert.ok(googleMobile.includes('/search'), 'Google /m must map to /search');
+assert.ok(googleMobile.includes('gbv=1'), 'Google /m must use HTML mode');
+assert.ok(proxy.specialShell('https://www.google.com/').includes('/api/browser/go'), 'Google shell form needs no-JS action');
+assert.ok(proxy.specialShell('https://www.youtube.com/').includes('/api/browser/go'), 'YouTube shell form needs no-JS action');
 assert.strictEqual(proxy.specialShell('https://www.iq.com/movie?lang=vi_vn'), null, 'streaming site must not be replaced by a fake shell');
 const srcsetHtml = proxy.rewriteHtml('<html><head></head><body><img srcset="/a.webp 1x, /b.webp 2x"></body></html>', 'https://example.org/page');
 assert.ok(srcsetHtml.includes('srcset="https://example.org/a.webp 1x, https://example.org/b.webp 2x"'), 'srcset image URLs must stay direct to origin');

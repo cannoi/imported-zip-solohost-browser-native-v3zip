@@ -60,6 +60,27 @@ function healthPayload() {
     timestamp: new Date().toISOString()
   };
 }
+
+// Quick search redirect (no JS required) — Google/YouTube shell forms
+app.get('/api/browser/go', (req, res) => {
+  try {
+    const engine = String(req.query.engine || 'google').toLowerCase();
+    const q = String(req.query.q || '').trim();
+    if (!q) return res.status(400).type('html').send('<p>Missing q</p>');
+    let target;
+    if (engine === 'youtube') {
+      target = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
+    } else {
+      target = 'https://www.google.com/search?gbv=1&hl=en&q=' + encodeURIComponent(q);
+    }
+    const dest = '/api/proxy?url=' + encodeURIComponent(target);
+    res.redirect(302, dest);
+  } catch (e) {
+    res.status(500).type('html').send('<p>Search error</p>');
+  }
+});
+
+
 app.get('/api/browser/diagnose', (_req, res) => {
   try {
     const appLog = require('./lib/app-log');
