@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "9.0.10-nav-log",
+  "version": "9.0.11-proxy-hardening",
   "description": "SoloHost Browser \u2014 lightweight client WebView shell, hardened HTML/CSS proxy and Universal AI",
   "main": "server.js",
   "engines": {

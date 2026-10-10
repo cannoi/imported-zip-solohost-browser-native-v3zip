@@ -284,7 +284,20 @@ async function loadLogs() {
   try {
     const r = await fetch('/api/logs');
     const j = await r.json();
-    view.textContent = (j.logs || []).map(l => (l.ts || '') + ' [' + l.level + '] ' + l.msg).join('\n') || '(no logs)';
+    view.textContent = (j.logs || []).map(l => {
+      const ts = l.ts || '';
+      const lvl = l.level || 'info';
+      const msg = l.msg || '';
+      const bits = [ts, '[' + lvl + ']', msg];
+      if (l.code) bits.push('code=' + l.code);
+      if (l.error) bits.push('error=' + l.error);
+      if (l.blocked) bits.push('blocked=' + l.blocked);
+      if (l.status != null) bits.push('status=' + l.status);
+      if (l.ms != null) bits.push(l.ms + 'ms');
+      if (l.url) bits.push(String(l.url).slice(0, 120));
+      if (l.snippet) bits.push('"' + String(l.snippet).slice(0, 80) + '"');
+      return bits.join(' ');
+    }).join('\n') || '(no logs)';
   } catch (e) {
     view.textContent = e.message;
   }
