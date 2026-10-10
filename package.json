@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "9.0.12-search-loop-fix",
+  "version": "9.0.13-nested-proxy-video",
   "description": "SoloHost Browser \u2014 lightweight client WebView shell, hardened HTML/CSS proxy and Universal AI",
   "main": "server.js",
   "engines": {

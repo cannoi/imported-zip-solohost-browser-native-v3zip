@@ -48,11 +48,18 @@ assert.strictEqual(proxy.isPrivateIp('::ffff:127.0.0.1'), true);
 assert.strictEqual(proxy.isPrivateIp('8.8.8.8'), false);
 
 const rewritten = proxy.rewriteHtml('<html><head><link rel="stylesheet" href="/site.css"></head><body><img src="/hero.png"><script src="/app.js"></script><a href="https://example.com/path">Next</a></body></html>', 'https://example.org/page');
-assert.ok(rewritten.includes('/api/proxy?url='), 'HTML resource URLs should be proxied');
+// Navigation links stay on proxy; static assets use absolute origin URLs (avoids nested proxy + log flood).
+assert.ok(rewritten.includes('/api/proxy?url='), 'anchors should be routed through the proxy');
+assert.ok(rewritten.includes('https://example.org/site.css'), 'stylesheets should be absolute origin, not nested proxy');
+assert.ok(rewritten.includes('https://example.org/hero.png'), 'images should be absolute origin');
 assert.ok(rewritten.includes('name="viewport"'), 'mobile viewport should be present');
 assert.ok(!rewritten.includes('href="https://example.com/path"'), 'external anchors should be routed through the proxy');
 const css = proxy.rewriteCss('.hero{background:url("../img/a.png")} @import "./theme.css";', 'https://example.org/css/site.css');
-assert.ok(css.includes('/api/proxy?url='), 'CSS url() and @import should be proxied');
+assert.ok(css.includes('https://example.org/img/a.png'), 'CSS url() should absolutize to origin');
+assert.ok(css.includes('https://example.org/css/theme.css'), 'CSS @import should absolutize to origin');
+assert.ok(!css.includes('/api/proxy?url='), 'CSS must not nest proxy URLs');
+// Nested proxy unwrap
+assert.ok(proxy.normalizeTargetUrl('http://14.176.78.46:62160/api/proxy?url=' + encodeURIComponent('https://static.example.com/a.css')) === 'https://static.example.com/a.css');
 (async () => {
   await assert.rejects(proxy.assertPublicHttpUrl('file:///etc/passwd'));
   await assert.rejects(proxy.assertPublicHttpUrl('http://127.0.0.1/'));
