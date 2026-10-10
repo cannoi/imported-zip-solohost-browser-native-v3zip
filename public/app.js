@@ -3,84 +3,213 @@
 
   const $ = (id) => document.getElementById(id);
   const frame = $('main-webview');
-  const bridge = { sessionId: null, token: null, backend: null, enabled: true };
 
-  async function ensureBridgeSession() {
-    if (bridge.sessionId && bridge.token) return bridge;
+  /** Per-tab navigation mode + bridge session isolation */
+  const MODE = { ENGINE: 'ENGINE', PROXY: 'PROXY', DIRECT: 'DIRECT', EXTERNAL: 'EXTERNAL' };
+
+  function hostOf(url) {
+    try { return new URL(url).hostname.replace(/^www\./, '').toLowerCase(); } catch { return ''; }
+  }
+
+  /**
+   * Site class — based on known policy, not HTTP 200.
+   * ENGINE: try WebKit/DOM bridge first
+   * PROXY: same-origin HTML proxy
+   * DIRECT: iframe src=URL (rare; only when embeddable)
+   * EXTERNAL: system browser (Open ↗)
+   */
+  function classifyUrl(url) {
+    const h = hostOf(url);
+    if (!h) return MODE.PROXY;
+    // Known frame/proxy hostile or app-only surfaces
+    if (/(^|\.)(facebook|fb|instagram|whatsapp|messenger)\.com$/.test(h) || h.endsWith('.facebook.com')) {
+      return MODE.EXTERNAL;
+    }
+    if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
+    // Embeddable media
+    if (/youtube\.com|youtu\.be/.test(h) && /\/embed\//.test(url)) return MODE.DIRECT;
+    if (/youtube\.com|youtu\.be/.test(h)) return MODE.ENGINE; // try bridge/proxy before external
+    // News / static-friendly — engine then proxy
+    if (/(thanhnien|tuoitre|vnexpress|wikipedia|example)\./.test(h)) return MODE.ENGINE;
+    // Default: try engine bridge, fall back proxy
+    return MODE.ENGINE;
+  }
+
+  function modeLabel(mode, lang) {
+    const vi = {
+      ENGINE: 'Engine/Bridge',
+      PROXY: 'Proxy HTML',
+      DIRECT: 'Direct iframe',
+      EXTERNAL: 'Mở ngoài (↗)'
+    };
+    const en = {
+      ENGINE: 'Engine/Bridge',
+      PROXY: 'HTML proxy',
+      DIRECT: 'Direct iframe',
+      EXTERNAL: 'Open externally (↗)'
+    };
+    return (lang === 'vi' ? vi : en)[mode] || mode;
+  }
+
+  function ensureTabNav(tab) {
+    if (!tab) return null;
+    if (!tab.nav) tab.nav = { stack: [], index: -1, mode: null, reason: '', bridge: null };
+    return tab.nav;
+  }
+
+  function pushNav(tab, url) {
+    const nav = ensureTabNav(tab);
+    if (!nav) return;
+    // truncate forward history
+    if (nav.index < nav.stack.length - 1) nav.stack = nav.stack.slice(0, nav.index + 1);
+    if (nav.stack[nav.stack.length - 1] !== url) {
+      nav.stack.push(url);
+      if (nav.stack.length > 50) nav.stack.shift();
+      else nav.index = nav.stack.length - 1;
+    } else {
+      nav.index = nav.stack.length - 1;
+    }
+  }
+
+  async function tabBridgeSession(tab) {
+    const nav = ensureTabNav(tab);
+    if (nav.bridge && nav.bridge.sessionId && nav.bridge.token) return nav.bridge;
     try {
       const r = await fetch('/api/browser/sessions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
       const j = await r.json();
       if (j && j.ok && j.sessionId && j.token) {
-        bridge.sessionId = j.sessionId;
-        bridge.token = j.token;
-        bridge.backend = j.backend;
-        return bridge;
+        nav.bridge = { sessionId: j.sessionId, token: j.token, backend: j.backend };
+        return nav.bridge;
       }
     } catch (_) {}
     return null;
   }
 
-  function bridgeHeaders() {
-    return { 'Content-Type': 'application/json', 'X-Session-Token': bridge.token || '' };
+  function bridgeHeaders(b) {
+    return { 'Content-Type': 'application/json', 'X-Session-Token': (b && b.token) || '' };
   }
 
-  function bridgeViewUrl() {
-    if (!bridge.sessionId || !bridge.token) return null;
-    return '/api/browser/sessions/' + encodeURIComponent(bridge.sessionId) + '/view?token=' + encodeURIComponent(bridge.token);
+  function bridgeViewUrl(b) {
+    if (!b || !b.sessionId || !b.token) return null;
+    return '/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '/view?token=' + encodeURIComponent(b.token);
   }
 
-  async function bridgeNavigate(url) {
-    const s = await ensureBridgeSession();
-    if (!s) return false;
-    const r = await fetch('/api/browser/sessions/' + encodeURIComponent(bridge.sessionId) + '/navigate', {
-      method: 'POST', headers: bridgeHeaders(), body: JSON.stringify({ url, token: bridge.token })
+  async function loadViaBridge(tab, url) {
+    const b = await tabBridgeSession(tab);
+    if (!b) return { ok: false, reason: 'bridge_session_failed' };
+    const r = await fetch('/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '/navigate', {
+      method: 'POST', headers: bridgeHeaders(b), body: JSON.stringify({ url, token: b.token })
     });
-    const j = await r.json();
-    if (!j || !j.ok) return false;
-    const view = bridgeViewUrl();
-    if (frame && view) {
-      frame.removeAttribute('sandbox'); // same-origin controlled HTML; CSP on response blocks scripts
+    const j = await r.json().catch(() => null);
+    if (!j || !j.ok) return { ok: false, reason: (j && j.error) || 'bridge_navigate_failed', detail: j };
+    if (!j.hasContent && j.error) return { ok: false, reason: j.error, detail: j };
+    const view = bridgeViewUrl(b);
+    if (!frame || !view) return { ok: false, reason: 'no_viewport' };
+    try {
       frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups');
-      frame.src = view;
+      frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
+    } catch (_) {
+      return { ok: false, reason: 'frame_error' };
     }
-    if (j.url) state.url = j.url;
-    if (j.title && getActiveTab()) { getActiveTab().title = j.title; renderTabs(); }
-    return true;
+    return {
+      ok: true,
+      mode: MODE.ENGINE,
+      backend: j.backend || b.backend,
+      url: j.url || url,
+      title: j.title || ''
+    };
+  }
+
+  function loadViaProxy(url) {
+    if (!frame) return { ok: false, reason: 'no_frame' };
+    const frameSrc = proxyFrameUrl(url);
+    try {
+      frame.removeAttribute('sandbox');
+      frame.removeAttribute('srcdoc');
+      frame.src = frameSrc;
+      return { ok: true, mode: MODE.PROXY, url };
+    } catch (e) {
+      return { ok: false, reason: String(e.message || e) };
+    }
+  }
+
+  function loadViaDirect(url) {
+    if (!frame) return { ok: false, reason: 'no_frame' };
+    try {
+      frame.removeAttribute('sandbox');
+      frame.src = url;
+      return { ok: true, mode: MODE.DIRECT, url };
+    } catch (e) {
+      return { ok: false, reason: String(e.message || e) };
+    }
+  }
+
+  function loadViaExternal(url, reason) {
+    if (btnOpen) btnOpen.href = url;
+    showProxyHint(
+      (state.lang === 'vi'
+        ? 'Trang này cần mở ngoài. Lý do: '
+        : 'This page needs an external browser. Reason: ') + (reason || 'policy') +
+      (state.lang === 'vi' ? ' — bấm ↗ Open.' : ' — tap ↗ Open.')
+    );
+    // Do not auto-window.open unless user clicks ↗
+    return { ok: true, mode: MODE.EXTERNAL, url, reason: reason || 'policy' };
   }
 
   async function bridgeEvent(ev) {
-    if (!bridge.sessionId || !bridge.token) return;
+    const tab = getActiveTab();
+    const nav = ensureTabNav(tab);
+    const b = nav && nav.bridge;
+    if (!b) return null;
     try {
-      const r = await fetch('/api/browser/sessions/' + encodeURIComponent(bridge.sessionId) + '/events', {
-        method: 'POST', headers: bridgeHeaders(), body: JSON.stringify(Object.assign({ token: bridge.token }, ev))
+      const r = await fetch('/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '/events', {
+        method: 'POST', headers: bridgeHeaders(b), body: JSON.stringify(Object.assign({ token: b.token }, ev))
       });
       const j = await r.json();
       if (j && j.ok && frame) {
-        const view = bridgeViewUrl();
-        // reload view to pick up new snapshot
+        const view = bridgeViewUrl(b);
         if (view) frame.src = view + '&t=' + Date.now();
-        if (j.url) {
-          state.url = j.url;
-          if (input) input.value = j.url;
-          if (btnOpen) btnOpen.href = j.url;
-          const active = getActiveTab();
-          if (active) { active.url = j.url; if (j.title) active.title = j.title; renderTabs(); }
-        }
+        if (j.url) applyUrlToUi(j.url, j.title);
       }
       return j;
     } catch (_) { return null; }
   }
 
-  // Click/map bridge: same-origin view document
+  function applyUrlToUi(url, title) {
+    state.url = url;
+    if (input) input.value = url;
+    if (btnOpen) btnOpen.href = url || '#';
+    const active = getActiveTab();
+    if (active) {
+      active.url = url;
+      if (title) active.title = title;
+      else try { active.title = new URL(url).hostname; } catch (_) {}
+      renderTabs();
+    }
+  }
+
+  // Same-origin bridge document interactions
   if (frame) {
     frame.addEventListener('load', () => {
       try {
         const doc = frame.contentDocument;
-        if (!doc || !bridge.sessionId) return;
+        if (!doc) return;
+        const tab = getActiveTab();
+        const nav = ensureTabNav(tab);
+        if (!nav || !nav.bridge) return;
         doc.addEventListener('click', (e) => {
           const el = e.target && e.target.closest && e.target.closest('[data-sh-id]');
           if (!el) return;
           const tag = (el.tagName || '').toLowerCase();
+          if (tag === 'a' && (e.ctrlKey || e.metaKey || el.target === '_blank')) {
+            e.preventDefault();
+            const href = el.getAttribute('href');
+            try {
+              const abs = new URL(href, state.url || 'https://example.com').href;
+              newTab(abs);
+            } catch (_) {}
+            return;
+          }
           if (tag === 'a' || tag === 'button' || el.getAttribute('role') === 'button') {
             e.preventDefault();
             e.stopPropagation();
@@ -95,29 +224,9 @@
           e.preventDefault();
           bridgeEvent({ type: 'submit', targetId: id });
         }, true);
-      } catch (_) { /* cross-origin proxy frame */ }
+      } catch (_) { /* proxy frame may be opaque */ }
     });
   }
-
-  const input = $('url-input');
-  const startScreen = $('start-screen');
-  const btnLang = $('btn-lang');
-  const btnOpen = $('btn-open-tab');
-  const btnTheme = $('btn-theme');
-  const root = document.documentElement;
-
-  const THEMES = ['rainbow', 'dark', 'light'];
-
-  const state = {
-    lang: localStorage.getItem('solo_lang') || ((navigator.language || '').toLowerCase().startsWith('vi') ? 'vi' : 'en'),
-    theme: localStorage.getItem('solo_theme') || 'rainbow',
-    readerOn: false, navLock: false, lastNavAt: 0,
-    url: '',
-    history: [],
-    tabs: [],
-    activeTabId: null,
-    libraryMode: 'bookmarks'
-  };
 
   function applyTheme() {
     if (!THEMES.includes(state.theme)) state.theme = 'rainbow';
@@ -291,7 +400,8 @@
     const tab = state.tabs.find(t => t.id === id); if (!tab) return;
     state.activeTabId = id; state.url = tab.url || ''; renderTabs();
     if (input) input.value = state.url; if (btnOpen) btnOpen.href = state.url || '#';
-    if (state.url && frame) { frame.src = isDirectEmbed(state.url) ? state.url : proxyFrameUrl(state.url); hideStart(); }
+    // Re-navigate with this tab's own bridge session (isolation)
+    if (state.url) navigate(state.url, { force: true, skipHistory: true });
     else { if (frame) frame.src = 'about:blank'; showStart(); }
   }
   function closeTab(id) {
@@ -331,62 +441,89 @@
     } catch (_) { list.textContent = state.lang === 'vi' ? 'Không tải được dữ liệu.' : 'Could not load library.'; }
   }
 
-  function navigate(raw) {
-    // Prefer interactive DOM bridge when available; fall back to proxy iframe.
-    (async () => {
-      try {
-        let url = String(raw || '').trim();
-        if (!url) return;
-        if (!/^https?:\/\//i.test(url) && url.indexOf('.') > 0 && url.indexOf(' ') < 0) url = 'https://' + url;
-        else if (!/^https?:\/\//i.test(url) && url && !url.startsWith('about:')) {
-          url = 'https://www.google.com/search?q=' + encodeURIComponent(url);
-        }
-        if (bridge.enabled && /^https?:\/\//i.test(url)) {
-          const ok = await bridgeNavigate(url);
-          if (ok) {
-            state.url = url;
-            if (input) input.value = url;
-            if (btnOpen) btnOpen.href = url;
-            hideStart && hideStart();
-            const active = getActiveTab && getActiveTab();
-            if (active) { active.url = url; try { active.title = new URL(url).hostname; } catch (_) {} renderTabs && renderTabs(); }
-            try { fetch('/api/browser/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) }); } catch (_) {}
-            return;
-          }
-        }
-      } catch (_) {}
-      navigateProxyFallback(raw);
-    })();
-    return;
-  }
-  function navigateProxyFallback(raw) {
+  async function navigate(raw, opts) {
+    opts = opts || {};
     let url = normalizeUrl(raw);
     if (!url || !frame) return;
+    // Do NOT rewrite Google queries to gbv=1 or DuckDuckGo here.
     url = toPlayableUrl(url);
-    // Break reload loops (same URL within 1.2s)
+
     const now = Date.now();
-    if (state.url === url && now - (state.lastNavAt || 0) < 1200) {
+    if (!opts.force && state.url === url && now - (state.lastNavAt || 0) < 1200) {
       clientLog('warn', 'navigate_deduped', { url: url });
       return;
     }
     state.lastNavAt = now;
-    state.url = url;
-    const active = getActiveTab(); if (active) { active.url = url; try { active.title = new URL(url).hostname; } catch (_) {} renderTabs(); }
-    saveVisit(url);
-    state.readerOn = false;
-    // Omnibox shows the real site URL; iframe loads via same-origin proxy (or direct embed)
-    if (input) input.value = url;
-    if (btnOpen) btnOpen.href = url;
-    hideStart();
+
+    const tab = getActiveTab();
+    const nav = ensureTabNav(tab);
+    const preferred = opts.mode || classifyUrl(url);
     hideProxyHint();
-    clientLog('info', 'navigate', { url: url });
-    const frameSrc = isDirectEmbed(url) ? url : proxyFrameUrl(url);
-    try {
-      frame.removeAttribute('srcdoc');
-      frame.src = frameSrc;
-    } catch (e) {
-      try { frame.src = frameSrc; } catch (_) {}
+    hideStart();
+    applyUrlToUi(url);
+    if (!opts.skipHistory) {
+      pushNav(tab, url);
+      saveVisit(url);
     }
+    state.readerOn = false;
+    clientLog('info', 'navigate', { url: url, mode: preferred });
+
+    let result = { ok: false, reason: 'untried' };
+
+    async function tryEngine() {
+      try {
+        return await loadViaBridge(tab, url);
+      } catch (e) {
+        return { ok: false, reason: String(e.message || e) };
+      }
+    }
+
+    if (preferred === MODE.EXTERNAL) {
+      result = loadViaExternal(url, 'site_policy_external');
+    } else if (preferred === MODE.DIRECT) {
+      result = loadViaDirect(url);
+      if (!result.ok) result = loadViaProxy(url);
+    } else if (preferred === MODE.ENGINE) {
+      result = await tryEngine();
+      if (!result.ok) {
+        const reason = result.reason || 'engine_failed';
+        clientLog('warn', 'navigate_engine_fallback', { url, reason });
+        result = loadViaProxy(url);
+        if (result.ok) {
+          result.mode = MODE.PROXY;
+          result.reason = 'fallback_from_engine:' + reason;
+          showProxyHint(
+            (state.lang === 'vi' ? 'Engine không dùng được (' : 'Engine unavailable (') +
+            reason + (state.lang === 'vi' ? '). Đang dùng Proxy.' : '). Using Proxy.')
+          );
+        }
+      }
+    } else {
+      result = loadViaProxy(url);
+    }
+
+    if (!result.ok && preferred !== MODE.EXTERNAL) {
+      result = loadViaExternal(url, result.reason || 'all_modes_failed');
+    }
+
+    if (nav) {
+      nav.mode = result.mode || preferred;
+      nav.reason = result.reason || '';
+    }
+    if (result.url && result.url !== url) applyUrlToUi(result.url, result.title);
+    else if (result.title) applyUrlToUi(url, result.title);
+
+    clientLog('info', 'navigate_result', {
+      url: state.url,
+      mode: result.mode,
+      reason: result.reason || '',
+      ok: !!result.ok
+    });
+  }
+
+  function navigateProxyFallback(raw) {
+    // retained for any legacy callers
+    navigate(raw, { mode: MODE.PROXY });
   }
 
   // Links inside proxied pages postMessage to navigate without leaving the shell
@@ -512,9 +649,23 @@
     navigate(input && input.value);
   });
   if ($('btn-back')) $('btn-back').addEventListener('click', () => {
-    try { frame.contentWindow.history.back(); } catch (_) { if (state.history.length) navigate(state.history.pop()); }
+    const tab = getActiveTab();
+    const nav = ensureTabNav(tab);
+    if (nav && nav.index > 0) {
+      nav.index -= 1;
+      navigate(nav.stack[nav.index], { skipHistory: true, force: true });
+      return;
+    }
+    try { frame.contentWindow.history.back(); } catch (_) {}
   });
   if ($('btn-fwd')) $('btn-fwd').addEventListener('click', () => {
+    const tab = getActiveTab();
+    const nav = ensureTabNav(tab);
+    if (nav && nav.index >= 0 && nav.index < nav.stack.length - 1) {
+      nav.index += 1;
+      navigate(nav.stack[nav.index], { skipHistory: true, force: true });
+      return;
+    }
     try { frame.contentWindow.history.forward(); } catch (_) {}
   });
   if ($('btn-reload')) $('btn-reload').addEventListener('click', () => {
