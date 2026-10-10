@@ -35,13 +35,24 @@
    * DIRECT: iframe src=URL (rare; only when embeddable)
    * EXTERNAL: system browser (Open ↗)
    */
+  function isLoginPath(url) {
+    try {
+      const u = new URL(url);
+      const p = (u.pathname || '') + (u.search || '');
+      return /\/(login|signin|sign-in|signup|sign-up|register|oauth|authorize|accounts\.google)/i.test(p);
+    } catch { return false; }
+  }
+
   function classifyUrl(url) {
     const h = hostOf(url);
     if (!h) return MODE.PROXY;
+    // Login/OAuth must leave the proxy frame (cookies + CAPTCHA)
+    if (isLoginPath(url)) return MODE.EXTERNAL;
     // Known frame/proxy hostile or app-only surfaces
     if (/(^|\.)(facebook|fb|instagram|whatsapp|messenger)\.com$/.test(h) || h.endsWith('.facebook.com')) {
       return MODE.EXTERNAL;
     }
+    if (/(^|\.)tiktok\.com$/.test(h) && isLoginPath(url)) return MODE.EXTERNAL;
     if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
     // Embeddable media
     if (/youtube\.com|youtu\.be/.test(h) && /\/embed\//.test(url)) return MODE.DIRECT;
