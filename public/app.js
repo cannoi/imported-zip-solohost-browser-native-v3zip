@@ -1276,15 +1276,33 @@
 
   function closeHomePanels() {
     ['panel-playlists', 'panel-scripts', 'panel-apps'].forEach((id) => {
-      const el = $(id);
-      if (el) el.hidden = true;
+      const el = document.getElementById(id);
+      if (el) {
+        el.hidden = true;
+        el.setAttribute('hidden', '');
+      }
     });
+    const bd = document.getElementById('home-panel-backdrop');
+    if (bd) { bd.hidden = true; bd.setAttribute('hidden', ''); }
   }
 
   function openHomePanel(panelId) {
     closeHomePanels();
-    const el = $(panelId);
-    if (el) el.hidden = false;
+    const el = document.getElementById(panelId);
+    if (!el) {
+      console.warn('[home] panel missing', panelId);
+      return;
+    }
+    el.hidden = false;
+    el.removeAttribute('hidden');
+    const bd = document.getElementById('home-panel-backdrop');
+    if (bd) { bd.hidden = false; bd.removeAttribute('hidden'); }
+    // ensure lists painted
+    try {
+      if (panelId === 'panel-playlists') renderPlaylists();
+      if (panelId === 'panel-scripts') renderScripts();
+      if (panelId === 'panel-apps') renderApps();
+    } catch (e) { console.warn(e); }
   }
 
 
@@ -1426,6 +1444,15 @@
           showStart();
         }, d);
         run.timers.push(tid);
+      } else if (step.type === 'repeatEveryMs' && step.ms > 0) {
+        const period = Math.max(60000, Number(step.ms) || 60000);
+        // Re-run navigate steps on interval (AI Action / local)
+        const navSteps = steps.filter((s) => s.type === 'navigate' && s.url);
+        const tid = setInterval(() => {
+          if (!homeLib.scriptRun || homeLib.scriptRun.id !== sc.id) return;
+          navSteps.forEach((s) => { try { navigate(s.url); } catch (_) {} });
+        }, period);
+        run.timers.push(tid);
       }
     });
   }
@@ -1442,7 +1469,7 @@
         body: JSON.stringify({
           message: task,
           lang: state.lang || 'en',
-          context: { scriptId: sc.id, steps: sc.steps }
+          context: { scriptId: sc.id, steps: sc.steps, schedule: sc.schedule, intervalMin: sc.intervalMin, task: "schedule_or_repeat" }
         })
       });
       const j = await r.json().catch(() => ({}));
@@ -1496,12 +1523,27 @@
   }
 
   function bindHomeLibrary() {
-    document.querySelectorAll('.home-icon-btn[data-panel]').forEach((btn) => {
-      btn.addEventListener('click', () => openHomePanel(btn.getAttribute('data-panel')));
-    });
+    const utils = document.getElementById('home-utils');
+    if (utils && !utils._boundHome) {
+      utils._boundHome = true;
+      utils.addEventListener('click', (e) => {
+        const btn = e.target && e.target.closest && e.target.closest('.home-icon-btn[data-panel]');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openHomePanel(btn.getAttribute('data-panel'));
+      });
+    }
     document.querySelectorAll('.home-panel-close').forEach((btn) => {
-      btn.addEventListener('click', () => closeHomePanels());
+      if (btn._bound) return;
+      btn._bound = true;
+      btn.addEventListener('click', (e) => { e.preventDefault(); closeHomePanels(); });
     });
+    const bd = document.getElementById('home-panel-backdrop');
+    if (bd && !bd._bound) {
+      bd._bound = true;
+      bd.addEventListener('click', () => closeHomePanels());
+    }
 
     if ($('btn-pl-add')) $('btn-pl-add').addEventListener('click', async () => {
       const title = state.lang === 'vi' ? 'Danh sách phát' : 'Playlist';
@@ -1541,15 +1583,29 @@
       e.preventDefault();
       const name = ($('sc-name-input') && $('sc-name-input').value || 'Script').trim();
       const url = ($('sc-url-input') && $('sc-url-input').value || '').trim();
+      const time = ($('sc-time-input') && $('sc-time-input').value || '').trim();
+      const intervalMin = Math.max(0, Number(($('sc-interval-input') && $('sc-interval-input').value) || 0) || 0);
       if (!url && !name) return;
-      const steps = url ? [{ type: 'navigate', url: url }] : [];
+      const steps = [];
+      if (time) steps.push({ type: 'waitUntil', time: time });
+      if (url) steps.push({ type: 'navigate', url: url });
+      if (intervalMin > 0) steps.push({ type: 'repeatEveryMs', ms: intervalMin * 60 * 1000 });
       await libFetch('/api/library/scripts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name, nameVi: name, description: url || name, steps: steps })
+        body: JSON.stringify({
+          name: name,
+          nameVi: name,
+          description: [url, time ? ('@' + time) : '', intervalMin ? ('every ' + intervalMin + 'm') : ''].filter(Boolean).join(' · '),
+          steps: steps,
+          schedule: time || null,
+          intervalMin: intervalMin || 0
+        })
       });
       if ($('sc-name-input')) $('sc-name-input').value = '';
       if ($('sc-url-input')) $('sc-url-input').value = '';
+      if ($('sc-time-input')) $('sc-time-input').value = '';
+      if ($('sc-interval-input')) $('sc-interval-input').value = '';
       await refreshHomeLibrary();
     });
 
@@ -1595,8 +1651,11 @@
   }
 
 
-  bindHomeLibrary();
-  refreshHomeLibrary();
+  try { bindHomeLibrary(); } catch (e) { console.error('[home] bind', e); }
+  try { refreshHomeLibrary(); } catch (e) { console.error('[home] refresh', e); }
+  // Extra bind after paint (mobile WebView)
+  setTimeout(function () { try { bindHomeLibrary(); refreshHomeLibrary(); } catch (_) {} }, 300);
+  document.documentElement.setAttribute('data-solo-home-utils-ready', '1');
   window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary, addCurrentUrlToPlaylist, refreshHomeLibrary, runScript, stopScript, getActiveBridge() { const tab = getActiveTab(); const nav = ensureTabNav(tab); return nav && nav.bridge ? { sessionId: nav.bridge.sessionId, token: nav.bridge.token, backend: nav.bridge.backend, url: state.url || '' } : null; },
     refreshBridgeView() {
       const tab = getActiveTab();

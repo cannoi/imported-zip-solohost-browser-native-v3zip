@@ -64,6 +64,7 @@
           </button>
         </div>
 
+        <button type="button" class="home-panel-backdrop" id="home-panel-backdrop" hidden aria-label="Close"></button>
         <div class="home-panel" id="panel-playlists" hidden>
           <header class="home-panel-h">
             <strong id="panel-pl-h">♪ Playlist</strong>
@@ -88,9 +89,11 @@
             <button type="button" class="icon-btn tiny home-panel-close" data-close title="Close">×</button>
           </header>
           <div class="home-card-body" id="sc-list"></div>
-          <form class="home-row" id="sc-add-form">
+          <form class="home-row home-sc-form" id="sc-add-form">
             <input type="text" id="sc-name-input" placeholder="Script name" autocomplete="off">
             <input type="url" id="sc-url-input" placeholder="https://…" autocomplete="off">
+            <input type="time" id="sc-time-input" title="Schedule HH:MM" aria-label="Schedule time">
+            <input type="number" id="sc-interval-input" min="0" step="1" placeholder="Repeat min" title="Repeat every N minutes (0=once)" aria-label="Repeat minutes">
             <button type="submit" class="icon-btn tiny" title="Add script">＋</button>
           </form>
           <p class="home-hint" id="sc-hint">◎ Sample · no AI · ✦ AI Action</p>

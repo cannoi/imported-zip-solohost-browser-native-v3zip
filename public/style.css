@@ -768,3 +768,51 @@ html[data-theme="rainbow"] .chrome-top::after {
   justify-content: center;
 }
 .start-screen.hidden { display: none !important; }
+
+
+/* —— v10.18.3 home utilities fix —— */
+.start-inner--utils {
+  position: relative;
+  max-width: min(22rem, 100%) !important;
+  width: 100%;
+  z-index: 6;
+}
+.home-icons {
+  position: relative;
+  z-index: 7;
+  pointer-events: auto;
+}
+.home-icon-btn {
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+.home-panel {
+  position: fixed !important;
+  left: 50% !important;
+  right: auto !important;
+  top: max(3.25rem, env(safe-area-inset-top, 0px) + 2.75rem) !important;
+  bottom: max(3.5rem, env(safe-area-inset-bottom, 0px) + 3rem) !important;
+  transform: translateX(-50%);
+  width: min(26rem, calc(100vw - 1rem)) !important;
+  max-width: calc(100vw - 1rem) !important;
+  margin: 0 !important;
+  z-index: 80 !important;
+  pointer-events: auto !important;
+}
+.home-panel[hidden] {
+  display: none !important;
+}
+.home-panel:not([hidden]) {
+  display: flex !important;
+}
+.home-panel-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  background: rgba(0,0,0,0.45);
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.home-panel-backdrop[hidden] { display: none !important; }
