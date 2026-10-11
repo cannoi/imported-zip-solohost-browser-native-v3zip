@@ -8,6 +8,7 @@
   const btnLang = $('btn-lang');
   const btnTheme = $('btn-theme');
   const THEMES = ['rainbow', 'dark', 'light'];
+  const bridgeAuditSeen = new Set();
   const state = {
     url: '',
     lang: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_lang')) || 'en',
@@ -291,13 +292,20 @@
           };
           const dataLoss = lost.iframes > 0 || lost.media > 0 || lost.controls > 0 || lost.links > 5 ||
             (sourceAudit.textLength > 300 && audit.textLength < sourceAudit.textLength * 0.35);
-          clientLog((audit.textLength < 120 || dataLoss) ? 'warn' : 'info', 'bridge_render_audit', {
-            url: state.url,
-            detail: JSON.stringify({ source: sourceAudit, rendered: audit, suspectedLoss: lost })
-          });
-          // Ask AI only for weak/incomplete snapshots or a source-vs-render mismatch. Send counts,
-          // never page text, form values, cookies, credentials, or tokens. Findings are logged.
-          if (audit.textLength < 120 || dataLoss || (audit.forms > 0 && audit.controls === 0)) {
+          const auditSignature = [state.url, sourceAudit.textLength || 0, sourceAudit.controls || 0, sourceAudit.media || 0,
+            sourceAudit.iframes || 0, sourceAudit.links || 0, audit.textLength, audit.controls, audit.media, audit.iframes, audit.links].join('|');
+          const firstAudit = !bridgeAuditSeen.has(auditSignature);
+          if (firstAudit) {
+            bridgeAuditSeen.add(auditSignature);
+            if (bridgeAuditSeen.size > 500) bridgeAuditSeen.clear();
+            clientLog((audit.textLength < 120 || dataLoss) ? 'warn' : 'info', 'bridge_render_audit', {
+              url: state.url,
+              detail: JSON.stringify({ source: sourceAudit, rendered: audit, suspectedLoss: lost })
+            });
+          }
+          // Ask AI only once for each weak snapshot signature. Send metrics only, never page
+          // text, form values, cookies, credentials, or tokens; avoid duplicate AI work on re-renders.
+          if (firstAudit && (audit.textLength < 120 || dataLoss || (audit.forms > 0 && audit.controls === 0))) {
             fetch('/api/browser/ai-compat', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -326,7 +334,7 @@
             return;
           }
           const inputType = (el.getAttribute('type') || '').toLowerCase();
-          if (tag === 'a' || tag === 'button' || el.getAttribute('role') === 'button' ||
+          if (tag === 'a' || tag === 'button' || tag === 'label' || ['button','link','tab','checkbox','switch','option','menuitem'].includes(el.getAttribute('role')) ||
               (tag === 'input' && ['checkbox','radio','submit','button','reset'].includes(inputType)) ) {
             e.preventDefault();
             e.stopPropagation();
@@ -340,13 +348,13 @@
           const id = el.getAttribute('data-sh-id');
           const old = inputTimers.get(el); if (old) clearTimeout(old);
           inputTimers.set(el, setTimeout(() => {
-            bridgeEvent({ type: 'input', targetId: id, value: el.value, checked: !!el.checked, selectedIndex: el.selectedIndex });
+            bridgeEvent({ type: 'input', targetId: id, value: (el.isContentEditable || el.getAttribute('role') === 'textbox') ? el.innerText : el.value, checked: !!el.checked, selectedIndex: el.selectedIndex });
           }, 90));
         }, true);
         doc.addEventListener('change', (e) => {
           const el = e.target && e.target.closest && e.target.closest('[data-sh-id]');
           if (!el) return;
-          bridgeEvent({ type: 'change', targetId: el.getAttribute('data-sh-id'), value: el.value, checked: !!el.checked, selectedIndex: el.selectedIndex });
+          bridgeEvent({ type: 'change', targetId: el.getAttribute('data-sh-id'), value: (el.isContentEditable || el.getAttribute('role') === 'textbox') ? el.innerText : el.value, checked: !!el.checked, selectedIndex: el.selectedIndex });
         }, true);
         doc.addEventListener('keydown', (e) => {
           if (e.key !== 'Enter') return;

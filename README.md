@@ -1,8 +1,8 @@
-# SoloHost Browser V10.12.0
+# SoloHost Browser V10.13.0
 
-Version 10.12.0 makes adaptive DOM rendering the default: it preserves original website CSS, classes, inline styles, product/search grids, forms and allowlisted media embeds, while applying conservative responsive and reduced-motion rules. Known ad markers are removed; untrusted nested frames are discarded. Bing remains the default search engine for unqualified searches.
+Version 10.13.0 improves Bridge interaction reliability and responsiveness: per-session events are serialized; checkbox/radio/select/contenteditable controls and semantic labels are handled explicitly; repeat audit/AI-compat work is deduplicated. Requests initiated by Bing pages are exempted from the ad filter so verification resources are not accidentally blocked. Bing verification is handed to the system browser for normal user completion; CAPTCHA is not bypassed. Adaptive rendering still preserves website styling and Bing remains the default search engine.
 
-See `docs/V10.12.0_ADAPTIVE_LAYOUT_REPORT.md` for changes, limitations, and validation.
+See `docs/V10.13.0_INTERACTION_BING_REPORT.md` for changes, limitations, and validation.
 
 Lightweight private browser for **Pi Network SoloHost**.
 
