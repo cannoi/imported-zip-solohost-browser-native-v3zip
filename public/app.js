@@ -248,6 +248,139 @@
     return { ok: true, mode: MODE.EXTERNAL, url, reason: reason || 'policy' };
   }
 
+  
+  /* —— Bridge live refresh: reopen / focus / scroll keeps content fresh at viewport —— */
+  let _bridgeRefreshBusy = false;
+  let _lastBridgeRefresh = 0;
+  let _scrollTimer = null;
+  let _lastScrollSent = 0;
+
+  function getBridgeScroll() {
+    try {
+      if (!frame || !frame.contentWindow) return { x: 0, y: 0 };
+      return {
+        x: frame.contentWindow.scrollX || 0,
+        y: frame.contentWindow.scrollY || 0
+      };
+    } catch (_) {
+      return { x: 0, y: 0 };
+    }
+  }
+
+  function restoreBridgeScroll(y, x) {
+    try {
+      if (!frame || !frame.contentWindow) return;
+      const doc = frame.contentDocument;
+      if (doc && doc.body) {
+        const dy = doc.body.getAttribute('data-sh-scroll-y');
+        const dx = doc.body.getAttribute('data-sh-scroll-x');
+        if (dy != null) y = Number(dy) || y;
+        if (dx != null) x = Number(dx) || x;
+      }
+      frame.contentWindow.scrollTo(Number(x) || 0, Number(y) || 0);
+      // Nudge lazy media
+      try {
+        doc.querySelectorAll('img[loading="lazy"],img[data-src]').forEach((img) => {
+          if (img.dataset.src && !img.src) img.src = img.dataset.src;
+        });
+      } catch (_) {}
+    } catch (_) {}
+  }
+
+  async function softRefreshActiveBridge(opts) {
+    opts = opts || {};
+    const tab = getActiveTab();
+    const nav = ensureTabNav(tab);
+    const b = nav && nav.bridge;
+    if (!b || !frame) return false;
+    if (nav.mode && nav.mode !== MODE.ENGINE && nav.mode !== 'ENGINE') return false;
+    const now = Date.now();
+    if (!opts.force && (now - _lastBridgeRefresh < 1500 || _bridgeRefreshBusy)) return false;
+    _bridgeRefreshBusy = true;
+    _lastBridgeRefresh = now;
+    const sc = getBridgeScroll();
+    try {
+      const r = await fetch('/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '/events', {
+        method: 'POST',
+        headers: bridgeHeaders(b),
+        body: JSON.stringify({
+          token: b.token,
+          type: opts.type || 'refresh',
+          force: !!opts.force,
+          scrollX: sc.x,
+          scrollY: sc.y
+        })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (j && j.ok && !j.throttled) {
+        const view = bridgeViewUrl(b);
+        if (view) {
+          const targetY = j.scrollY != null ? j.scrollY : sc.y;
+          const onLoad = function () {
+            frame.removeEventListener('load', onLoad);
+            restoreBridgeScroll(targetY, sc.x);
+          };
+          frame.addEventListener('load', onLoad);
+          frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
+          frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
+        }
+      } else {
+        // Still restore local scroll
+        restoreBridgeScroll(sc.y, sc.x);
+      }
+      return !!(j && j.ok);
+    } catch (_) {
+      return false;
+    } finally {
+      _bridgeRefreshBusy = false;
+    }
+  }
+
+  function onBridgeFrameLoad() {
+    try {
+      restoreBridgeScroll();
+      const win = frame.contentWindow;
+      const doc = frame.contentDocument;
+      if (!win || !doc || doc._soloScrollBound) return;
+      doc._soloScrollBound = true;
+      win.addEventListener('scroll', function () {
+        clearTimeout(_scrollTimer);
+        _scrollTimer = setTimeout(function () {
+          const sc = getBridgeScroll();
+          const now = Date.now();
+          // Sync scroll to engine (cheap)
+          bridgeEvent({ type: 'scroll', scrollX: sc.x, scrollY: sc.y });
+          // Soft refresh when scrolled far from last refresh (lazy images/videos)
+          if (now - _lastScrollSent > 2500) {
+            _lastScrollSent = now;
+            bridgeEvent({ type: 'scroll', scrollX: sc.x, scrollY: sc.y, refresh: true });
+            // After backend refresh, reload view lightly
+            setTimeout(function () { softRefreshActiveBridge({ force: false }); }, 400);
+          }
+        }, 180);
+      }, { passive: true });
+    } catch (_) {}
+  }
+
+  function bindBridgeLiveRefresh() {
+    if (frame && !frame._soloLiveBound) {
+      frame._soloLiveBound = true;
+      frame.addEventListener('load', onBridgeFrameLoad);
+    }
+    document.addEventListener('visibilitychange', function () {
+      if (document.visibilityState === 'visible') {
+        softRefreshActiveBridge({ force: true, type: 'visibility' });
+      }
+    });
+    window.addEventListener('pageshow', function (e) {
+      softRefreshActiveBridge({ force: !!e.persisted, type: 'visibility' });
+    });
+    window.addEventListener('focus', function () {
+      softRefreshActiveBridge({ force: false, type: 'refresh' });
+    });
+  }
+
+
   async function bridgeEvent(ev) {
     const tab = getActiveTab();
     const nav = ensureTabNav(tab);
@@ -1220,6 +1353,7 @@
   renderTabs();
   startSplash();
   showStart();
+  try { bindBridgeLiveRefresh(); } catch (_) {}
 
   try {
     const q = new URLSearchParams(location.search).get('url');
@@ -1657,7 +1791,7 @@
   setTimeout(function () { try { bindHomeLibrary(); refreshHomeLibrary(); } catch (_) {} }, 300);
   document.documentElement.setAttribute('data-solo-home-utils-ready', '1');
   window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary, addCurrentUrlToPlaylist, refreshHomeLibrary, runScript, stopScript, getActiveBridge() { const tab = getActiveTab(); const nav = ensureTabNav(tab); return nav && nav.bridge ? { sessionId: nav.bridge.sessionId, token: nav.bridge.token, backend: nav.bridge.backend, url: state.url || '' } : null; },
-    refreshBridgeView() {
+    softRefreshActiveBridge: softRefreshActiveBridge, refreshBridgeView() {
       const tab = getActiveTab();
       const nav = ensureTabNav(tab);
       if (!nav || !nav.bridge || !frame) return false;

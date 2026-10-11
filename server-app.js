@@ -512,9 +512,13 @@ app.get('/api/browser/sessions/:id/view', (req, res) => {
   const tok = req.get('x-session-token') || req.query.token || '';
   const session = domBridge.authSession(req.params.id, tok);
   if (!session) return res.status(401).type('html').send('<!doctype html><p>Unauthorized</p>');
-  const html = session.html || '<!doctype html><p>Empty</p>';
+  let html = session.html || '<!doctype html><p>Empty</p>';
+  try {
+    if (domBridge.stampScrollOnHtml) html = domBridge.stampScrollOnHtml(html, session);
+  } catch (_) {}
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('X-SoloHost-Scroll-Y', String(Number(session.scrollY) || 0));
   // The bridge document itself cannot execute scripts. YouTube's nested player
   // needs its own scripts and frame origin, so allow only the official embed hosts.
   res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline' https: http:; font-src https: http: data:; media-src https: http:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://www.tiktok.com https://www.vimeo.com https://player.vimeo.com https://open.spotify.com https://player.twitch.tv https://www.twitch.tv https://www.dailymotion.com https://geo.dailymotion.com; script-src 'none'; base-uri 'self'; form-action https: http:");
