@@ -88,7 +88,7 @@
   function describe(a, url) {
     const t = a.type || 'action';
     if (t === 'navigate') return 'Backend mở ' + (a.url || 'trang');
-    if (t === 'search') return 'Backend tìm kiếm ' + (a.query || '') + ' trên ' + (a.engine || 'Google');
+    if (t === 'search') return 'Backend tìm kiếm ' + (a.query || '') + ' trên ' + (a.engine || 'Bing');
     if (t === 'click') return 'Backend bấm phần tử #' + a.id;
     if (t === 'type') return 'Backend nhập nội dung vào trường #' + a.id;
     if (t === 'select') return 'Backend chọn mục trong trường #' + a.id;

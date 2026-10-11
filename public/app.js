@@ -445,7 +445,7 @@
       return 'http://' + s;
     }
     if (/^[\w.-]+\.[a-z]{2,}([/:].*)?$/i.test(s)) return 'https://' + s;
-    return 'https://www.google.com/search?q=' + encodeURIComponent(s);
+    return 'https://www.bing.com/search?q=' + encodeURIComponent(s);
   }
 
   function hideStart() {
@@ -604,7 +604,7 @@
       if (safeUrl && !isInternalBridgeViewUrl(safeUrl)) applyUrlToUi(safeUrl);
       return;
     }
-    // Do NOT rewrite Google queries to gbv=1 or DuckDuckGo here.
+    // Keep explicit URLs untouched; bare search text uses Bing as the default engine.
     url = toPlayableUrl(url);
 
     const now = Date.now();

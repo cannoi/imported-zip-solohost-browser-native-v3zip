@@ -1,4 +1,6 @@
-# SoloHost Browser V10.9.8
+# SoloHost Browser V10.9.9
+
+Version 10.9.9: Bing is the default search engine for unqualified searches; Bridge applies responsive Bing result/search-box styling. Explicit Google URLs remain available.
 
 Lightweight private browser for **Pi Network SoloHost**.
 
@@ -12,6 +14,15 @@ Native **WebKitGTK cannot** paint into the remote SoloHost web page without a di
 
 Address bar, tabs, back/forward/home/reload, bookmarks, history, AI panel, Feedback, Settings, Logs.
 
+
+## V10.9.9 — Bing default and responsive results
+
+- Bare text in the address bar searches Bing by default; entering an explicit `https://...` URL remains unchanged.
+- Browser Agent and backend quick-search routing use Bing for general searches; explicit Google and YouTube searches remain supported.
+- Bing result cards, snippets, header, and search box receive mobile-first Bridge layout rules.
+- Google `/sorry/` fallback now extracts a query only from a real search URL/continuation, avoiding challenge tokens being sent as search terms.
+- Google sign-in rejection is separately logged. Google security challenges are not bypassed; some account sign-ins may need the system browser.
+- See `docs/V10.9.9_BING_DEFAULT_REPORT.md` for scope and validation notes.
 
 ## V10.9.8 — Mobile-first rendering and engine recovery
 

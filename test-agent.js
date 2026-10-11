@@ -26,7 +26,7 @@ const { createAIService } = require('./lib/ai-module/ai-service');
   assert.ok(t.ok && t.action.text.length <= 1001 && t.action.submit === true && !('evil' in t.action));
   assert.strictEqual(agent.validateAction({ type: 'wait', ms: 999999 }, obs).action.ms, 3000);
   assert.strictEqual(agent.validateAction({ type: 'scroll', direction: 'sideways' }, obs).action.direction, 'down');
-  assert.strictEqual(agent.validateAction({ type: 'search', query: 'cats', engine: 'bing' }, obs).action.engine, 'google');
+  assert.strictEqual(agent.validateAction({ type: 'search', query: 'cats', engine: 'bing' }, obs).action.engine, 'bing');
   assert.ok(!agent.validateAction(null, obs).ok);
   console.log('  validateAction PASS');
 
@@ -51,7 +51,7 @@ const { createAIService } = require('./lib/ai-module/ai-service');
   assert.deepStrictEqual([h.type, h.engine, h.query], ['search', 'youtube', 'phim hay']);
   const h2 = agent.heuristicPlan('search on youtube cats');
   assert.deepStrictEqual([h2.engine, h2.query], ['youtube', 'cats']);
-  assert.strictEqual(agent.heuristicPlan('tìm giá vàng').engine, 'google');
+  assert.strictEqual(agent.heuristicPlan('tìm giá vàng').engine, 'bing');
   assert.strictEqual(agent.heuristicPlan('hãy mua cho tôi một cái áo'), null);
   console.log('  heuristicPlan PASS');
 
