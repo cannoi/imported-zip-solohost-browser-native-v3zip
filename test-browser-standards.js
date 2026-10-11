@@ -8,13 +8,14 @@ const bridge = fs.readFileSync(path.join(root, 'lib/engine/dom-bridge.js'), 'utf
 const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
 const pkg = require('./package.json');
 const caps = require('./lib/engine/capabilities').detect();
-assert.strictEqual(pkg.version, '10.11.0');
-assert.strictEqual(caps.version, '10.11.0');
+assert.strictEqual(pkg.version, '10.12.0');
+assert.strictEqual(caps.version, '10.12.0');
 assert.ok(engine.includes('SOLOHOST_BROWSER_PERSIST_SESSIONS'), 'persistent session storage can be disabled explicitly');
 assert.ok(engine.includes('context.storageState()') && engine.includes('0o600') && engine.includes('0o700'), 'session storage is persisted with restricted file permissions');
 assert.ok(engine.includes('playwright.popup_attached'), 'new popup pages are attached to the active session');
-assert.ok(engine.includes('solohost-focused-mode'), 'focused content mode provides a simplified display layer');
-assert.ok(engine.includes('SOLOHOST_BROWSER_CONTENT_MODE'), 'focused display mode is configurable');
+assert.ok(engine.includes('solohost-adaptive-layout'), 'adaptive mode adds only conservative responsive and reduced-motion styles');
+assert.ok(engine.includes("preserve the site's classes"), 'adaptive mode preserves original site styling and layout');
+assert.ok(engine.includes('SOLOHOST_BROWSER_CONTENT_MODE'), 'adaptive/focused display modes are configurable');
 assert.ok(!engine.includes("waitForLoadState('networkidle', { timeout: 8000 })"), 'dynamic pages do not wait for network idle indefinitely');
 assert.ok(engine.includes('Only use the video embed fallback for a specific watch URL'), 'YouTube feed links are not scanned into embed cards');
 assert.ok(bridge.includes('normalizeKnownLandingUrl'), 'tracking URLs can normalize to safe canonical destinations');

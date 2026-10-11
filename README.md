@@ -1,8 +1,8 @@
-# SoloHost Browser V10.11.0
+# SoloHost Browser V10.12.0
 
-Version 10.11.0 improves engine-first navigation, session persistence, popup tracking, YouTube home/feed rendering, and policy-aware sign-in handoff. Bing remains the default search engine for unqualified searches.
+Version 10.12.0 makes adaptive DOM rendering the default: it preserves original website CSS, classes, inline styles, product/search grids, forms and allowlisted media embeds, while applying conservative responsive and reduced-motion rules. Known ad markers are removed; untrusted nested frames are discarded. Bing remains the default search engine for unqualified searches.
 
-See `docs/V10.11.0_ENGINE_FIRST_BROWSER_REPORT.md` for changes, limitations, and validation.
+See `docs/V10.12.0_ADAPTIVE_LAYOUT_REPORT.md` for changes, limitations, and validation.
 
 Lightweight private browser for **Pi Network SoloHost**.
 
@@ -147,3 +147,13 @@ The Browser Agent now runs as a backend task against the authenticated browser s
 Supported task patterns include opening URLs, web/search queries, clicking links and controls, filling non-secret fields, selecting options, scrolling, reading long pages in chunks, summarizing/extracting visible page information, and diagnosing browser logs. Passwords, OTPs, card data and other secrets are never supplied to the agent. Sensitive actions require user confirmation.
 
 Compatibility note: WebKitGTK is the backend engine, not Chromium. CAPTCHA, DRM, anti-bot pages, and some highly dynamic/cross-origin iframe content may still require opening the page in an external browser. The frontend snapshot intentionally does not execute website scripts in the SoloHost origin.
+
+
+## V10.12.0 — Adaptive site-layout preservation
+
+- Default `SOLOHOST_BROWSER_CONTENT_MODE=adaptive` preserves website stylesheets, classes, inline styles and original grid/flex layouts; this fixes the previous snapshot behavior that flattened sites into a single-column plain-text-like layout.
+- Adds lightweight page-family detection for search, video, commerce, social, article and generic pages. Family-specific CSS is deliberately conservative so it does not replace each website's own layout system.
+- Keeps forms, link IDs, responsive `srcset`, native video/audio elements and HTTPS embeds from an explicit provider allowlist. Untrusted nested frames are removed.
+- Continues removing scripts from the transferred snapshot, conservative ad markers, tracking pixels and known third-party ad/analytics requests. The live Chromium page still runs its original JavaScript and remains the interaction source of truth.
+- `SOLOHOST_BROWSER_CONTENT_MODE=focused` remains available as an opt-in simplified mode; `0`/`site-style` keeps site styles and applies only the Bridge safety/responsive layer.
+- Validation: full test suite, syntax, configuration parsing and ZIP integrity checks. Real SoloHost visual/interaction tests are still required for site-specific behavior.
