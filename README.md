@@ -1,6 +1,8 @@
-# SoloHost Browser V10.9.9
+# SoloHost Browser V10.10.0
 
-Version 10.9.9: Bing is the default search engine for unqualified searches; Bridge applies responsive Bing result/search-box styling. Explicit Google URLs remain available.
+Version 10.10.0 improves engine-first navigation, session persistence, popup tracking, YouTube home/feed rendering, and policy-aware sign-in handoff. Bing remains the default search engine for unqualified searches.
+
+See `docs/V10.10.0_ENGINE_FIRST_BROWSER_REPORT.md` for changes, limitations, and validation.
 
 Lightweight private browser for **Pi Network SoloHost**.
 
@@ -14,6 +16,14 @@ Native **WebKitGTK cannot** paint into the remote SoloHost web page without a di
 
 Address bar, tabs, back/forward/home/reload, bookmarks, history, AI panel, Feedback, Settings, Logs.
 
+
+## V10.10.0 — Engine-first compatibility and session stability
+
+- Playwright storage state (cookies/local storage) persists under `/app/data/browser-state` by default; set `SOLOHOST_BROWSER_PERSIST_SESSIONS=0` to disable.
+- Popup/new-page tracking and shorter SPA navigation waits improve stability on dynamic sites.
+- YouTube home/feed stays a page instead of being replaced with embed cards.
+- Google Account and known Facebook/TikTok sign-in flows use the system browser when required by site policy. The external browser's cookies are not shared with the embedded engine.
+- This app still displays sanitized DOM snapshots, not a live pixel-perfect Chromium viewport; some canvas/iframe/DRM/media experiences require a system browser.
 
 ## V10.9.9 — Bing default and responsive results
 

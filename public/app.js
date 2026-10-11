@@ -35,25 +35,39 @@
    * DIRECT: iframe src=URL (rare; only when embeddable)
    * EXTERNAL: system browser (Open ↗)
    */
+  function isExternalAuthPath(url) {
+    try {
+      const u = new URL(url);
+      const h = u.hostname.toLowerCase().replace(/^www\./, '');
+      const p = u.pathname || '/';
+      if (h === 'accounts.google.com') return true;
+      if ((h === 'youtube.com' || h.endsWith('.youtube.com')) && /\/(signin|sign_in)(?:\/|$)/i.test(p)) return true;
+      if ((h === 'facebook.com' || h.endsWith('.facebook.com')) && /\/(login|checkpoint|recover)(?:\/|$)/i.test(p)) return true;
+      if ((h === 'tiktok.com' || h.endsWith('.tiktok.com') || h === 'login.tiktok.com') && /\/(login|signup|passport)(?:\/|$)/i.test(p)) return true;
+      return false;
+    } catch { return false; }
+  }
+
   function isLoginPath(url) {
     try {
       const u = new URL(url);
       const p = (u.pathname || '') + (u.search || '');
-      return /\/(login|signin|sign-in|signup|sign-up|register|oauth|authorize|accounts\.google)/i.test(p);
+      return /\/(login|signin|sign-in|signup|sign-up|register|oauth|authorize)/i.test(p) || isExternalAuthPath(url);
     } catch { return false; }
   }
 
   function classifyUrl(url) {
     const h = hostOf(url);
     if (!h) return MODE.PROXY;
+    // Site-owned authentication must use a normal system browser, not an embedded/automated view.
+    if (isExternalAuthPath(url)) return MODE.EXTERNAL;
     // DRM/subscription streaming sites need their own full browser profile/DRM stack.
     if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
     // Official embeddable players remain direct when explicitly on their embed endpoint.
     if (/youtube\.com|youtu\.be/.test(h) && /\/embed\//.test(url)) return MODE.DIRECT;
-    // Dynamic sites and authentication flows need an actual JS-capable engine, not fetched HTML.
+    // Dynamic sites use the JS-capable engine; do not rewrite them to proxy HTML pre-emptively.
     if (/google\.|youtube\.com|youtu\.be|(^|\.)(facebook|fb|instagram|whatsapp|messenger|tiktok|x|twitter|reddit)\.com$/.test(h)) return MODE.ENGINE;
     if (isLoginPath(url)) return MODE.ENGINE;
-    // Prefer the live WebKit worker by default; navigate() retains proxy/external fallbacks.
     return MODE.ENGINE;
   }
 
@@ -139,6 +153,7 @@
       });
       const j = await r.json().catch(() => null);
       if (!j || !j.ok) return { ok: false, reason: (j && j.error) || 'bridge_navigate_failed', detail: j };
+      if (j.externalRequired) return loadViaExternal(j.url || url, j.externalReason || 'site_auth_policy');
       const activeNav = ensureTabNav(tab);
       if (activeNav) activeNav.bridgeAudit = j.audit || {};
       if (!j.hasContent && j.error) return { ok: false, reason: j.error, detail: j };
@@ -215,6 +230,11 @@
         method: 'POST', headers: bridgeHeaders(b), body: JSON.stringify(Object.assign({ token: b.token }, ev))
       });
       const j = await r.json();
+      if (j && j.ok && j.externalRequired) {
+        if (j.url) applyUrlToUi(j.url, j.title);
+        loadViaExternal(j.url || (tab && tab.url) || state.url, j.externalReason || 'site_auth_policy');
+        return j;
+      }
       if (j && j.ok && frame) {
         // Typing must not reload the snapshot: doing so loses focus and breaks login forms.
         // The real page receives every input event in WebKit; refresh only after actions that may navigate/update UI.

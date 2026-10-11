@@ -1,14 +1,14 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.9.9",
-  "description": "SoloHost Browser \u2014 Bing-default mobile-first Playwright multi-engine bridge and resilient AI agent",
+  "version": "10.10.0",
+  "description": "SoloHost Browser \u2014 Engine-first Playwright browser backend with persistent sessions and site-policy-aware auth",
   "main": "server.js",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node test-syntax.js && node test.js && node test-security.js && node test-bridge.js && node test-ai-compat.js && node test-agent.js && node test-backend-agent.js && node test-youtube.js && node test-mobile-resilience.js && node test-bing-default.js && node test-perf-ssrf.js && node --check lib/engine/playwright-engine.js",
+    "test": "node test-syntax.js && node test.js && node test-security.js && node test-bridge.js && node test-ai-compat.js && node test-agent.js && node test-backend-agent.js && node test-youtube.js && node test-mobile-resilience.js && node test-bing-default.js && node test-browser-standards.js && node test-perf-ssrf.js && node --check lib/engine/playwright-engine.js",
     "test:e2e": "node test-agent-e2e.js"
   },
   "dependencies": {
