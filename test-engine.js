@@ -47,6 +47,11 @@ async function main() {
   const workerSource = require('fs').readFileSync(worker, 'utf8');
   assert.ok(workerSource.includes('cloneNode(true)'), 'snapshot must clone DOM before removing scripts');
   assert.ok(workerSource.includes('CookiePersistentStorage'), 'worker should configure persistent login cookies when enabled');
+  assert.ok(workerSource.includes('set_enable_javascript(True)') || workerSource.includes('set_property("enable-javascript", True)'), 'WebKit must explicitly enable JavaScript');
+  const managerSource = require('fs').readFileSync(path.join(__dirname, 'lib', 'engine', 'webkit-manager.js'), 'utf8');
+  assert.ok(managerSource.includes('_dispatchNext()') && managerSource.includes('requestQueue'), 'WebKit IPC requests must be serialized to avoid queued requests timing out before execution');
+  const bridgeSource = require('fs').readFileSync(path.join(__dirname, 'lib', 'engine', 'dom-bridge.js'), 'utf8');
+  assert.ok(bridgeSource.includes('session.navigationInFlight'), 'duplicate navigations per session should be coalesced/serialized');
   assert.ok(workerSource.includes("el.type!=='file'"), 'password inputs should be forwarded to live page but not serialized into snapshots');
   const st = await request({ id: 1, cmd: 'engine.status' });
   assert.strictEqual(st.id, 1);

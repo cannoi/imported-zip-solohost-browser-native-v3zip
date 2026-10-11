@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.5.0-adaptive-webkit-bridge",
+  "version": "10.6.0-js-ipc-recovery",
   "description": "SoloHost Browser V10 \u2014 hybrid proxy engine (honest SoloHost web-app architecture) + Universal AI",
   "main": "server.js",
   "engines": {

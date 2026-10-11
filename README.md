@@ -1,4 +1,4 @@
-# SoloHost Browser V10
+# SoloHost Browser V10.6.0
 
 Lightweight private browser for **Pi Network SoloHost**.
 
@@ -23,7 +23,7 @@ Engine: `GET /api/engine/status`
 
 ## Limits
 
-Google/Facebook full SPA, DRM video: use **Open ↗**. News sites usually work via proxy.
+V10.6.0 explicitly enables JavaScript in the live WebKitGTK worker and uses a sanitized DOM snapshot + event bridge for the app viewport. Google, YouTube and other dynamic sites are best-effort; a successful HTTP response alone does not guarantee a usable page. CAPTCHA, anti-bot checks, DRM video, file upload and complex cross-origin widgets may still require **Open ↗**.
 
 
 
@@ -75,3 +75,12 @@ In the AI panel → Chat, tap 🤖 and give a task; the AI operates the open pag
 - Website cookies can persist in `/app/data/browser-profile/cookies.sqlite` (the SoloHost data volume). Set `SOLOHOST_WEBKIT_PERSIST_COOKIES=0` to disable persistence.
 - Bridge render audits log only structural counts (text length, forms, controls, media, iframes, links); AI compatibility checks receive those counts, not page text, credentials, cookies or tokens.
 - This is still a DOM-snapshot bridge, not a full pixel-native browser surface. DRM-protected streaming, CAPTCHA and anti-embedded-webview checks may still require Open ↗.
+
+
+## V10.6.0 — JavaScript and IPC recovery
+
+- Explicit WebKit JavaScript setting; live scripts are not removed during snapshot extraction.
+- Serialized IPC queue prevents requests waiting behind a slow page load from timing out before execution.
+- Worker timeout recovery and per-session navigation coalescing reduce stale navigations and repeated fallback loops.
+- Temporary proxy fallback can recover to WebKit; session tokens are redacted from logs.
+- Run `npm test` before packaging. Live Google/YouTube behavior must still be verified in the SoloHost runtime.

@@ -64,6 +64,12 @@ async function main() {
   assert.ok(!/onerror/i.test(clean));
   assert.ok(!/javascript:/i.test(clean));
   console.log('  HTML sanitize PASS');
+  const appLog = require('./lib/app-log');
+  const safeLog = appLog.redact({ url: 'http://127.0.0.1/api/view?token=abc123&next=1', password: 'dont-log-me', detail: 'access_token=xyz789' });
+  assert.ok(!JSON.stringify(safeLog).includes('abc123'), 'URL query tokens must be redacted from logs');
+  assert.ok(!JSON.stringify(safeLog).includes('xyz789'), 'inline access tokens must be redacted from logs');
+  assert.ok(!JSON.stringify(safeLog).includes('dont-log-me'), 'sensitive object fields must be redacted');
+  console.log('  log credential redaction PASS');
 
   // rate limiter returns boolean
   assert.strictEqual(typeof rateOk('t'), 'boolean');

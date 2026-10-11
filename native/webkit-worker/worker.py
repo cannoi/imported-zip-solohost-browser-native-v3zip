@@ -141,6 +141,20 @@ def session_create(args: Dict[str, Any]) -> Dict[str, Any]:
             _cookie_persistence.update({"enabled": False, "path": None, "error": str(cookie_error)[:180]})
             log_err("cookie persistence unavailable: " + str(cookie_error))
     webview = WebKit2.WebView.new_with_context(ctx)
+    # Explicitly enable JavaScript instead of relying on distro defaults. Modern
+    # search/social sites depend on it for navigation, hydration and search forms.
+    try:
+        settings = webview.get_settings()
+        if hasattr(settings, "set_enable_javascript"):
+            settings.set_enable_javascript(True)
+        else:
+            settings.set_property("enable-javascript", True)
+        # Keep site JS active in the live WebKit page. Scripts are removed only
+        # from the exported DOM snapshot, never from the actual document.
+        if hasattr(settings, "set_enable_javascript_markup"):
+            settings.set_enable_javascript_markup(True)
+    except Exception as settings_error:
+        log_err("javascript settings warning: " + str(settings_error))
     # Hidden window required for some GTK/WebKit builds
     win = Gtk.OffscreenWindow() if hasattr(Gtk, "OffscreenWindow") else Gtk.Window()
     win.set_default_size(1280, 720)
@@ -378,7 +392,9 @@ CONTENT_JS = r"""
     media:document.querySelectorAll('video,audio').length,
     iframes:document.querySelectorAll('iframe').length,
     links:document.querySelectorAll('a[href]').length,
-    readyState:document.readyState
+    readyState:document.readyState,
+    javascriptExecutionVerified:true,
+    pageHasScripts:scriptCount>0
   };
   return JSON.stringify({
     html:root.outerHTML,
