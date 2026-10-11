@@ -1,6 +1,5 @@
 services:
   web:
-    build: .
     image: ghcr.io/cannoi/imported-zip-solohost-browser-native-v3zip:latest
     ports:
       - "8080:8080"
@@ -12,6 +11,8 @@ services:
       SOLOHOST_BROWSER_ENGINE: "chromium"
       SOLOHOST_BROWSER_MOBILE: "1"
       SOLOHOST_BROWSER_PERSIST_SESSIONS: "1"
+      SOLOHOST_BROWSER_CONTENT_MODE: "focused"
+      SOLOHOST_BROWSER_BLOCK_ADS: "1"
       SOLOHOST_WEBKIT: "0"
       SOLOHOST_WEBKIT_BRIDGE: "0"
       SOLOHOST_DATA_DIR: "/app/data"

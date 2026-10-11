@@ -13,6 +13,6 @@ assert.ok(pw.includes('SOLOHOST_BROWSER_MOBILE') && pw.includes('options.isMobil
 assert.ok(bridge.includes('bridge.google_search_fallback') && bridge.includes('DuckDuckGo'), 'Google verification has transparent alternate search');
 assert.ok(bridge.includes('viewport-fit=cover') && bridge.includes('@media(max-width:600px)'), 'Bridge output has mobile viewport and responsive CSS');
 assert.ok(proxy.includes('Preserve m.youtube.com'), 'proxy preserves YouTube mobile host');
-assert.strictEqual(caps.version, '10.10.0');
+assert.strictEqual(caps.version, '10.11.0');
 assert.strictEqual(caps.features.sessionRecovery, true);
 console.log('✓ mobile-first bridge / engine fallback / Google verification regression tests');
