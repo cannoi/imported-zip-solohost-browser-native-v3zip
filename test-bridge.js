@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('assert');
-const { sanitizeHtml, annotateInteractive, createSession, authSession, navigate, dispatchEvent, destroySession } = require('./lib/engine/dom-bridge');
+const { sanitizeHtml, hasRenderableContent, annotateInteractive, createSession, authSession, navigate, dispatchEvent, destroySession } = require('./lib/engine/dom-bridge');
 
 async function main() {
   console.log('Bridge unit tests...');
@@ -11,7 +11,13 @@ async function main() {
   assert.ok(!/<script/i.test(clean));
   assert.ok(!/onclick/i.test(clean));
   assert.ok(!/javascript:/i.test(clean));
-  console.log('  sanitize OK');
+  assert.strictEqual(sanitizeHtml('', 'https://example.com/'), '', 'empty input must stay empty; never add CSS-only HTML');
+  assert.strictEqual(sanitizeHtml('<html><head><style>body{color:red}</style></head><body> </body></html>', 'https://example.com/'), '', 'CSS-only/empty body must stay empty');
+  assert.strictEqual(hasRenderableContent('<html><body><p>Useful page content</p></body></html>'), true);
+  assert.strictEqual(hasRenderableContent('<html><head><style>x{}</style></head><body></body></html>'), false);
+  assert.strictEqual(hasRenderableContent('', { textLength: 500, links: 8 }), false, 'audit metrics cannot turn an empty HTML string into content');
+  assert.strictEqual(hasRenderableContent('<html><body><video src="https://example.com/a.mp4"></video></body></html>'), true, 'media-only pages remain renderable');
+  console.log('  sanitize + empty-content semantics OK');
 
   const ann = annotateInteractive('<a href="/p">p</a><button>b</button>');
   assert.ok(ann.mapCount >= 2);

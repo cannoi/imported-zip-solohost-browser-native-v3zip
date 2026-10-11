@@ -1,4 +1,4 @@
-# SoloHost Browser V10.6.0
+# SoloHost Browser V10.7.0
 
 Lightweight private browser for **Pi Network SoloHost**.
 
@@ -23,7 +23,7 @@ Engine: `GET /api/engine/status`
 
 ## Limits
 
-V10.6.0 explicitly enables JavaScript in the live WebKitGTK worker and uses a sanitized DOM snapshot + event bridge for the app viewport. Google, YouTube and other dynamic sites are best-effort; a successful HTTP response alone does not guarantee a usable page. CAPTCHA, anti-bot checks, DRM video, file upload and complex cross-origin widgets may still require **Open ↗**.
+V10.7.0 explicitly enables JavaScript in the live WebKitGTK worker and uses a sanitized DOM snapshot + event bridge for the app viewport. Google, YouTube and other dynamic sites are best-effort; a successful HTTP response alone does not guarantee a usable page. CAPTCHA, anti-bot checks, DRM video, file upload and complex cross-origin widgets may still require **Open ↗**.
 
 
 
@@ -84,3 +84,13 @@ In the AI panel → Chat, tap 🤖 and give a task; the AI operates the open pag
 - Worker timeout recovery and per-session navigation coalescing reduce stale navigations and repeated fallback loops.
 - Temporary proxy fallback can recover to WebKit; session tokens are redacted from logs.
 - Run `npm test` before packaging. Live Google/YouTube behavior must still be verified in the SoloHost runtime.
+
+
+## V10.7.0 — Empty-content and recursive viewport recovery
+
+- Fixed a critical URL-sync bug: the internal `/api/browser/sessions/:id/view` iframe URL is no longer mistaken for the actual website URL. This prevented reload/agent actions from navigating back into the browser's own viewport endpoint.
+- Server rejects same-host session view/state/content/navigation/event API URLs as navigation targets (`internal_url_not_navigable`) to prevent recursive self-fetches.
+- Empty or CSS-only HTML remains empty; sanitization no longer adds bridge CSS to an empty response and then falsely reports `hasContent=true`.
+- Content readiness checks recognize meaningful text, controls, links, images, media and worker audit metrics. Blank responses now trigger a clean fallback instead of being reported as successful pages.
+- Clears prior-page snapshot state at navigation start so a failed page cannot leave stale content masquerading as the current page.
+- Added regression tests for empty HTML, CSS-only documents, media-only pages, and internal viewport navigation guards.

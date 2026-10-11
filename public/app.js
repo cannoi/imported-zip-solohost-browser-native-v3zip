@@ -389,6 +389,15 @@
     return '/api/proxy?url=' + encodeURIComponent(url);
   }
 
+  // The bridge iframe URL is an internal HTML viewport, not the website being visited.
+  // Treating it as the active URL creates a recursive navigate -> /view -> blank loop.
+  function isInternalBridgeViewUrl(raw) {
+    try {
+      const u = new URL(String(raw || ''), window.location.href);
+      return u.origin === window.location.origin && /^\/api\/browser\/sessions\/[^/]+\/view\/?$/i.test(u.pathname);
+    } catch (_) { return false; }
+  }
+
   function toPlayableUrl(url) {
     let u;
     try { u = new URL(url); } catch { return url; }
@@ -588,6 +597,13 @@
     opts = opts || {};
     let url = normalizeUrl(raw);
     if (!url || !frame) return;
+    if (isInternalBridgeViewUrl(url)) {
+      clientLog('warn', 'navigate_internal_view_blocked', { url: url });
+      const active = getActiveTab();
+      const safeUrl = (active && active.url && !isInternalBridgeViewUrl(active.url)) ? active.url : state.url;
+      if (safeUrl && !isInternalBridgeViewUrl(safeUrl)) applyUrlToUi(safeUrl);
+      return;
+    }
     // Do NOT rewrite Google queries to gbv=1 or DuckDuckGo here.
     url = toPlayableUrl(url);
 
@@ -758,6 +774,10 @@
       } catch (_) { /* cross-origin direct embed */ }
       try {
         const href = frame.contentWindow && frame.contentWindow.location && frame.contentWindow.location.href;
+        if (href && isInternalBridgeViewUrl(href)) {
+          // This is only the same-origin sanitized viewport; state.url must remain the real target URL.
+          return;
+        }
         if (href && href !== 'about:blank' && !href.startsWith('about:')) {
           let realHref = href;
           try {

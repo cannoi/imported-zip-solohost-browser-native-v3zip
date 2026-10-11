@@ -309,6 +309,16 @@ app.post('/api/browser/sessions/:id/navigate', async (req, res) => {
     if (!domBridge.rateOk('nav:' + ip)) return res.status(429).json({ ok: false, error: 'rate_limited' });
     const url = String((req.body && req.body.url) || '').trim();
     if (!url) return res.status(400).json({ ok: false, error: 'url required' });
+    // Prevent the app's own bridge viewport/session API from being fetched as a remote page.
+    // Logs showed /api/browser/sessions/:id/view?token=... entering this route and recursing.
+    try {
+      const target = new URL(url);
+      const requestHost = String(req.get('host') || '').toLowerCase();
+      if (requestHost && target.host.toLowerCase() === requestHost &&
+          /^\/api\/browser\/sessions\/[^/]+\/(?:view|state|content|navigate|events)\/?$/i.test(target.pathname)) {
+        return res.status(400).json({ ok: false, error: 'internal_url_not_navigable' });
+      }
+    } catch (_) { /* normal URL validation below returns the precise error */ }
     try {
       const { assertPublicHttpUrl } = require('./lib/frame-proxy');
       if (!url.startsWith('about:')) await assertPublicHttpUrl(url);
