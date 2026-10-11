@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.9.4-bootstrap-listen",
+  "version": "10.9.5-ui-fix",
   "description": "SoloHost Browser \u2014 Playwright Chromium engine + adaptive DOM Bridge + backend AI agent",
   "main": "server.js",
   "engines": {

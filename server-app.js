@@ -1,22 +1,20 @@
 'use strict';
 
 module.exports.mount = function mount(app, server, ctx) {
-/**
- * SoloHost Browser — static WebView shell + frame proxy + Universal AI/Feedback.
- */
-
-try { require('dotenv').config(); } catch { /* optional */ }
-
+const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const http = require('http');
 
-let cors = null;
-try { cors = require('cors'); } catch { /* optional */ }
+try { require('dotenv').config(); } catch (e) { /* optional */ }
+
 const PORT = (ctx && ctx.PORT) || Number(process.env.PORT || 8080);
 const HOST = (ctx && ctx.HOST) || process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const DATA_DIR = path.join(__dirname, 'data');
+
+let cors = null;
+try { cors = require('cors'); } catch { /* optional */ }
 const appLog = require('./lib/app-log');
 const engineCaps = require('./lib/engine/capabilities');
 const { webkitManager, installShutdownHooks } = require('./lib/engine/webkit-manager');
