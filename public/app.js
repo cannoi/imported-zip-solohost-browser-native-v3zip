@@ -59,6 +59,17 @@
     } catch { return false; }
   }
 
+  function isYouTubeVideoUrl(url) {
+    try {
+      const u = new URL(url);
+      const h = u.hostname.toLowerCase().replace(/^www\./, '');
+      if (h === 'youtu.be') return /^\/[\w-]{6,15}\/?$/.test(u.pathname);
+      if (!(h === 'youtube.com' || h.endsWith('.youtube.com') || h === 'youtube-nocookie.com')) return false;
+      if (/^\/watch\/?$/i.test(u.pathname)) return /^[\w-]{6,15}$/.test(u.searchParams.get('v') || '');
+      return /^\/(?:shorts|live|v)\/[\w-]{6,15}(?:\/|$)/i.test(u.pathname);
+    } catch (_) { return false; }
+  }
+
   function isNativeMediaOrDocumentUrl(url) {
     try {
       const u = new URL(url); const p = (u.pathname || '').toLowerCase();
@@ -74,6 +85,10 @@
     if (!h) return MODE.PROXY;
     // Site-owned authentication must use a normal system browser, not an embedded/automated view.
     if (isExternalAuthPath(url)) return MODE.EXTERNAL;
+    // YouTube watch/Shorts/live URLs must reach the server's official-player shell.
+    // The Bridge snapshot intentionally strips scripts/unsafe frames, so rendering these
+    // URLs in the automated DOM view leaves a visible page with a non-working player.
+    if (isYouTubeVideoUrl(url)) return MODE.PROXY;
     // DRM/subscription streaming sites need their own full browser profile/DRM stack.
     if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
     // Official embeddable players remain direct when on their official embed endpoint.
@@ -460,6 +475,14 @@
               const abs = new URL(el.getAttribute('href') || '', state.url || 'https://example.com').href;
               if (isNativeMediaOrDocumentUrl(abs)) {
                 e.preventDefault(); e.stopPropagation(); navigate(abs, { force: true }); return;
+              }
+              // Hand video clicks from YouTube's live DOM to the official player route.
+              // Do not click through the Playwright page and then display its script-stripped snapshot.
+              if (isYouTubeVideoUrl(abs)) {
+                e.preventDefault(); e.stopPropagation();
+                clientLog('info', 'youtube.video_handoff', { url: abs, detail: 'official_embed_player_route' });
+                navigate(abs, { force: true, mode: MODE.PROXY });
+                return;
               }
             } catch (_) {}
           }

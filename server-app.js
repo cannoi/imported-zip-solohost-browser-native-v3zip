@@ -88,7 +88,7 @@ let aiCompat = softRequire('ai-compat', './lib/ai-compat', {
 try { installShutdownHooks(); } catch (_) {}
 try { appLog.configure(DATA_DIR); } catch (_) {}
 const PKG = (() => {
-  try { return require('./package.json'); } catch { return { version: '9.0.8' }; }
+  try { return require('./package.json'); } catch { return { version: '10.16.0' }; }
 })();
 
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* ignore */ }
@@ -126,7 +126,7 @@ function healthPayload() {
     status: 'ok',
     ok: true,
     service: 'solohost-browser',
-    version: PKG.version || '9.0.8',
+    version: PKG.version || '10.16.0',
     mode: 'hybrid-proxy',
     engine: engineCaps.detect(),
     port: PORT,
@@ -419,7 +419,7 @@ try {
   const fbOpts = {
     appId: process.env.SHFH_APP_ID || 'solohost-browser',
     appName: 'SoloHost Browser',
-    version: PKG.version || '9.0.8'
+    version: PKG.version || '10.16.0'
   };
   if (process.env.SHFH_HUB_ID) fbOpts.hubId = process.env.SHFH_HUB_ID;
   if (process.env.SHFH_HUB_URL) fbOpts.baseUrl = process.env.SHFH_HUB_URL;
