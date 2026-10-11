@@ -261,186 +261,44 @@
   }
 
   
-  /* —— Bridge live refresh: reopen / focus / scroll keeps content fresh at viewport —— */
-  let _bridgeRefreshBusy = false;
-  let _lastBridgeRefresh = 0;
-  let _scrollTimer = null;
-  let _lastScrollSent = 0;
+  /* —— Bridge viewport: no auto soft-refresh (avoids flicker & scroll jump) ——
+     Missing images: one-shot nudge on frame load only; engine keeps scroll. */
 
-  function getBridgeScroll() {
+  function nudgeLazyMediaInFrame() {
     try {
-      if (!frame || !frame.contentWindow) return { x: 0, y: 0 };
-      return {
-        x: frame.contentWindow.scrollX || 0,
-        y: frame.contentWindow.scrollY || 0
-      };
-    } catch (_) {
-      return { x: 0, y: 0 };
-    }
-  }
-
-  function restoreBridgeScroll(y, x) {
-    try {
-      if (!frame || !frame.contentWindow) return;
+      if (!frame || !frame.contentDocument) return;
       const doc = frame.contentDocument;
-      // Prefer explicit caller coordinates (user position) over stale data attributes
-      let tx = Number(x);
-      let ty = Number(y);
-      if (!Number.isFinite(tx)) tx = 0;
-      if (!Number.isFinite(ty)) ty = 0;
-      // Only fall back to data attrs when caller did not pass values
-      if ((y == null || y === undefined) && doc && doc.body) {
-        const dy = doc.body.getAttribute('data-sh-scroll-y');
-        if (dy != null) ty = Number(dy) || 0;
-      }
-      if ((x == null || x === undefined) && doc && doc.body) {
-        const dx = doc.body.getAttribute('data-sh-scroll-x');
-        if (dx != null) tx = Number(dx) || 0;
-      }
-      frame.contentWindow.scrollTo(tx, ty);
-      if (doc && doc.documentElement) {
-        doc.documentElement.scrollTop = ty;
-        doc.documentElement.scrollLeft = tx;
-      }
-      if (doc && doc.body) {
-        doc.body.scrollTop = ty;
-        doc.body.scrollLeft = tx;
-      }
-      // Nudge lazy media near viewport only
-      try {
-        if (doc) {
-          doc.querySelectorAll('img[loading="lazy"],img[data-src]').forEach((img) => {
-            if (img.dataset.src && !img.src) img.src = img.dataset.src;
-          });
-        }
-      } catch (_) {}
+      doc.querySelectorAll('img').forEach((img) => {
+        try {
+          if (img.dataset && img.dataset.src && (!img.getAttribute('src') || img.getAttribute('src') === '')) {
+            img.setAttribute('src', img.dataset.src);
+          }
+          if (img.loading === 'lazy') img.loading = 'eager';
+          if (typeof img.decode === 'function') img.decode().catch(function () {});
+        } catch (_) {}
+      });
     } catch (_) {}
-  }
-
-  async function softRefreshActiveBridge(opts) {
-    opts = opts || {};
-    const tab = getActiveTab();
-    const nav = ensureTabNav(tab);
-    const b = nav && nav.bridge;
-    if (!b || !frame) return false;
-    if (nav.mode && nav.mode !== MODE.ENGINE && nav.mode !== 'ENGINE') return false;
-    const now = Date.now();
-    if (!opts.force && (now - _lastBridgeRefresh < 1800 || _bridgeRefreshBusy)) return false;
-    _bridgeRefreshBusy = true;
-    _lastBridgeRefresh = now;
-    // Capture scroll BEFORE any DOM work — never jump user to top
-    const sc = getBridgeScroll();
-    const lockY = sc.y;
-    const lockX = sc.x;
-    try {
-      const r = await fetch('/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '/events', {
-        method: 'POST',
-        headers: bridgeHeaders(b),
-        body: JSON.stringify({
-          token: b.token,
-          type: opts.type || 'refresh',
-          force: !!opts.force,
-          scrollX: lockX,
-          scrollY: lockY
-        })
-      });
-      const j = await r.json().catch(() => ({}));
-      if (!j || !j.ok || j.throttled) {
-        restoreBridgeScroll(lockY, lockX);
-        return !!(j && j.ok);
-      }
-      // In-place content update (no frame.src navigation = no scroll reset to 0)
-      const view = bridgeViewUrl(b);
-      if (!view) {
-        restoreBridgeScroll(lockY, lockX);
-        return true;
-      }
-      const htmlRes = await fetch(view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now(), {
-        headers: bridgeHeaders(b),
-        cache: 'no-store'
-      });
-      if (!htmlRes.ok) {
-        restoreBridgeScroll(lockY, lockX);
-        return false;
-      }
-      const html = await htmlRes.text();
-      const targetY = (j.scrollY != null && j.scrollY > 0) ? j.scrollY : lockY;
-      const targetX = lockX;
-      try {
-        const doc = frame.contentDocument;
-        if (doc && doc.open && doc.write) {
-          doc.open();
-          doc.write(html);
-          doc.close();
-        } else {
-          // Fallback srcdoc still restores scroll aggressively
-          frame.srcdoc = html;
-        }
-      } catch (_) {
-        try { frame.srcdoc = html; } catch (__) {}
-      }
-      const pin = function () { restoreBridgeScroll(targetY, targetX); };
-      pin();
-      requestAnimationFrame(pin);
-      setTimeout(pin, 0);
-      setTimeout(pin, 32);
-      setTimeout(pin, 100);
-      setTimeout(pin, 250);
-      // re-bind scroll listener on new document
-      try { onBridgeFrameLoad(); } catch (_) {}
-      return true;
-    } catch (_) {
-      restoreBridgeScroll(lockY, lockX);
-      return false;
-    } finally {
-      _bridgeRefreshBusy = false;
-    }
   }
 
   function onBridgeFrameLoad() {
     try {
-      restoreBridgeScroll();
-      const win = frame.contentWindow;
-      const doc = frame.contentDocument;
-      if (!win || !doc || doc._soloScrollBound) return;
-      doc._soloScrollBound = true;
-            win.addEventListener('scroll', function () {
-        clearTimeout(_scrollTimer);
-        _scrollTimer = setTimeout(function () {
-          const sc = getBridgeScroll();
-          // Only sync position to engine — never reload UI (avoids jump to top)
-          bridgeEvent({ type: 'scroll', scrollX: sc.x, scrollY: sc.y, refresh: false });
-          // Engine-side soft snapshot without forcing iframe navigation:
-          // refresh:true updates session.html on server only (user stays put)
-          const now = Date.now();
-          if (now - _lastScrollSent > 4000) {
-            _lastScrollSent = now;
-            bridgeEvent({ type: 'scroll', scrollX: sc.x, scrollY: sc.y, refresh: true });
-            // Do NOT call softRefreshActiveBridge here — that rewrites the viewport
-          }
-        }, 200);
-      }, { passive: true });
+      nudgeLazyMediaInFrame();
+      // Scroll position is owned by the user — do not rewrite document or force refresh
     } catch (_) {}
   }
 
-  function bindBridgeLiveRefresh() {
-    if (frame && !frame._soloLiveBound) {
-      frame._soloLiveBound = true;
+  function bindBridgeViewportHelpers() {
+    if (frame && !frame._soloViewportBound) {
+      frame._soloViewportBound = true;
       frame.addEventListener('load', onBridgeFrameLoad);
     }
-    document.addEventListener('visibilitychange', function () {
-      if (document.visibilityState === 'visible') {
-        softRefreshActiveBridge({ force: true, type: 'visibility' });
-      }
-    });
-    window.addEventListener('pageshow', function (e) {
-      softRefreshActiveBridge({ force: !!e.persisted, type: 'visibility' });
-    });
-    window.addEventListener('focus', function () {
-      softRefreshActiveBridge({ force: false, type: 'refresh' });
-    });
   }
 
+  async function softRefreshActiveBridge() {
+    // Disabled: rewriting the viewport caused flicker and scroll jumps.
+    // Kept as no-op for API compatibility (SoloBrowser.softRefreshActiveBridge).
+    return false;
+  }
 
   async function bridgeEvent(ev) {
     const tab = getActiveTab();
@@ -1414,7 +1272,7 @@
   renderTabs();
   startSplash();
   showStart();
-  try { bindBridgeLiveRefresh(); } catch (_) {}
+  try { bindBridgeViewportHelpers(); } catch (_) {}
 
   try {
     const q = new URLSearchParams(location.search).get('url');
