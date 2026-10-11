@@ -45,8 +45,21 @@
               hooks.onConfirm(ev.text || 'Cho phép thao tác nhạy cảm?', finish);
             });
             if (!S.stop) await api('/api/browser/agent/sessions/' + encodeURIComponent(bridge.sessionId) + '/tasks/' + encodeURIComponent(S.taskId) + '/confirm', { method: 'POST', body: JSON.stringify({ token: bridge.token, confirmationId: ev.confirmationId, approved: answer }) });
+          } else if (ev.type === 'login_form') {
+            const msg = ev.message || 'Login form — fill credentials in the browser viewport (not in chat).';
+            hooks.onStatus('🔐 ' + msg + (ev.url ? ' · ' + ev.url : ''));
+            if (typeof hooks.onLoginForm === 'function') hooks.onLoginForm(ev);
+            // Refresh viewport so user sees live login fields from Playwright
+            try {
+              if (browser().refreshBridgeView) browser().refreshBridgeView();
+              else if (browser().reload) browser().reload();
+            } catch (_) {}
           } else if (ev.type === 'ask_user') {
-            // The backend stops safely and returns a question; next user message can continue with history.
+            hooks.onStatus(ev.message || 'Need your action');
+          } else if (ev.type === 'step' || ev.type === 'status' || ev.type === 'action_result') {
+            if (ev.message) hooks.onStatus(ev.message);
+            else if (ev.type === 'action_result' && ev.result) hooks.onStatus(String(ev.result));
+            if (ev.type === 'step' && typeof hooks.onStep === 'function') hooks.onStep(ev);
           }
         }
         if (['done', 'failed', 'error', 'stopped', 'limit', 'waiting_user'].includes(st.status)) {
