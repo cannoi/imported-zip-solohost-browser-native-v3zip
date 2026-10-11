@@ -576,6 +576,68 @@ app.delete('/api/browser/bookmarks/:id', async (req, res, next) => {
   try { await browserStore.removeBookmark(req.params.id); res.json({ ok: true }); } catch (e) { next(e); }
 });
 
+
+// —— User library: playlists, scripts, SoloHost apps ——
+try {
+  const lib = require('./lib/user-library');
+  app.get('/api/library/playlists', (_req, res) => {
+    res.json({ ok: true, playlists: lib.listPlaylists() });
+  });
+  app.post('/api/library/playlists', (req, res) => {
+    const pl = lib.createPlaylist((req.body && req.body.title) || 'Playlist');
+    res.json({ ok: true, playlist: pl });
+  });
+  app.patch('/api/library/playlists/:id', (req, res) => {
+    const pl = lib.updatePlaylist(req.params.id, req.body || {});
+    if (!pl) return res.status(404).json({ ok: false, error: 'not_found' });
+    res.json({ ok: true, playlist: pl });
+  });
+  app.delete('/api/library/playlists/:id', (req, res) => {
+    lib.deletePlaylist(req.params.id);
+    res.json({ ok: true });
+  });
+  app.post('/api/library/playlists/:id/items', (req, res) => {
+    const item = lib.addPlaylistItem(req.params.id, req.body || {});
+    if (!item) return res.status(400).json({ ok: false, error: 'invalid' });
+    res.json({ ok: true, item });
+  });
+  app.delete('/api/library/playlists/:id/items/:itemId', (req, res) => {
+    lib.removePlaylistItem(req.params.id, req.params.itemId);
+    res.json({ ok: true });
+  });
+  app.get('/api/library/apps', (_req, res) => {
+    res.json({ ok: true, apps: lib.listApps() });
+  });
+  app.post('/api/library/apps', (req, res) => {
+    const url = String((req.body && req.body.url) || '').trim();
+    if (!/^https?:\/\//i.test(url)) return res.status(400).json({ ok: false, error: 'url required' });
+    const appEntry = lib.addApp((req.body && req.body.name) || 'App', url);
+    res.json({ ok: true, app: appEntry });
+  });
+  app.delete('/api/library/apps/:id', (req, res) => {
+    lib.removeApp(req.params.id);
+    res.json({ ok: true });
+  });
+  app.get('/api/library/scripts', (_req, res) => {
+    res.json({ ok: true, scripts: lib.listScripts() });
+  });
+  app.post('/api/library/scripts', (req, res) => {
+    res.json({ ok: true, script: lib.createScript(req.body || {}) });
+  });
+  app.patch('/api/library/scripts/:id', (req, res) => {
+    const s = lib.updateScript(req.params.id, req.body || {});
+    if (!s) return res.status(404).json({ ok: false, error: 'not_found' });
+    res.json({ ok: true, script: s });
+  });
+  app.delete('/api/library/scripts/:id', (req, res) => {
+    lib.deleteScript(req.params.id);
+    res.json({ ok: true });
+  });
+  console.log('[ok] library routes mounted');
+} catch (e) {
+  console.error('[warn] library routes:', e && e.message);
+}
+
 // Legacy parse stub
 app.get('/api/browser/parse', (req, res) => {
   const url = String((req.query && req.query.url) || '').trim();

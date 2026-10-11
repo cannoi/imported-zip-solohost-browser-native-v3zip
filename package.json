@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.16.0",
+  "version": "10.17.0-home-library",
   "description": "SoloHost Browser \u2014 Engine-first Playwright browser backend with persistent sessions and site-policy-aware auth",
   "main": "server.js",
   "engines": {

@@ -540,6 +540,18 @@
   }
 
   function applyLang() {
+    try {
+      const vi = state.lang === 'vi';
+      if ($('home-pl-title')) $('home-pl-title').textContent = vi ? '▶ Danh sách phát' : '▶ Playlist';
+      if ($('home-sc-title')) $('home-sc-title').textContent = vi ? '⚡ Tập lệnh' : '⚡ Scripts';
+      if ($('home-app-title')) $('home-app-title').textContent = vi ? '⊞ App SoloHost' : '⊞ SoloHost Apps';
+      if ($('sc-hint')) $('sc-hint').textContent = vi
+        ? 'Mẫu chạy không cần AI (điều hướng / chờ giờ).'
+        : 'Samples run without AI (navigate / wait).';
+      if ($('pl-url-input')) $('pl-url-input').placeholder = vi ? 'Dán URL video…' : 'Paste video URL…';
+      if ($('app-url-input')) $('app-url-input').placeholder = 'http://127.0.0.1:8090';
+    } catch (_) {}
+
     if (btnLang) btnLang.textContent = state.lang === 'vi' ? 'VI' : 'EN';
     localStorage.setItem('solo_lang', state.lang);
     if (input) {
@@ -1032,6 +1044,7 @@
   if ($('btn-new-tab')) $('btn-new-tab').addEventListener('click', () => newTab());
   if ($('btn-bookmark')) $('btn-bookmark').addEventListener('click', addCurrentBookmark);
   if ($('btn-library')) $('btn-library').addEventListener('click', () => openLibrary('bookmarks'));
+  if ($('btn-add-pl')) $('btn-add-pl').addEventListener('click', () => { try { closeSettings && closeSettings(); } catch(_){} addCurrentUrlToPlaylist(); });
   if ($('library-close')) $('library-close').addEventListener('click', () => { $('library-overlay').hidden = true; });
   document.querySelectorAll('[data-library]').forEach(b => b.addEventListener('click', () => openLibrary(b.dataset.library)));
   if ($('history-clear')) $('history-clear').addEventListener('click', async () => {
@@ -1168,7 +1181,283 @@
     else { const active = getActiveTab(); if (active && active.url) navigate(active.url); }
   } catch (_) {}
 
-  window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary, getActiveBridge() { const tab = getActiveTab(); const nav = ensureTabNav(tab); return nav && nav.bridge ? { sessionId: nav.bridge.sessionId, token: nav.bridge.token, backend: nav.bridge.backend, url: state.url || '' } : null; },
+
+  /* —— Home: playlists, scripts, SoloHost apps (no AI required for scripts) —— */
+  const homeLib = {
+    playlists: [],
+    scripts: [],
+    apps: [],
+    activePlaylistId: null,
+    playIndex: 0,
+    musicMode: false,
+    scriptRun: null
+  };
+
+  async function libFetch(path, opts) {
+    try {
+      const r = await fetch(path, opts);
+      return await r.json();
+    } catch (e) {
+      return { ok: false, error: String(e.message || e) };
+    }
+  }
+
+  async function refreshHomeLibrary() {
+    const [pl, sc, ap] = await Promise.all([
+      libFetch('/api/library/playlists'),
+      libFetch('/api/library/scripts'),
+      libFetch('/api/library/apps')
+    ]);
+    if (pl && pl.ok) homeLib.playlists = pl.playlists || [];
+    if (sc && sc.ok) homeLib.scripts = sc.scripts || [];
+    if (ap && ap.ok) homeLib.apps = ap.apps || [];
+    if (!homeLib.activePlaylistId && homeLib.playlists[0]) homeLib.activePlaylistId = homeLib.playlists[0].id;
+    renderPlaylists();
+    renderScripts();
+    renderApps();
+  }
+
+  function renderPlaylists() {
+    const box = $('pl-list');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!homeLib.playlists.length) {
+      box.innerHTML = '<div class="home-hint">' + (state.lang === 'vi' ? 'Chưa có danh sách. Bấm ＋ để tạo.' : 'No playlists yet. Tap ＋ to create.') + '</div>';
+      return;
+    }
+    homeLib.playlists.forEach((pl) => {
+      const row = document.createElement('div');
+      row.className = 'home-item';
+      if (pl.id === homeLib.activePlaylistId) row.style.fontWeight = '600';
+      const label = document.createElement('span');
+      label.className = 'label';
+      label.textContent = pl.title + ' (' + (pl.items && pl.items.length || 0) + ')';
+      label.onclick = () => { homeLib.activePlaylistId = pl.id; homeLib.playIndex = 0; renderPlaylists(); };
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'icon-btn tiny'; del.textContent = '×';
+      del.title = state.lang === 'vi' ? 'Xóa' : 'Delete';
+      del.onclick = async () => { await libFetch('/api/library/playlists/' + encodeURIComponent(pl.id), { method: 'DELETE' }); await refreshHomeLibrary(); };
+      row.appendChild(label); row.appendChild(del);
+      box.appendChild(row);
+      (pl.items || []).slice(0, 8).forEach((it, idx) => {
+        const ir = document.createElement('div');
+        ir.className = 'home-item';
+        ir.style.paddingLeft = '0.75rem';
+        const lab = document.createElement('span');
+        lab.className = 'label';
+        lab.textContent = (it.source || 'web') + ' · ' + (it.title || it.url);
+        lab.onclick = () => { homeLib.activePlaylistId = pl.id; homeLib.playIndex = idx; playPlaylistItem(); };
+        const rm = document.createElement('button');
+        rm.type = 'button'; rm.className = 'icon-btn tiny'; rm.textContent = '×';
+        rm.onclick = async () => {
+          await libFetch('/api/library/playlists/' + encodeURIComponent(pl.id) + '/items/' + encodeURIComponent(it.id), { method: 'DELETE' });
+          await refreshHomeLibrary();
+        };
+        ir.appendChild(lab); ir.appendChild(rm);
+        box.appendChild(ir);
+      });
+    });
+  }
+
+  function activePlaylist() {
+    return homeLib.playlists.find((p) => p.id === homeLib.activePlaylistId) || homeLib.playlists[0];
+  }
+
+  function playPlaylistItem() {
+    const pl = activePlaylist();
+    if (!pl || !pl.items || !pl.items.length) return;
+    const it = pl.items[homeLib.playIndex % pl.items.length];
+    if (!it) return;
+    let url = it.url;
+    // Music / background-friendly: prefer YouTube embed when possible
+    if (homeLib.musicMode) {
+      const m = String(url).match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,})/i);
+      if (m) url = 'https://www.youtube.com/embed/' + m[1] + '?autoplay=1';
+    }
+    navigate(url);
+  }
+
+  function renderScripts() {
+    const box = $('sc-list');
+    if (!box) return;
+    box.innerHTML = '';
+    (homeLib.scripts || []).forEach((sc) => {
+      const row = document.createElement('div');
+      row.className = 'home-item';
+      const lab = document.createElement('span');
+      lab.className = 'label';
+      lab.textContent = (state.lang === 'vi' && sc.nameVi) ? sc.nameVi : (sc.name || sc.id);
+      lab.title = (state.lang === 'vi' && sc.descriptionVi) ? sc.descriptionVi : (sc.description || '');
+      const run = document.createElement('button');
+      run.type = 'button'; run.className = 'chip'; run.textContent = '▶';
+      run.title = state.lang === 'vi' ? 'Chạy' : 'Run';
+      run.onclick = () => runScript(sc);
+      const stop = document.createElement('button');
+      stop.type = 'button'; stop.className = 'chip'; stop.textContent = '■';
+      stop.onclick = () => stopScript();
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'icon-btn tiny'; del.textContent = '×';
+      del.onclick = async () => { await libFetch('/api/library/scripts/' + encodeURIComponent(sc.id), { method: 'DELETE' }); await refreshHomeLibrary(); };
+      row.appendChild(lab); row.appendChild(run); row.appendChild(stop); row.appendChild(del);
+      box.appendChild(row);
+    });
+  }
+
+  function parseHHMM(s) {
+    const m = String(s || '').match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return null;
+    return { h: Number(m[1]), min: Number(m[2]) };
+  }
+
+  function msUntilTime(hhmm) {
+    const t = parseHHMM(hhmm);
+    if (!t) return 0;
+    const now = new Date();
+    const target = new Date(now.getFullYear(), now.getMonth(), now.getDate(), t.h, t.min, 0, 0);
+    if (target <= now) target.setDate(target.getDate() + 1);
+    return target - now;
+  }
+
+  function stopScript() {
+    if (homeLib.scriptRun && homeLib.scriptRun.timers) {
+      homeLib.scriptRun.timers.forEach((id) => clearTimeout(id));
+    }
+    homeLib.scriptRun = null;
+  }
+
+  function runScript(sc) {
+    stopScript();
+    const steps = (sc && sc.steps) || [];
+    homeLib.scriptRun = { id: sc.id, timers: [], step: 0 };
+    const run = homeLib.scriptRun;
+    let delay = 0;
+    steps.forEach((step, i) => {
+      if (step.type === 'waitUntil' && step.time) {
+        delay = msUntilTime(step.time);
+      } else if (step.type === 'waitMs') {
+        delay += Math.max(0, Number(step.ms) || 0);
+      } else if (step.type === 'navigate' && step.url) {
+        const d = delay;
+        const url = step.url;
+        const tid = setTimeout(() => {
+          if (!homeLib.scriptRun || homeLib.scriptRun.id !== sc.id) return;
+          if (url && url !== 'about:blank') navigate(url);
+        }, d);
+        run.timers.push(tid);
+      } else if (step.type === 'stopAt' && step.time) {
+        const d = msUntilTime(step.time);
+        const tid = setTimeout(() => {
+          stopScript();
+          showStart();
+        }, d);
+        run.timers.push(tid);
+      }
+    });
+  }
+
+  function renderApps() {
+    const box = $('app-list');
+    if (!box) return;
+    box.innerHTML = '';
+    if (!homeLib.apps.length) {
+      box.innerHTML = '<div class="home-hint">' + (state.lang === 'vi' ? 'Thêm app local: http://127.0.0.1:PORT' : 'Add local app: http://127.0.0.1:PORT') + '</div>';
+      return;
+    }
+    homeLib.apps.forEach((a) => {
+      const row = document.createElement('div');
+      row.className = 'home-item';
+      const lab = document.createElement('span');
+      lab.className = 'label';
+      lab.textContent = a.name + ' · ' + a.url;
+      lab.onclick = () => navigate(a.url);
+      const del = document.createElement('button');
+      del.type = 'button'; del.className = 'icon-btn tiny'; del.textContent = '×';
+      del.onclick = async () => { await libFetch('/api/library/apps/' + encodeURIComponent(a.id), { method: 'DELETE' }); await refreshHomeLibrary(); };
+      row.appendChild(lab); row.appendChild(del);
+      box.appendChild(row);
+    });
+  }
+
+  function bindHomeLibrary() {
+    if ($('btn-pl-add')) $('btn-pl-add').addEventListener('click', async () => {
+      const title = state.lang === 'vi' ? 'Danh sách phát' : 'Playlist';
+      await libFetch('/api/library/playlists', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) });
+      await refreshHomeLibrary();
+    });
+    if ($('pl-add-form')) $('pl-add-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      let pl = activePlaylist();
+      if (!pl) {
+        const r = await libFetch('/api/library/playlists', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Playlist' }) });
+        if (r.playlist) { homeLib.playlists.unshift(r.playlist); homeLib.activePlaylistId = r.playlist.id; pl = r.playlist; }
+      }
+      const url = ($('pl-url-input') && $('pl-url-input').value || '').trim();
+      if (!url || !pl) return;
+      await libFetch('/api/library/playlists/' + encodeURIComponent(pl.id) + '/items', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, title: url })
+      });
+      if ($('pl-url-input')) $('pl-url-input').value = '';
+      await refreshHomeLibrary();
+    });
+    if ($('btn-pl-play')) $('btn-pl-play').addEventListener('click', () => { homeLib.musicMode = false; playPlaylistItem(); });
+    if ($('btn-pl-music')) $('btn-pl-music').addEventListener('click', () => {
+      homeLib.musicMode = !homeLib.musicMode;
+      $('btn-pl-music').classList.toggle('active', homeLib.musicMode);
+      playPlaylistItem();
+    });
+    if ($('btn-pl-next')) $('btn-pl-next').addEventListener('click', () => {
+      const pl = activePlaylist();
+      if (!pl || !pl.items) return;
+      homeLib.playIndex = (homeLib.playIndex + 1) % Math.max(pl.items.length, 1);
+      playPlaylistItem();
+    });
+    if ($('btn-sc-refresh')) $('btn-sc-refresh').addEventListener('click', () => refreshHomeLibrary());
+    if ($('app-add-form')) $('app-add-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = ($('app-name-input') && $('app-name-input').value || 'App').trim();
+      const url = ($('app-url-input') && $('app-url-input').value || '').trim();
+      if (!url) return;
+      await libFetch('/api/library/apps', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, url }) });
+      if ($('app-name-input')) $('app-name-input').value = '';
+      if ($('app-url-input')) $('app-url-input').value = '';
+      await refreshHomeLibrary();
+    });
+    // Context menu: long-press / right-click on page frame cannot access cross-origin DOM;
+    // offer "Add current URL to playlist" via custom event from chrome.
+    document.addEventListener('contextmenu', (e) => {
+      const t = e.target;
+      if (!t || !t.closest) return;
+      if (t.closest('#main-webview') || t.tagName === 'VIDEO' || (t.closest && t.closest('video'))) {
+        // same-origin only for video elements outside iframe
+      }
+    });
+  }
+
+  function addCurrentUrlToPlaylist() {
+    const url = state.url || ($('url-input') && $('url-input').value);
+    if (!url || !/^https?:/i.test(url)) return;
+    (async () => {
+      let pl = activePlaylist();
+      if (!pl) {
+        const r = await libFetch('/api/library/playlists', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title: 'Playlist' }) });
+        pl = r.playlist;
+        homeLib.activePlaylistId = pl && pl.id;
+      }
+      if (!pl) return;
+      await libFetch('/api/library/playlists/' + encodeURIComponent(pl.id) + '/items', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url, title: url })
+      });
+      await refreshHomeLibrary();
+      showStart();
+    })();
+  }
+
+
+  bindHomeLibrary();
+  refreshHomeLibrary();
+  window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary, addCurrentUrlToPlaylist, refreshHomeLibrary, runScript, stopScript, getActiveBridge() { const tab = getActiveTab(); const nav = ensureTabNav(tab); return nav && nav.bridge ? { sessionId: nav.bridge.sessionId, token: nav.bridge.token, backend: nav.bridge.backend, url: state.url || '' } : null; },
     refreshBridgeView() {
       const tab = getActiveTab();
       const nav = ensureTabNav(tab);
