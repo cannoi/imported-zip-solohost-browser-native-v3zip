@@ -89,12 +89,24 @@
     // The Bridge snapshot intentionally strips scripts/unsafe frames, so rendering these
     // URLs in the automated DOM view leaves a visible page with a non-working player.
     if (isYouTubeVideoUrl(url)) return MODE.PROXY;
+    try {
+      const yu = new URL(url);
+      const yh = yu.hostname.replace(/^www\./, '').toLowerCase();
+      let yp = yu.pathname || '/';
+      if (yp.length > 1 && yp.endsWith('/')) yp = yp.slice(0, -1);
+      if ((yh === 'youtube.com' || yh === 'm.youtube.com' || yh === 'youtu.be') &&
+          (yp === '/' || yp === '/feed' || yp.indexOf('/feed/') === 0)) {
+        return MODE.PROXY;
+      }
+    } catch (_) {}
     // DRM/subscription streaming sites need their own full browser profile/DRM stack.
     if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
     // Official embeddable players remain direct when on their official embed endpoint.
     if (isDirectEmbed(url)) return MODE.DIRECT;
     // Dynamic sites use the JS-capable engine; do not rewrite them to proxy HTML pre-emptively.
-    if (/google\.|youtube\.com|youtu\.be|(^|\.)(facebook|fb|instagram|whatsapp|messenger|tiktok|x|twitter|reddit)\.com$/.test(h)) return MODE.ENGINE;
+    if (/google\./.test(h)) return MODE.ENGINE;
+    if (/youtube\.com|youtu\.be/.test(h)) return MODE.PROXY;
+    if (/(^|\.)(facebook|fb|instagram|whatsapp|messenger|tiktok|x|twitter|reddit)\.com$/.test(h)) return MODE.ENGINE;
     if (isLoginPath(url)) return MODE.ENGINE;
     return MODE.ENGINE;
   }
@@ -271,18 +283,36 @@
     try {
       if (!frame || !frame.contentWindow) return;
       const doc = frame.contentDocument;
-      if (doc && doc.body) {
+      // Prefer explicit caller coordinates (user position) over stale data attributes
+      let tx = Number(x);
+      let ty = Number(y);
+      if (!Number.isFinite(tx)) tx = 0;
+      if (!Number.isFinite(ty)) ty = 0;
+      // Only fall back to data attrs when caller did not pass values
+      if ((y == null || y === undefined) && doc && doc.body) {
         const dy = doc.body.getAttribute('data-sh-scroll-y');
-        const dx = doc.body.getAttribute('data-sh-scroll-x');
-        if (dy != null) y = Number(dy) || y;
-        if (dx != null) x = Number(dx) || x;
+        if (dy != null) ty = Number(dy) || 0;
       }
-      frame.contentWindow.scrollTo(Number(x) || 0, Number(y) || 0);
-      // Nudge lazy media
+      if ((x == null || x === undefined) && doc && doc.body) {
+        const dx = doc.body.getAttribute('data-sh-scroll-x');
+        if (dx != null) tx = Number(dx) || 0;
+      }
+      frame.contentWindow.scrollTo(tx, ty);
+      if (doc && doc.documentElement) {
+        doc.documentElement.scrollTop = ty;
+        doc.documentElement.scrollLeft = tx;
+      }
+      if (doc && doc.body) {
+        doc.body.scrollTop = ty;
+        doc.body.scrollLeft = tx;
+      }
+      // Nudge lazy media near viewport only
       try {
-        doc.querySelectorAll('img[loading="lazy"],img[data-src]').forEach((img) => {
-          if (img.dataset.src && !img.src) img.src = img.dataset.src;
-        });
+        if (doc) {
+          doc.querySelectorAll('img[loading="lazy"],img[data-src]').forEach((img) => {
+            if (img.dataset.src && !img.src) img.src = img.dataset.src;
+          });
+        }
       } catch (_) {}
     } catch (_) {}
   }
@@ -295,10 +325,13 @@
     if (!b || !frame) return false;
     if (nav.mode && nav.mode !== MODE.ENGINE && nav.mode !== 'ENGINE') return false;
     const now = Date.now();
-    if (!opts.force && (now - _lastBridgeRefresh < 1500 || _bridgeRefreshBusy)) return false;
+    if (!opts.force && (now - _lastBridgeRefresh < 1800 || _bridgeRefreshBusy)) return false;
     _bridgeRefreshBusy = true;
     _lastBridgeRefresh = now;
+    // Capture scroll BEFORE any DOM work — never jump user to top
     const sc = getBridgeScroll();
+    const lockY = sc.y;
+    const lockX = sc.x;
     try {
       const r = await fetch('/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '/events', {
         method: 'POST',
@@ -307,29 +340,57 @@
           token: b.token,
           type: opts.type || 'refresh',
           force: !!opts.force,
-          scrollX: sc.x,
-          scrollY: sc.y
+          scrollX: lockX,
+          scrollY: lockY
         })
       });
       const j = await r.json().catch(() => ({}));
-      if (j && j.ok && !j.throttled) {
-        const view = bridgeViewUrl(b);
-        if (view) {
-          const targetY = j.scrollY != null ? j.scrollY : sc.y;
-          const onLoad = function () {
-            frame.removeEventListener('load', onLoad);
-            restoreBridgeScroll(targetY, sc.x);
-          };
-          frame.addEventListener('load', onLoad);
-          frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
-          frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
-        }
-      } else {
-        // Still restore local scroll
-        restoreBridgeScroll(sc.y, sc.x);
+      if (!j || !j.ok || j.throttled) {
+        restoreBridgeScroll(lockY, lockX);
+        return !!(j && j.ok);
       }
-      return !!(j && j.ok);
+      // In-place content update (no frame.src navigation = no scroll reset to 0)
+      const view = bridgeViewUrl(b);
+      if (!view) {
+        restoreBridgeScroll(lockY, lockX);
+        return true;
+      }
+      const htmlRes = await fetch(view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now(), {
+        headers: bridgeHeaders(b),
+        cache: 'no-store'
+      });
+      if (!htmlRes.ok) {
+        restoreBridgeScroll(lockY, lockX);
+        return false;
+      }
+      const html = await htmlRes.text();
+      const targetY = (j.scrollY != null && j.scrollY > 0) ? j.scrollY : lockY;
+      const targetX = lockX;
+      try {
+        const doc = frame.contentDocument;
+        if (doc && doc.open && doc.write) {
+          doc.open();
+          doc.write(html);
+          doc.close();
+        } else {
+          // Fallback srcdoc still restores scroll aggressively
+          frame.srcdoc = html;
+        }
+      } catch (_) {
+        try { frame.srcdoc = html; } catch (__) {}
+      }
+      const pin = function () { restoreBridgeScroll(targetY, targetX); };
+      pin();
+      requestAnimationFrame(pin);
+      setTimeout(pin, 0);
+      setTimeout(pin, 32);
+      setTimeout(pin, 100);
+      setTimeout(pin, 250);
+      // re-bind scroll listener on new document
+      try { onBridgeFrameLoad(); } catch (_) {}
+      return true;
     } catch (_) {
+      restoreBridgeScroll(lockY, lockX);
       return false;
     } finally {
       _bridgeRefreshBusy = false;
@@ -343,21 +404,21 @@
       const doc = frame.contentDocument;
       if (!win || !doc || doc._soloScrollBound) return;
       doc._soloScrollBound = true;
-      win.addEventListener('scroll', function () {
+            win.addEventListener('scroll', function () {
         clearTimeout(_scrollTimer);
         _scrollTimer = setTimeout(function () {
           const sc = getBridgeScroll();
+          // Only sync position to engine — never reload UI (avoids jump to top)
+          bridgeEvent({ type: 'scroll', scrollX: sc.x, scrollY: sc.y, refresh: false });
+          // Engine-side soft snapshot without forcing iframe navigation:
+          // refresh:true updates session.html on server only (user stays put)
           const now = Date.now();
-          // Sync scroll to engine (cheap)
-          bridgeEvent({ type: 'scroll', scrollX: sc.x, scrollY: sc.y });
-          // Soft refresh when scrolled far from last refresh (lazy images/videos)
-          if (now - _lastScrollSent > 2500) {
+          if (now - _lastScrollSent > 4000) {
             _lastScrollSent = now;
             bridgeEvent({ type: 'scroll', scrollX: sc.x, scrollY: sc.y, refresh: true });
-            // After backend refresh, reload view lightly
-            setTimeout(function () { softRefreshActiveBridge({ force: false }); }, 400);
+            // Do NOT call softRefreshActiveBridge here — that rewrites the viewport
           }
-        }, 180);
+        }, 200);
       }, { passive: true });
     } catch (_) {}
   }
