@@ -65,3 +65,13 @@ Historical V7/V8 reports and release notes are retained for traceability; they d
 ## AI Agent mode (v10.4.0)
 
 In the AI panel → Chat, tap 🤖 and give a task; the AI operates the open page step by step (open/search/click/type/scroll) with Allow/Deny for sensitive actions and a Stop button. Needs a configured AI provider (offline: simple commands only). Details, safety model and limits: `docs/AGENT.md`.
+
+
+## V10.5.0 — Adaptive WebKit Bridge
+
+- WebKitGTK is the preferred JavaScript execution engine when available; proxy remains the fallback.
+- DOM snapshots are cloned before scripts are removed, so extracting a page no longer removes scripts from the live WebKit page.
+- Login forms can forward text/password input events to the live page; password values are not copied into HTML snapshots or diagnostics.
+- Website cookies can persist in `/app/data/browser-profile/cookies.sqlite` (the SoloHost data volume). Set `SOLOHOST_WEBKIT_PERSIST_COOKIES=0` to disable persistence.
+- Bridge render audits log only structural counts (text length, forms, controls, media, iframes, links); AI compatibility checks receive those counts, not page text, credentials, cookies or tokens.
+- This is still a DOM-snapshot bridge, not a full pixel-native browser surface. DRM-protected streaming, CAPTCHA and anti-embedded-webview checks may still require Open ↗.

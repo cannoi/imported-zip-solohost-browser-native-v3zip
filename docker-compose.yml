@@ -7,6 +7,10 @@ services:
     environment:
       PORT: "8080"
       HOME: "/tmp/solohost-browser"
+      SOLOHOST_WEBKIT_BRIDGE: "1"
+      SOLOHOST_WEBKIT_NAV_TIMEOUT_MS: "20000"
+      SOLOHOST_WEBKIT_IPC_TIMEOUT_MS: "30000"
+      SOLOHOST_WEBKIT_PERSIST_COOKIES: "1"
     restart: unless-stopped
     labels:
       pi.ui.primary: "true"

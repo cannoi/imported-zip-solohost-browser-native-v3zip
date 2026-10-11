@@ -16,6 +16,9 @@ async function main() {
   const ann = annotateInteractive('<a href="/p">p</a><button>b</button>');
   assert.ok(ann.mapCount >= 2);
   assert.ok(ann.html.includes('data-sh-id'));
+  const existing = annotateInteractive('<input data-sh-id="e77" type="text"><a data-sh-id="e78" href="/next">next</a>');
+  assert.ok(existing.map.e77 && existing.map.e78, 'existing WebKit ids must remain actionable');
+  assert.strictEqual(existing.map.e78.href, '/next');
   console.log('  annotate OK');
 
   // Session auth

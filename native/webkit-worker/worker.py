@@ -30,7 +30,7 @@ for _d in (os.environ["HOME"], os.environ["XDG_CACHE_HOME"], os.environ["XDG_CON
         os.makedirs(_d, exist_ok=True)
     except Exception:
         pass
-NAV_TIMEOUT_MS = int(os.environ.get("SOLOHOST_WEBKIT_NAV_TIMEOUT_MS", "8000"))
+NAV_TIMEOUT_MS = int(os.environ.get("SOLOHOST_WEBKIT_NAV_TIMEOUT_MS", "20000"))
 WORKER_ID = os.environ.get("SOLOHOST_WEBKIT_WORKER_ID", "wk1")
 
 _lock = threading.Lock()
@@ -39,6 +39,7 @@ _session_seq = 0
 _webkit_ok = False
 _webkit_error = "not_initialized"
 _main_loop = None
+_cookie_persistence = {"enabled": False, "path": None, "error": None}
 
 def log_err(msg: str) -> None:
     sys.stderr.write("[webkit-worker] " + msg + "\n")
@@ -92,6 +93,7 @@ def engine_status() -> Dict[str, Any]:
         "sessions": len(_sessions),
         "maxSessions": MAX_SESSIONS,
         "navTimeoutMs": NAV_TIMEOUT_MS,
+        "cookiePersistence": dict(_cookie_persistence),
         "pid": os.getpid(),
         "display": os.environ.get("DISPLAY") or None,
         "engine": "webkitgtk" if _webkit_ok else "unavailable",
@@ -120,7 +122,24 @@ def session_create(args: Dict[str, Any]) -> Dict[str, Any]:
     GLib = globals()["GLib"]
 
     ctx = WebKit2.WebContext.get_default()
-    # Ephemeral-ish: do not persist cookies to disk by default
+    # Persist website cookies in the SoloHost app data volume so logins can survive
+    # tab changes and container restarts. This is local profile data, never sent to AI/logs.
+    # Set SOLOHOST_WEBKIT_PERSIST_COOKIES=0 to opt out.
+    if os.environ.get("SOLOHOST_WEBKIT_PERSIST_COOKIES", "1") != "0" and not _cookie_persistence.get("enabled"):
+        try:
+            cookie_manager = ctx.get_cookie_manager()
+            profile_dir = os.environ.get("SOLOHOST_BROWSER_PROFILE_DIR", "/app/data/browser-profile")
+            os.makedirs(profile_dir, mode=0o700, exist_ok=True)
+            cookie_path = os.path.join(profile_dir, "cookies.sqlite")
+            storage = getattr(WebKit2.CookiePersistentStorage, "SQLITE", None)
+            if storage is not None and hasattr(cookie_manager, "set_persistent_storage"):
+                cookie_manager.set_persistent_storage(cookie_path, storage)
+                _cookie_persistence.update({"enabled": True, "path": cookie_path, "error": None})
+            else:
+                _cookie_persistence.update({"enabled": False, "path": None, "error": "persistent_cookie_api_unavailable"})
+        except Exception as cookie_error:
+            _cookie_persistence.update({"enabled": False, "path": None, "error": str(cookie_error)[:180]})
+            log_err("cookie persistence unavailable: " + str(cookie_error))
     webview = WebKit2.WebView.new_with_context(ctx)
     # Hidden window required for some GTK/WebKit builds
     win = Gtk.OffscreenWindow() if hasattr(Gtk, "OffscreenWindow") else Gtk.Window()
@@ -320,26 +339,55 @@ def _run_js(webview, script: str, timeout_s: float = 5.0):
 CONTENT_JS = r"""
 (function(){
   var id = 0;
-  var map = {};
-  function mark(el){
-    if(!el || el.nodeType!==1) return;
-    id++;
-    var sid = 'e'+id;
-    el.setAttribute('data-sh-id', sid);
-    map[sid] = {tag: el.tagName, href: el.href||null, type: el.getAttribute('type'), name: el.getAttribute('name')};
+  var liveNodes = document.querySelectorAll('a,button,input,select,textarea,form,[onclick],[role="button"]');
+  for(var i=0;i<liveNodes.length;i++){
+    var el=liveNodes[i];
+    if(!el.hasAttribute('data-sh-id')) el.setAttribute('data-sh-id','e'+(++id));
   }
-  var nodes = document.querySelectorAll('a,button,input,select,textarea,form,[onclick],[role="button"]');
-  for(var i=0;i<nodes.length;i++) mark(nodes[i]);
-  // strip scripts for transfer safety (engine already ran them)
-  var scripts = document.querySelectorAll('script');
+  // Snapshot a clone. Never remove scripts from the live page: doing so breaks SPAs,
+  // login flows, media controls and pages that continue hydrating after DOMContentLoaded.
+  var root = document.documentElement ? document.documentElement.cloneNode(true) : null;
+  if(!root) return JSON.stringify({html:'',url:location.href,title:document.title||'',audit:{textLength:0}});
+  var originals=document.querySelectorAll('input,textarea,select');
+  var copies=root.querySelectorAll('input,textarea,select');
+  for(var k=0;k<Math.min(originals.length,copies.length);k++){
+    var a=originals[k], b=copies[k], typ=(a.type||'').toLowerCase();
+    if(typ==='password' || typ==='hidden' || typ==='file'){
+      b.removeAttribute('value');
+      if(typ==='password') b.value='';
+    } else if(a.tagName==='TEXTAREA') {
+      b.textContent=a.value||'';
+    } else if(a.tagName==='SELECT') {
+      for(var q=0;q<Math.min(a.options.length,b.options.length);q++){
+        if(a.options[q].selected) b.options[q].setAttribute('selected','selected');
+        else b.options[q].removeAttribute('selected');
+      }
+    } else {
+      b.setAttribute('value',a.value||'');
+      if(a.checked) b.setAttribute('checked','checked'); else b.removeAttribute('checked');
+    }
+  }
+  var scripts=root.querySelectorAll('script'); var scriptCount=scripts.length;
   for(var j=0;j<scripts.length;j++) scripts[j].remove();
+  var text=(document.body && document.body.innerText)||'';
+  var audit={
+    textLength:text.length,
+    scriptCount:scriptCount,
+    forms:document.forms ? document.forms.length : 0,
+    controls:document.querySelectorAll('input,select,textarea,button').length,
+    media:document.querySelectorAll('video,audio').length,
+    iframes:document.querySelectorAll('iframe').length,
+    links:document.querySelectorAll('a[href]').length,
+    readyState:document.readyState
+  };
   return JSON.stringify({
-    html: document.documentElement ? document.documentElement.outerHTML : '',
-    url: location.href,
-    title: document.title||'',
-    scrollY: window.scrollY||0,
-    scrollX: window.scrollX||0,
-    mapCount: id
+    html:root.outerHTML,
+    url:location.href,
+    title:document.title||'',
+    scrollY:window.scrollY||0,
+    scrollX:window.scrollX||0,
+    mapCount:id,
+    audit:audit
   });
 })();
 """
@@ -372,6 +420,7 @@ def session_get_content(args):
         "scrollX": data.get("scrollX") or 0,
         "scrollY": data.get("scrollY") or 0,
         "mapCount": state.get("mapCount") or 0,
+        "audit": data.get("audit") or {},
         "loading": bool(state.get("loading")),
         "error": state.get("error"),
     }
@@ -415,17 +464,21 @@ def session_dispatch_event(args):
         tid = "".join(c for c in str(target) if c.isalnum())
         # JSON-escape value
         val_js = json.dumps("" if value is None else str(value))
+        checked_js = "true" if args.get("checked") is True else "false"
+        selected_js = int(args.get("selectedIndex", -1)) if str(args.get("selectedIndex", "-1")).lstrip('-').isdigit() else -1
         script = r"""
 (function(){
   var el = document.querySelector('[data-sh-id="%s"]');
   if(!el) return JSON.stringify({ok:false,error:'not_found'});
   el.focus();
-  el.value = %s;
+  if(el.type==='checkbox' || el.type==='radio') { var cd=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'checked'); if(cd&&cd.set) cd.set.call(el,%s); else el.checked=%s; }
+  else if(el.tagName==='SELECT' && %d>=0) el.selectedIndex = %d;
+  else if(el.type!=='file') { var vd=Object.getOwnPropertyDescriptor(el.constructor.prototype,'value'); if(vd&&vd.set) vd.set.call(el,%s); else el.value=%s; }
   el.dispatchEvent(new Event('input',{bubbles:true}));
   el.dispatchEvent(new Event('change',{bubbles:true}));
-  return JSON.stringify({ok:true});
+  return JSON.stringify({ok:true,tag:el.tagName,type:el.type||''});
 })();
-""" % (tid, val_js)
+""" % (tid, checked_js, checked_js, selected_js, selected_js, val_js, val_js)
     elif etype == "submit":
         if not target:
             raise RuntimeError("targetId_required")
@@ -449,7 +502,10 @@ def session_dispatch_event(args):
     else:
         raise RuntimeError("unsupported_event:" + etype)
 
-    state["loading"] = True  # navigation may start
+    # Input/scroll events do not imply navigation. Mark only likely navigation actions
+    # as loading, otherwise typing into a login form falsely appears stuck for 5 seconds.
+    state["loading"] = etype in ("submit", "navigate")
+    previous_url = state.get("url") or webview.get_uri() or ""
     raw = _run_js(webview, script, timeout_s=8.0)
     try:
         result = json.loads(raw) if raw else {"ok": True}
@@ -459,15 +515,24 @@ def session_dispatch_event(args):
     # Allow load to settle
     GLib = globals()["GLib"]
     deadline = time.time() + 5
-    while state.get("loading") and time.time() < deadline:
+    while etype in ("click", "submit") and state.get("loading") and time.time() < deadline:
         GLib.MainContext.default().iteration(False)
         time.sleep(0.05)
+    # Give client-side routers a brief chance to commit DOM changes after clicks.
+    if etype == "click" and not state.get("loading"):
+        settle_until = time.time() + 0.25
+        while time.time() < settle_until:
+            GLib.MainContext.default().iteration(False)
+            time.sleep(0.02)
     try:
         state["url"] = webview.get_uri() or state.get("url")
         state["title"] = webview.get_title() or state.get("title")
     except Exception:
         pass
-    state["loading"] = False
+    if etype in ("input", "change", "scroll"):
+        state["loading"] = False
+    elif etype in ("submit", "navigate") and time.time() >= deadline:
+        state["loading"] = False
     return {
         "sessionId": sid,
         "event": etype,

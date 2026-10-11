@@ -46,22 +46,15 @@
   function classifyUrl(url) {
     const h = hostOf(url);
     if (!h) return MODE.PROXY;
-    // Login/OAuth must leave the proxy frame (cookies + CAPTCHA)
-    if (isLoginPath(url)) return MODE.EXTERNAL;
-    // Known frame/proxy hostile or app-only surfaces
-    if (/(^|\.)(facebook|fb|instagram|whatsapp|messenger)\.com$/.test(h) || h.endsWith('.facebook.com')) {
-      return MODE.EXTERNAL;
-    }
-    if (/(^|\.)tiktok\.com$/.test(h) && isLoginPath(url)) return MODE.EXTERNAL;
+    // DRM/subscription streaming sites need their own full browser profile/DRM stack.
     if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
-    // Embeddable media
+    // Official embeddable players remain direct when explicitly on their embed endpoint.
     if (/youtube\.com|youtu\.be/.test(h) && /\/embed\//.test(url)) return MODE.DIRECT;
-    // Google/YouTube SPA: PROXY shell immediately (skip WebKit wait — was causing multi-second delay + white screens)
-    if (/youtube\.com|youtu\.be/.test(h)) return MODE.PROXY;
-    if (/google\./.test(h)) return MODE.PROXY;
-    // Default PROXY (fast). Bridge/WebKit only when user enables or engine proven ready.
-    // Log evidence: ENGINE path caused 20–40s js_timeout/ipc_timeout before proxy.
-    return MODE.PROXY;
+    // Dynamic sites and authentication flows need an actual JS-capable engine, not fetched HTML.
+    if (/google\.|youtube\.com|youtu\.be|(^|\.)(facebook|fb|instagram|whatsapp|messenger|tiktok|x|twitter|reddit)\.com$/.test(h)) return MODE.ENGINE;
+    if (isLoginPath(url)) return MODE.ENGINE;
+    // Prefer the live WebKit worker by default; navigate() retains proxy/external fallbacks.
+    return MODE.ENGINE;
   }
 
   function modeLabel(mode, lang) {
@@ -134,7 +127,7 @@
   async function loadViaBridge(tab, url) {
     // Hard client timeout — never block UI for WebKit IPC (logs showed 35s+ ipc_timeout)
     const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = ac ? setTimeout(() => ac.abort(), 4000) : null;
+    const timer = ac ? setTimeout(() => ac.abort(), 28000) : null;
     try {
       const b = await tabBridgeSession(tab);
       if (!b) return { ok: false, reason: 'bridge_session_failed' };
@@ -146,6 +139,8 @@
       });
       const j = await r.json().catch(() => null);
       if (!j || !j.ok) return { ok: false, reason: (j && j.error) || 'bridge_navigate_failed', detail: j };
+      const activeNav = ensureTabNav(tab);
+      if (activeNav) activeNav.bridgeAudit = j.audit || {};
       if (!j.hasContent && j.error) return { ok: false, reason: j.error, detail: j };
       // If backend fell back to proxy inside server, treat as proxy success without bridge view
       if (j.backend === 'proxy' && j.hasContent === false) {
@@ -161,7 +156,7 @@
       }
       return {
         ok: true,
-        mode: MODE.ENGINE,
+        mode: (j.backend === 'webkit' || b.backend === 'webkit') ? MODE.ENGINE : MODE.PROXY,
         backend: j.backend || b.backend,
         url: j.url || url,
         title: j.title || ''
@@ -221,8 +216,12 @@
       });
       const j = await r.json();
       if (j && j.ok && frame) {
-        const view = bridgeViewUrl(b);
-        if (view) frame.src = view + '&t=' + Date.now();
+        // Typing must not reload the snapshot: doing so loses focus and breaks login forms.
+        // The real page receives every input event in WebKit; refresh only after actions that may navigate/update UI.
+        if (ev.type !== 'input' && ev.type !== 'change') {
+          const view = bridgeViewUrl(b);
+          if (view) frame.src = view + '&t=' + Date.now();
+        }
         if (j.url) applyUrlToUi(j.url, j.title);
       }
       return j;
@@ -251,6 +250,48 @@
         const tab = getActiveTab();
         const nav = ensureTabNav(tab);
         if (!nav || !nav.bridge) return;
+        const body = doc.body;
+        if (body) {
+          const audit = {
+            textLength: (body.innerText || '').length,
+            links: doc.querySelectorAll('a[href]').length,
+            forms: doc.querySelectorAll('form').length,
+            controls: doc.querySelectorAll('input,select,textarea,button').length,
+            media: doc.querySelectorAll('video,audio').length,
+            iframes: doc.querySelectorAll('iframe').length,
+            scriptTagsInSnapshot: doc.querySelectorAll('script').length
+          };
+          const sourceAudit = nav.bridgeAudit || {};
+          const lost = {
+            textLength: Math.max(0, (sourceAudit.textLength || 0) - audit.textLength),
+            controls: Math.max(0, (sourceAudit.controls || 0) - audit.controls),
+            media: Math.max(0, (sourceAudit.media || 0) - audit.media),
+            iframes: Math.max(0, (sourceAudit.iframes || 0) - audit.iframes),
+            links: Math.max(0, (sourceAudit.links || 0) - audit.links)
+          };
+          const dataLoss = lost.iframes > 0 || lost.media > 0 || lost.controls > 0 || lost.links > 5 ||
+            (sourceAudit.textLength > 300 && audit.textLength < sourceAudit.textLength * 0.35);
+          clientLog((audit.textLength < 120 || dataLoss) ? 'warn' : 'info', 'bridge_render_audit', {
+            url: state.url,
+            detail: JSON.stringify({ source: sourceAudit, rendered: audit, suspectedLoss: lost })
+          });
+          // Ask AI only for weak/incomplete snapshots or a source-vs-render mismatch. Send counts,
+          // never page text, form values, cookies, credentials, or tokens. Findings are logged.
+          if (audit.textLength < 120 || dataLoss || (audit.forms > 0 && audit.controls === 0)) {
+            fetch('/api/browser/ai-compat', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                url: state.url, mode: nav.mode || 'ENGINE', reason: 'empty_content', lang: state.lang,
+                textSnippet: 'Bridge source/render metrics only: ' + JSON.stringify({ source: sourceAudit, rendered: audit, suspectedLoss: lost }), structureHtml: ''
+              })
+            }).then(r => r.json()).then(j => {
+              clientLog('warn', 'bridge_ai_compat_finding', {
+                url: state.url,
+                detail: JSON.stringify({ category: j.category, confidence: j.confidence, recommendedMode: j.recommendedMode, summary: j.summary, suggestions: j.suggestions, source: j.source, suspectedLoss: lost })
+              });
+            }).catch(() => {});
+          }
+        }
         doc.addEventListener('click', (e) => {
           const el = e.target && e.target.closest && e.target.closest('[data-sh-id]');
           if (!el) return;
@@ -264,11 +305,38 @@
             } catch (_) {}
             return;
           }
-          if (tag === 'a' || tag === 'button' || el.getAttribute('role') === 'button') {
+          const inputType = (el.getAttribute('type') || '').toLowerCase();
+          if (tag === 'a' || tag === 'button' || el.getAttribute('role') === 'button' ||
+              (tag === 'input' && ['checkbox','radio','submit','button','reset'].includes(inputType)) ) {
             e.preventDefault();
             e.stopPropagation();
-            bridgeEvent({ type: 'click', targetId: el.getAttribute('data-sh-id') });
+            bridgeEvent({ type: 'click', targetId: el.getAttribute('data-sh-id'), checked: !!el.checked, selectedIndex: el.selectedIndex });
           }
+        }, true);
+        const inputTimers = new WeakMap();
+        doc.addEventListener('input', (e) => {
+          const el = e.target && e.target.closest && e.target.closest('[data-sh-id]');
+          if (!el) return;
+          const id = el.getAttribute('data-sh-id');
+          const old = inputTimers.get(el); if (old) clearTimeout(old);
+          inputTimers.set(el, setTimeout(() => {
+            bridgeEvent({ type: 'input', targetId: id, value: el.value, checked: !!el.checked, selectedIndex: el.selectedIndex });
+          }, 90));
+        }, true);
+        doc.addEventListener('change', (e) => {
+          const el = e.target && e.target.closest && e.target.closest('[data-sh-id]');
+          if (!el) return;
+          bridgeEvent({ type: 'change', targetId: el.getAttribute('data-sh-id'), value: el.value, checked: !!el.checked, selectedIndex: el.selectedIndex });
+        }, true);
+        doc.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter') return;
+          const el = e.target;
+          if (!el || !/^(INPUT|TEXTAREA)$/.test(el.tagName)) return;
+          const form = el.closest('form');
+          if (!form) return;
+          e.preventDefault();
+          const id = form.getAttribute('data-sh-id');
+          if (id) bridgeEvent({ type: 'submit', targetId: id });
         }, true);
         doc.addEventListener('submit', (e) => {
           const form = e.target;
@@ -564,10 +632,14 @@
       if (!result.ok) {
         const reason = result.reason || 'engine_failed';
         clientLog('warn', 'navigate_engine_fallback', { url, reason });
-        result = loadViaProxy(url);
-        if (result.ok) {
-          result.mode = MODE.PROXY;
-          result.reason = 'fallback_from_engine:' + reason;
+        if (isLoginPath(url)) {
+          result = loadViaExternal(url, 'login_requires_full_browser_context:' + reason);
+        } else {
+          result = loadViaProxy(url);
+          if (result.ok) {
+            result.mode = MODE.PROXY;
+            result.reason = 'fallback_from_engine:' + reason;
+          }
         }
       }
     } else if (preferred === MODE.PROXY) {

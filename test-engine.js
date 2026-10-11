@@ -44,6 +44,10 @@ async function main() {
   const { proc, request } = createClient();
   await new Promise((r) => setTimeout(r, 400));
 
+  const workerSource = require('fs').readFileSync(worker, 'utf8');
+  assert.ok(workerSource.includes('cloneNode(true)'), 'snapshot must clone DOM before removing scripts');
+  assert.ok(workerSource.includes('CookiePersistentStorage'), 'worker should configure persistent login cookies when enabled');
+  assert.ok(workerSource.includes("el.type!=='file'"), 'password inputs should be forwarded to live page but not serialized into snapshots');
   const st = await request({ id: 1, cmd: 'engine.status' });
   assert.strictEqual(st.id, 1);
   assert.strictEqual(st.ok, true);
