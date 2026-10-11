@@ -1,6 +1,8 @@
 'use strict';
 
 module.exports.mount = function mount(app, server, ctx) {
+/* mount-guard */
+try {
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -15,19 +17,76 @@ const DATA_DIR = path.join(__dirname, 'data');
 
 let cors = null;
 try { cors = require('cors'); } catch { /* optional */ }
-const appLog = require('./lib/app-log');
-const engineCaps = require('./lib/engine/capabilities');
-const { webkitManager, installShutdownHooks } = require('./lib/engine/webkit-manager');
-let playwrightEngine = { status: async () => ({ ready: false }), createSession: async () => { throw new Error('pw_off'); }, installShutdownHooks() {} };
+
+function softRequire(label, path, fallback) {
+  try { return require(path); } catch (e) {
+    console.error('[warn] softRequire ' + label + ':', e && e.message);
+    return fallback;
+  }
+}
+
+const appLog = softRequire('app-log', './lib/app-log', {
+  configure() {},
+  log() {},
+  readLogs() { return []; },
+  clearLogs() {}
+});
+const engineCaps = softRequire('capabilities', './lib/engine/capabilities', {
+  detect() { return { mode: 'proxy', engine: 'none' }; }
+});
+let webkitManager = {
+  status: async () => ({ ready: false }),
+  createSession: async () => { throw new Error('webkit_off'); },
+  navigate: async () => ({}),
+  getState: async () => ({}),
+  closeSession: async () => ({}),
+  request: async () => ({})
+};
+let installShutdownHooks = () => {};
+try {
+  const wk = require('./lib/engine/webkit-manager');
+  webkitManager = wk.webkitManager || webkitManager;
+  installShutdownHooks = wk.installShutdownHooks || installShutdownHooks;
+} catch (e) { console.error('[warn] webkit-manager:', e && e.message); }
+
+let playwrightEngine = {
+  status: async () => ({ ready: false, engine: 'playwright', reason: 'not_loaded' }),
+  createSession: async () => { throw new Error('pw_off'); },
+  navigate: async () => ({}),
+  getContent: async () => ({ html: '' }),
+  dispatchEvent: async () => ({}),
+  closeSession: async () => ({}),
+  installShutdownHooks() {}
+};
 try {
   playwrightEngine = require('./lib/engine/playwright-engine');
   try { playwrightEngine.installShutdownHooks(); } catch (_) {}
 } catch (e) { console.error('[warn] playwright-engine:', e && e.message); }
-const agentProgress = require('./lib/agent-progress');
-const domBridge = require('./lib/engine/dom-bridge');
-const aiCompat = require('./lib/ai-compat');
-installShutdownHooks();
-appLog.configure(DATA_DIR);
+
+const agentProgress = softRequire('agent-progress', './lib/agent-progress', {
+  list() { return []; },
+  bus: { on() {}, off() {}, emit() {} }
+});
+
+let domBridge = softRequire('dom-bridge', './lib/engine/dom-bridge', null);
+if (!domBridge) {
+  domBridge = {
+    createSession: async () => ({ id: 'off', token: 'off' }),
+    authSession: () => null,
+    navigate: async () => ({ ok: false, error: 'bridge_off' }),
+    getContent: async () => ({ html: '<p>bridge offline</p>' }),
+    dispatchEvent: async () => ({ ok: false }),
+    destroySession: async () => ({}),
+    getState: async () => ({ url: '', title: '' })
+  };
+}
+
+let aiCompat = softRequire('ai-compat', './lib/ai-compat', {
+  analyze: async () => ({ summary: 'offline', category: 'unknown', suggestions: [], recommendedMode: 'UNCHANGED', confidence: 0 })
+});
+
+try { installShutdownHooks(); } catch (_) {}
+try { appLog.configure(DATA_DIR); } catch (_) {}
 const PKG = (() => {
   try { return require('./package.json'); } catch { return { version: '9.0.8' }; }
 })();
@@ -216,15 +275,42 @@ try {
 }
 
 // Universal AI
-const adapter = require('./lib/app-adapter');
-const { createAIService } = require('./lib/ai-module/ai-service');
-const { mountAIRoutes } = require('./lib/ai-module/routes');
-const ai = createAIService({
-  dataDir: DATA_DIR,
-  appName: 'SoloHost Browser',
-  adapter
-});
-mountAIRoutes(app, ai);
+let adapter = { analyzeLogs: () => ({ summary: 'n/a' }) };
+try { adapter = require('./lib/app-adapter'); } catch (e) { console.error('[warn] app-adapter:', e.message); }
+let ai = {
+  configured: () => false,
+  publicSettings: () => ({ provider: '', model: '', hasKey: false }),
+  catalog: () => [],
+  saveSettings: (s) => s,
+  refreshModels: async () => ({ models: [] }),
+  testConnection: async () => ({ ok: false, error: 'ai_unavailable' }),
+  chat: async ({ message }) => ({ ok: true, reply: 'AI module unavailable: ' + String(message || '').slice(0, 80), provider: 'local', offline: true }),
+  readLogs: () => [],
+  clearLogs: () => {},
+  log: () => {}
+};
+try {
+  const { createAIService } = require('./lib/ai-module/ai-service');
+  const { mountAIRoutes } = require('./lib/ai-module/routes');
+  ai = createAIService({ dataDir: DATA_DIR, appName: 'SoloHost Browser', adapter });
+  mountAIRoutes(app, ai);
+  console.log('[ok] AI routes mounted');
+} catch (e) {
+  console.error('[error] AI mount failed:', e && e.stack ? e.stack : e);
+  // Minimal AI stubs so UI chat does not return app_mount_failed
+  app.get('/api/ai/status', (_req, res) => res.json({ ok: true, configured: false, settings: ai.publicSettings() }));
+  app.get('/api/ai/catalog', (_req, res) => res.json({ providers: [
+    { id: 'openai', name: 'OpenAI' }, { id: 'local', name: 'Local' }, { id: 'custom', name: 'Custom' }
+  ] }));
+  app.get('/api/ai/settings', (_req, res) => res.json(ai.publicSettings()));
+  app.post('/api/ai/settings', (req, res) => res.json({ ok: true, settings: req.body || {} }));
+  app.post('/api/ai/chat', (req, res) => res.json({ ok: true, reply: 'AI backend not ready. Check server logs.', provider: 'local', offline: true }));
+  app.get('/api/logs', (_req, res) => {
+    try { res.json({ logs: appLog.readLogs ? appLog.readLogs() : [] }); }
+    catch (_) { res.json({ logs: [] }); }
+  });
+  app.delete('/api/logs', (_req, res) => { try { appLog.clearLogs && appLog.clearLogs(); } catch (_) {} res.json({ ok: true }); });
+}
 app.get('/api/agent/progress', (req, res) => {
   res.json({ ok: true, events: agentProgress.list(Number(req.query.limit) || 40) });
 });
@@ -251,8 +337,15 @@ app.post('/api/browser/ai-compat', async (req, res) => {
 
 
 // Browser Agent planner: observation + task -> next validated action (executed by public/browser-agent.js)
-const browserAgent = require('./lib/browser-agent');
-const backendAgent = require('./lib/backend-agent');
+let browserAgent = { planStep: async () => ({ ok: false, error: 'agent_off' }) };
+let backendAgent = {
+  start: async () => ({ ok: false, error: 'agent_off' }),
+  status: () => ({ ok: false }),
+  stop: () => ({ ok: true }),
+  confirm: () => null
+};
+try { browserAgent = require('./lib/browser-agent'); } catch (e) { console.error('[warn] browser-agent:', e.message); }
+try { backendAgent = require('./lib/backend-agent'); } catch (e) { console.error('[warn] backend-agent:', e.message); }
 const agentHits = new Map();
 function agentRateOk(key) {
   const now = Date.now();
@@ -319,20 +412,32 @@ app.post('/api/browser/agent/step', async (req, res) => {
 });
 
 // Universal Feedback — hub credentials default inside feedback-service.js
-const { createFeedbackService, mountFeedbackRoutes } = require('./lib/feedback-module/feedback-service');
-const fbOpts = {
-  appId: process.env.SHFH_APP_ID || 'solohost-browser',
-  appName: 'SoloHost Browser',
-  version: PKG.version || '9.0.8'
-};
-if (process.env.SHFH_HUB_ID) fbOpts.hubId = process.env.SHFH_HUB_ID;
-if (process.env.SHFH_HUB_URL) fbOpts.baseUrl = process.env.SHFH_HUB_URL;
-if (process.env.SHFH_INGEST_TOKEN) fbOpts.ingestToken = process.env.SHFH_INGEST_TOKEN;
-const fb = createFeedbackService(fbOpts);
-mountFeedbackRoutes(app, fb);
+try {
+  const { createFeedbackService, mountFeedbackRoutes } = require('./lib/feedback-module/feedback-service');
+  const fbOpts = {
+    appId: process.env.SHFH_APP_ID || 'solohost-browser',
+    appName: 'SoloHost Browser',
+    version: PKG.version || '9.0.8'
+  };
+  if (process.env.SHFH_HUB_ID) fbOpts.hubId = process.env.SHFH_HUB_ID;
+  if (process.env.SHFH_HUB_URL) fbOpts.baseUrl = process.env.SHFH_HUB_URL;
+  if (process.env.SHFH_INGEST_TOKEN) fbOpts.ingestToken = process.env.SHFH_INGEST_TOKEN;
+  const fb = createFeedbackService(fbOpts);
+  mountFeedbackRoutes(app, fb);
+  console.log('[ok] Feedback routes mounted');
+} catch (e) {
+  console.error('[warn] feedback mount:', e && e.message);
+}
 
-// Lightweight persistent browser library: history and bookmarks (JSON fallback, optional SQLite).
-const browserStore = require('./lib/store');
+let browserStore = {
+  listHistory: async () => [],
+  addHistory: async () => {},
+  clearHistory: async () => {},
+  listBookmarks: async () => [],
+  addBookmark: async (title, url) => ({ id: '1', title, url }),
+  removeBookmark: async () => {}
+};
+try { browserStore = require('./lib/store'); } catch (e) { console.error('[warn] store:', e.message); }
 
 // —— Interactive DOM Bridge (versioned browser sessions) ——
 app.post('/api/browser/sessions', async (req, res) => {
@@ -490,5 +595,22 @@ app.use((err, _req, res, _next) => {
   console.error('[error]', err && err.message ? err.message : err);
   res.status(500).json({ success: false, error: String((err && err.message) || err) });
 });
+
+
+} catch (mountErr) {
+  console.error('[error] server-app mount exception:', mountErr && mountErr.stack ? mountErr.stack : mountErr);
+}
+// Always ensure static UI is served
+try {
+  const path = require('path');
+  const express = require('express');
+  const PUBLIC_DIR = path.join(__dirname, 'public');
+  app.use(express.static(PUBLIC_DIR, { index: 'index.html', fallthrough: true, maxAge: 0 }));
+  app.get('/', (_req, res) => {
+    res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
+  });
+} catch (e) {
+  console.error('[error] static fallback:', e && e.message);
+}
 
 }; // mount
