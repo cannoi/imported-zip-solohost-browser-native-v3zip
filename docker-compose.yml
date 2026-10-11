@@ -6,11 +6,12 @@ services:
       - "8080:8080"
     environment:
       PORT: "8080"
+      HOST: "0.0.0.0"
       HOME: "/tmp/solohost-browser"
-      SOLOHOST_WEBKIT_BRIDGE: "1"
-      SOLOHOST_WEBKIT_NAV_TIMEOUT_MS: "20000"
-      SOLOHOST_WEBKIT_IPC_TIMEOUT_MS: "30000"
-      SOLOHOST_WEBKIT_PERSIST_COOKIES: "1"
+      SOLOHOST_PLAYWRIGHT: "1"
+      SOLOHOST_WEBKIT: "0"
+      SOLOHOST_WEBKIT_BRIDGE: "0"
+      SOLOHOST_DATA_DIR: "/app/data"
     restart: unless-stopped
     labels:
       pi.ui.primary: "true"

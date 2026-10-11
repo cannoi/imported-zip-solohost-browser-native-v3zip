@@ -1,4 +1,4 @@
-# Playwright ships Chromium + system deps for full JS/CSS/cookies engine
+# Playwright image includes Chromium; HTTP server must listen immediately on PORT
 FROM mcr.microsoft.com/playwright:v1.49.1-jammy
 
 WORKDIR /app
@@ -14,29 +14,33 @@ ENV NODE_ENV=production \
     SOLOHOST_PW_NAV_TIMEOUT_MS=25000 \
     SOLOHOST_DATA_DIR=/app/data \
     npm_config_update_notifier=false \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 COPY package.json ./
+# Install app deps only; browsers already in base image
 RUN npm install --omit=dev --no-audit --no-fund \
-    && npm install playwright@1.49.1 --omit=dev --no-audit --no-fund \
     && npm cache clean --force
 
 COPY server.js start.sh ./
-RUN chmod +x start.sh
 COPY lib ./lib
 COPY public ./public
 COPY native ./native
 COPY config_options.yml ./
 COPY docs ./docs
 
-RUN mkdir -p /app/data /app/data/pw-profiles /tmp/solohost-browser \
-    && chown -R pwuser:pwuser /app /tmp/solohost-browser || chown -R node:node /app /tmp/solohost-browser || true
+RUN chmod +x start.sh \
+    && mkdir -p /app/data /app/data/pw-profiles /tmp/solohost-browser \
+    && (chown -R pwuser:pwuser /app /tmp/solohost-browser 2>/dev/null || true)
 
-# playwright image uses pwuser
+# Stay as root if pwuser missing; otherwise pwuser (Playwright default)
 USER pwuser
+
 EXPOSE 8080
 
-HEALTHCHECK --interval=15s --timeout=5s --start-period=40s --retries=5 \
-  CMD node -e "fetch('http://127.0.0.1:8080/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+# Fast health for SoloHost / Actions smoke (must respond in <90s)
+HEALTHCHECK --interval=10s --timeout=5s --start-period=20s --retries=8 \
+  CMD node -e "require('http').get('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"
 
-CMD ["./start.sh"]
+# Direct node is more reliable than shell for signal/smoke detection
+CMD ["node", "server.js"]

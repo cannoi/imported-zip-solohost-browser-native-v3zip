@@ -21,8 +21,11 @@ const DATA_DIR = path.join(__dirname, 'data');
 const appLog = require('./lib/app-log');
 const engineCaps = require('./lib/engine/capabilities');
 const { webkitManager, installShutdownHooks } = require('./lib/engine/webkit-manager');
-const playwrightEngine = require('./lib/engine/playwright-engine');
-try { playwrightEngine.installShutdownHooks(); } catch (_) {}
+let playwrightEngine = { status: async () => ({ ready: false }), createSession: async () => { throw new Error('pw_off'); }, installShutdownHooks() {} };
+try {
+  playwrightEngine = require('./lib/engine/playwright-engine');
+  try { playwrightEngine.installShutdownHooks(); } catch (_) {}
+} catch (e) { console.error('[warn] playwright-engine:', e && e.message); }
 const agentProgress = require('./lib/agent-progress');
 const domBridge = require('./lib/engine/dom-bridge');
 const aiCompat = require('./lib/ai-compat');
@@ -128,13 +131,14 @@ app.get('/api/engine/status', async (_req, res) => {
   try {
     const base = engineCaps.detect();
     const wk = await webkitManager.status();
-    const pw = await playwrightEngine.status();
+    let pw = { ready: false };
+    try { pw = await playwrightEngine.status(); } catch (_) {}
     res.json({
       ok: true,
       ...base,
       webkitWorker: wk,
       playwright: pw,
-      mode: (pw && pw.ready) ? 'playwright+proxy-fallback' : ((wk && wk.ready) ? 'webkit-worker+proxy-fallback' : base.mode)
+      mode: (wk && wk.ready) ? 'webkit-worker+proxy-fallback' : base.mode
     });
   } catch (e) {
     res.json({ ok: true, ...engineCaps.detect(), webkitWorker: { ready: false, error: String(e.message || e) } });
@@ -191,6 +195,15 @@ app.get('/health', (_req, res) => res.status(200).json(healthPayload()));
 app.get('/ready', (_req, res) => res.status(200).json({ ready: true, ok: true }));
 app.get('/api/ready', (_req, res) => res.status(200).json({ ready: true, ok: true }));
 
+/* early-listen — GHCR/SoloHost smoke must reach PORT quickly */
+var server = http.createServer(app);
+server.listen(PORT, HOST, () => {
+  console.log('SoloHost Browser listening on http://' + HOST + ':' + PORT);
+  try { appLog.log('info', 'server.listen', { host: HOST, port: PORT, version: PKG.version }); } catch (_) {}
+});
+server.on('error', (err) => { console.error('listen error', err); process.exit(1); });
+
+
 // Client-side diagnostic logs (shown in AI Logs tab via shared app.log)
 app.post('/api/logs/client', (req, res) => {
   try {
@@ -227,20 +240,8 @@ const ai = createAIService({
   adapter
 });
 mountAIRoutes(app, ai);
-
 app.get('/api/agent/progress', (req, res) => {
   res.json({ ok: true, events: agentProgress.list(Number(req.query.limit) || 40) });
-});
-app.get('/api/agent/progress/stream', (req, res) => {
-  res.setHeader('Content-Type', 'text/event-stream');
-  res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('Connection', 'keep-alive');
-  res.write(': ok\n\n');
-  const onProg = (evt) => {
-    try { res.write('data: ' + JSON.stringify(evt) + '\n\n'); } catch (_) {}
-  };
-  agentProgress.bus.on('progress', onProg);
-  req.on('close', () => agentProgress.bus.off('progress', onProg));
 });
 
 
@@ -266,7 +267,6 @@ app.post('/api/browser/ai-compat', async (req, res) => {
 
 // Browser Agent planner: observation + task -> next validated action (executed by public/browser-agent.js)
 const browserAgent = require('./lib/browser-agent');
-
 const backendAgent = require('./lib/backend-agent');
 const agentHits = new Map();
 function agentRateOk(key) {
@@ -506,12 +506,5 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ success: false, error: String((err && err.message) || err) });
 });
 
-
-const server = http.createServer(app);
-server.listen(PORT, HOST, () => {
-  console.log(`SoloHost Browser v${PKG.version} listening on http://${HOST}:${PORT}`);
-  appLog.log('info', 'server.listen', { host: HOST, port: PORT, version: PKG.version });
-});
-server.on('error', (err) => { console.error(err); process.exit(1); });
 process.on('SIGTERM', () => server.close(() => process.exit(0)));
 process.on('SIGINT', () => server.close(() => process.exit(0)));
