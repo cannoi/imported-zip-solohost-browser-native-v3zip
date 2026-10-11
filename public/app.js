@@ -13,6 +13,8 @@
     url: '',
     lang: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_lang')) || 'en',
     theme: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_theme')) || 'rainbow',
+    searchEngine: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_engine')) || 'bing',
+    customSearchUrl: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_custom_url')) || '',
     tabs: [],
     activeTabId: null,
     history: [],
@@ -57,15 +59,25 @@
     } catch { return false; }
   }
 
+  function isNativeMediaOrDocumentUrl(url) {
+    try {
+      const u = new URL(url); const p = (u.pathname || '').toLowerCase();
+      return /\.(?:mp4|webm|ogv|mov|m4v|mp3|m4a|aac|wav|flac|opus|oga|pdf|png|jpe?g|webp|avif|gif)(?:$)/i.test(p);
+    } catch (_) { return false; }
+  }
+
   function classifyUrl(url) {
     const h = hostOf(url);
+    // Let Chromium's native viewer handle direct media, images and PDFs instead of
+    // trying to snapshot its internal browser UI through the DOM Bridge.
+    if (isNativeMediaOrDocumentUrl(url)) return MODE.DIRECT;
     if (!h) return MODE.PROXY;
     // Site-owned authentication must use a normal system browser, not an embedded/automated view.
     if (isExternalAuthPath(url)) return MODE.EXTERNAL;
     // DRM/subscription streaming sites need their own full browser profile/DRM stack.
     if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
-    // Official embeddable players remain direct when explicitly on their embed endpoint.
-    if (/youtube\.com|youtu\.be/.test(h) && /\/embed\//.test(url)) return MODE.DIRECT;
+    // Official embeddable players remain direct when on their official embed endpoint.
+    if (isDirectEmbed(url)) return MODE.DIRECT;
     // Dynamic sites use the JS-capable engine; do not rewrite them to proxy HTML pre-emptively.
     if (/google\.|youtube\.com|youtu\.be|(^|\.)(facebook|fb|instagram|whatsapp|messenger|tiktok|x|twitter|reddit)\.com$/.test(h)) return MODE.ENGINE;
     if (isLoginPath(url)) return MODE.ENGINE;
@@ -314,7 +326,7 @@
     if (action === 'copy-media') return copyTextSafe(media);
     if (action === 'copy-text') return copyTextSafe(t.selectedText || '');
     if (action === 'copy-page') return copyTextSafe(state.url || '');
-    if (action === 'search-text' && t.selectedText) return navigate('https://www.google.com/search?q=' + encodeURIComponent(t.selectedText));
+    if (action === 'search-text' && t.selectedText) return navigate(buildSearchUrl(t.selectedText));
     if (action === 'share-link') {
       const shareUrl = href || state.url;
       if (navigator.share) navigator.share({ title: t.linkText || document.title || 'Link', url: shareUrl }).catch(() => {});
@@ -443,6 +455,14 @@
             } catch (_) {}
             return;
           }
+          if (tag === 'a') {
+            try {
+              const abs = new URL(el.getAttribute('href') || '', state.url || 'https://example.com').href;
+              if (isNativeMediaOrDocumentUrl(abs)) {
+                e.preventDefault(); e.stopPropagation(); navigate(abs, { force: true }); return;
+              }
+            } catch (_) {}
+          }
           const inputType = (el.getAttribute('type') || '').toLowerCase();
           if (tag === 'a' || tag === 'button' || tag === 'label' || ['button','link','tab','checkbox','switch','option','menuitem'].includes(el.getAttribute('role')) ||
               (tag === 'input' && ['checkbox','radio','submit','button','reset'].includes(inputType)) ) {
@@ -506,6 +526,14 @@
     const libraryButtons = document.querySelectorAll('[data-library]');
     libraryButtons.forEach(b => { b.textContent = state.lang === 'vi' ? (b.dataset.library === 'bookmarks' ? '☆ Dấu trang' : '◷ Lịch sử') : (b.dataset.library === 'bookmarks' ? '☆ Bookmarks' : '◷ History'); });
     const clear = $('history-clear'); if (clear) clear.textContent = state.lang === 'vi' ? 'Xóa lịch sử' : 'Clear history';
+    const st = state.lang === 'vi';
+    if ($('search-settings-title')) $('search-settings-title').textContent = st ? 'Công cụ tìm kiếm mặc định' : 'Default search engine';
+    if ($('search-engine-label')) $('search-engine-label').textContent = st ? 'Công cụ tìm kiếm' : 'Search engine';
+    if ($('search-custom-label')) $('search-custom-label').textContent = st ? 'URL tìm kiếm tùy chỉnh (dùng {query} hoặc %s)' : 'Custom search URL (use {query} or %s)';
+    if ($('search-engine-help')) $('search-engine-help').textContent = st ? 'URL tùy chỉnh phải dùng HTTP(S). {query} hoặc %s sẽ được thay bằng từ khóa đã mã hóa.' : 'Custom URL must use HTTP(S). {query} or %s is replaced with encoded search terms.';
+    if ($('search-settings-cancel')) $('search-settings-cancel').textContent = st ? 'Hủy' : 'Cancel';
+    if ($('search-settings-save')) $('search-settings-save').textContent = st ? 'Lưu' : 'Save';
+    if ($('btn-search-settings')) $('btn-search-settings').textContent = st ? '⌕ Công cụ tìm kiếm' : '⌕ Search engine';
   }
 
 
@@ -572,18 +600,29 @@
     } catch (_) {}
   }
 
+  function buildSearchUrl(query) {
+    const encoded = encodeURIComponent(String(query || '').trim());
+    const engine = String(state.searchEngine || 'bing').toLowerCase();
+    if (engine === 'google') return 'https://www.google.com/search?q=' + encoded;
+    if (engine === 'duckduckgo') return 'https://html.duckduckgo.com/html/?q=' + encoded;
+    if (engine === 'brave') return 'https://search.brave.com/search?q=' + encoded;
+    if (engine === 'custom') {
+      const template = String(state.customSearchUrl || '').trim();
+      if (/^https?:\/\//i.test(template) && /(?:\{query\}|%s)/i.test(template))
+        return template.replace(/\{query\}/gi, encoded).replace(/%s/gi, encoded);
+    }
+    return 'https://www.bing.com/search?q=' + encoded;
+  }
+
   function normalizeUrl(raw) {
     let s = String(raw || '').trim();
     if (!s) return '';
-    if (/^about:/i.test(s) || /^javascript:/i.test(s)) return '';
+    if (/^about:/i.test(s) || /^javascript:/i.test(s) || /^data:/i.test(s)) return '';
     if (/^https?:\/\//i.test(s)) return s;
     if (/^\/\//.test(s)) return 'https:' + s;
-    // IP or localhost
-    if (/^(\d{1,3}\.){3}\d{1,3}(:\d+)?(\/.*)?$/.test(s) || /^localhost(:\d+)?(\/.*)?$/i.test(s)) {
-      return 'http://' + s;
-    }
+    if (/^(\d{1,3}\.){3}\d{1,3}(:\d+)?(\/.*)?$/.test(s) || /^localhost(:\d+)?$/i.test(s)) return 'http://' + s;
     if (/^[\w.-]+\.[a-z]{2,}([/:].*)?$/i.test(s)) return 'https://' + s;
-    return 'https://www.bing.com/search?q=' + encodeURIComponent(s);
+    return buildSearchUrl(s);
   }
 
   function showToast(message) {
@@ -1034,6 +1073,39 @@
     showStart();
     const active = getActiveTab();
     if (active) { active.url = ''; active.title = 'New Tab'; renderTabs(); }
+  });
+
+  // Default search engine settings. Custom templates only accept HTTP(S) URLs and encoded query placeholders.
+  function closeSearchSettings() { const overlay = $('search-settings-overlay'); if (overlay) overlay.hidden = true; }
+  function openSearchSettings() {
+    const overlay = $('search-settings-overlay'); if (!overlay) return;
+    if ($('search-engine-select')) $('search-engine-select').value = state.searchEngine || 'bing';
+    if ($('search-engine-custom')) $('search-engine-custom').value = state.customSearchUrl || '';
+    if ($('search-engine-status')) $('search-engine-status').textContent = '';
+    overlay.hidden = false; closeSettings();
+  }
+  if ($('btn-search-settings')) $('btn-search-settings').addEventListener('click', openSearchSettings);
+  ['search-settings-close','search-settings-cancel'].forEach(id => { if ($(id)) $(id).addEventListener('click', closeSearchSettings); });
+  if ($('search-settings-overlay')) $('search-settings-overlay').addEventListener('click', ev => { if (ev.target === $('search-settings-overlay')) closeSearchSettings(); });
+  if ($('search-settings-save')) $('search-settings-save').addEventListener('click', () => {
+    const engine = String(($('search-engine-select') || {}).value || 'bing').toLowerCase();
+    const template = String(($('search-engine-custom') || {}).value || '').trim();
+    const status = $('search-engine-status');
+    if (engine === 'custom') {
+      try {
+        const parsed = new URL(template.replace(/\{query\}|%s/gi, 'test-query'));
+        if (!['http:', 'https:'].includes(parsed.protocol) || !/(?:\{query\}|%s)/i.test(template)) throw new Error('invalid');
+      } catch (_) {
+        if (status) status.textContent = state.lang === 'vi' ? 'URL phải dùng HTTP(S) và chứa {query} hoặc %s.' : 'URL must use HTTP(S) and contain {query} or %s.';
+        return;
+      }
+    }
+    state.searchEngine = ['bing','google','duckduckgo','brave','custom'].includes(engine) ? engine : 'bing';
+    state.customSearchUrl = template;
+    try { localStorage.setItem('solo_search_engine', state.searchEngine); localStorage.setItem('solo_search_custom_url', template); } catch (_) {}
+    if (status) status.textContent = state.lang === 'vi' ? 'Đã lưu công cụ tìm kiếm.' : 'Search engine saved.';
+    clientLog('info', 'browser.search_engine_saved', { detail: state.searchEngine });
+    setTimeout(closeSearchSettings, 500);
   });
 
   // Settings menu (☰)

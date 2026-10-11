@@ -8,8 +8,8 @@ const bridge = fs.readFileSync(path.join(root, 'lib/engine/dom-bridge.js'), 'utf
 const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
 const pkg = require('./package.json');
 const caps = require('./lib/engine/capabilities').detect();
-assert.strictEqual(pkg.version, '10.14.0');
-assert.strictEqual(caps.version, '10.14.0');
+assert.strictEqual(pkg.version, '10.15.0');
+assert.strictEqual(caps.version, '10.15.0');
 assert.ok(engine.includes('SOLOHOST_BROWSER_PERSIST_SESSIONS'), 'persistent session storage can be disabled explicitly');
 assert.ok(engine.includes('context.storageState()') && engine.includes('0o600') && engine.includes('0o700'), 'session storage is persisted with restricted file permissions');
 assert.ok(engine.includes('playwright.popup_attached'), 'new popup pages are attached to the active session');

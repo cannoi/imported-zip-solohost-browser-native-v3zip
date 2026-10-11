@@ -458,3 +458,17 @@ html[data-theme="rainbow"] .chrome-top::after {
 
 .browser-toast { position: fixed; z-index: 600; left: 50%; bottom: calc(68px + var(--safe-b)); transform: translateX(-50%); max-width: calc(100vw - 28px); padding: 10px 14px; border-radius: 12px; background: var(--chrome-bg); color: var(--chrome-fg); border: 1px solid var(--chrome-line); box-shadow: 0 8px 24px rgba(0,0,0,.3); font-size: 13px; text-align: center; }
 .browser-toast[hidden] { display: none !important; }
+
+
+/* Compact search-engine settings dialog */
+.search-settings-overlay{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.62);display:flex;align-items:center;justify-content:center;padding:16px}
+.search-settings-overlay[hidden]{display:none!important}
+.search-settings-dialog{width:min(440px,100%);max-height:90dvh;overflow:auto;background:var(--panel,#171923);color:var(--text,#f4f5f7);border:1px solid rgba(255,255,255,.14);border-radius:16px;padding:16px;box-shadow:0 18px 60px #0008}
+.search-settings-dialog header,.search-settings-dialog footer{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:14px}
+.search-settings-dialog footer{justify-content:flex-end;margin:16px 0 0}
+.search-settings-dialog label{display:block;font-size:13px;opacity:.8;margin:10px 0 5px}
+.search-settings-dialog select,.search-settings-dialog input{box-sizing:border-box;width:100%;min-height:42px;border-radius:9px;border:1px solid #565b6b;background:#10121a;color:inherit;padding:9px;font:inherit}
+.search-settings-dialog p{font-size:12px;line-height:1.45;opacity:.72;overflow-wrap:anywhere}
+.search-settings-dialog #search-engine-status{min-height:16px;color:#8bd5a7}
+.search-settings-dialog footer button{min-height:40px;padding:0 14px;border-radius:9px;border:1px solid #565b6b;background:#222635;color:inherit}
+.search-settings-dialog #search-settings-save{background:#2563eb;border-color:#2563eb;color:white}

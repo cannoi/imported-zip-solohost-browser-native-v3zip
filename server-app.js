@@ -517,7 +517,7 @@ app.get('/api/browser/sessions/:id/view', (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   // The bridge document itself cannot execute scripts. YouTube's nested player
   // needs its own scripts and frame origin, so allow only the official embed hosts.
-  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline' https: http:; font-src https: http: data:; media-src https: http:; frame-src https://www.youtube.com https://www.youtube-nocookie.com; script-src 'none'; base-uri 'self'; form-action https: http:");
+  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline' https: http:; font-src https: http: data:; media-src https: http:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://www.tiktok.com https://www.vimeo.com https://player.vimeo.com https://open.spotify.com https://player.twitch.tv https://www.twitch.tv https://www.dailymotion.com https://geo.dailymotion.com; script-src 'none'; base-uri 'self'; form-action https: http:");
   res.send(html);
 });
 
