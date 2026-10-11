@@ -117,7 +117,7 @@
       const r = await fetch('/api/browser/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: '{}',
+        body: JSON.stringify({ privateMode: !!tab.private }),
         signal: ac ? ac.signal : undefined
       });
       const j = await r.json();
@@ -262,6 +262,73 @@
     }
   }
 
+  // Opera-style long-press / right-click menu for the same-origin Bridge snapshot.
+  const contextMenu = $('page-context-menu');
+  let contextTarget = null;
+  function hideContextMenu() { if (contextMenu) { contextMenu.hidden = true; contextMenu.textContent = ''; } contextTarget = null; }
+  function showContextMenu(payload, x, y) {
+    if (!contextMenu) return;
+    contextTarget = payload || {};
+    const vi = state.lang === 'vi';
+    const items = [];
+    if (contextTarget.href) {
+      items.push([vi ? 'Mở liên kết trong tab mới' : 'Open link in new tab', 'new-tab']);
+      items.push([vi ? 'Mở liên kết trong tab riêng tư' : 'Open link in private tab', 'private-tab']);
+      items.push([vi ? 'Sao chép địa chỉ liên kết' : 'Copy link address', 'copy-link']);
+      items.push([vi ? 'Chia sẻ liên kết' : 'Share link', 'share-link']);
+      items.push([vi ? 'Tải xuống liên kết…' : 'Download link…', 'download-link']);
+    }
+    if (contextTarget.mediaSrc) {
+      items.push([vi ? 'Mở media trong tab mới' : 'Open media in new tab', 'media-tab']);
+      items.push([vi ? 'Sao chép địa chỉ media' : 'Copy media address', 'copy-media']);
+      if (contextTarget.mediaType === 'image') items.push([vi ? 'Mở ảnh' : 'Open image', 'open-image']);
+    }
+    if (contextTarget.selectedText) {
+      items.push([vi ? 'Tìm trên Google' : 'Search Google', 'search-text']);
+      items.push([vi ? 'Sao chép văn bản' : 'Copy text', 'copy-text']);
+    }
+    if (!items.length && state.url) items.push([vi ? 'Sao chép địa chỉ trang' : 'Copy page address', 'copy-page']);
+    contextMenu.textContent = '';
+    items.forEach(([label, action]) => {
+      const b = document.createElement('button'); b.type = 'button'; b.className = 'page-context-action'; b.setAttribute('role', 'menuitem'); b.textContent = label;
+      b.addEventListener('click', () => runContextAction(action)); contextMenu.appendChild(b);
+    });
+    contextMenu.hidden = false;
+    const width = Math.min(300, window.innerWidth - 16), height = contextMenu.offsetHeight || 260;
+    contextMenu.style.left = Math.max(8, Math.min(Number(x) || 8, window.innerWidth - width - 8)) + 'px';
+    contextMenu.style.top = Math.max(8, Math.min(Number(y) || 8, window.innerHeight - height - 8)) + 'px';
+  }
+  async function copyTextSafe(text) {
+    if (!text) return;
+    try { await navigator.clipboard.writeText(text); }
+    catch (_) { const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (_) {} ta.remove(); }
+  }
+  function runContextAction(action) {
+    const t = contextTarget || {}; const href = t.href || ''; const media = t.mediaSrc || '';
+    hideContextMenu();
+    if (action === 'new-tab' && href) return newTab(href);
+    if (action === 'private-tab' && href) return newTab(href, { private: true });
+    if (action === 'media-tab' && media) return newTab(media);
+    if (action === 'open-image' && media) return newTab(media);
+    if (action === 'copy-link') return copyTextSafe(href);
+    if (action === 'copy-media') return copyTextSafe(media);
+    if (action === 'copy-text') return copyTextSafe(t.selectedText || '');
+    if (action === 'copy-page') return copyTextSafe(state.url || '');
+    if (action === 'search-text' && t.selectedText) return navigate('https://www.google.com/search?q=' + encodeURIComponent(t.selectedText));
+    if (action === 'share-link') {
+      const shareUrl = href || state.url;
+      if (navigator.share) navigator.share({ title: t.linkText || document.title || 'Link', url: shareUrl }).catch(() => {});
+      else copyTextSafe(shareUrl);
+      return;
+    }
+    if (action === 'download-link' && href) {
+      const a = document.createElement('a'); a.href = href; a.target = '_blank'; a.rel = 'noopener noreferrer'; a.download = ''; document.body.appendChild(a); a.click(); a.remove();
+    }
+  }
+  document.addEventListener('click', e => { if (contextMenu && !contextMenu.contains(e.target)) hideContextMenu(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hideContextMenu(); });
+  window.addEventListener('resize', hideContextMenu);
+
   // Same-origin bridge document interactions
   if (frame) {
     frame.addEventListener('load', () => {
@@ -273,6 +340,49 @@
         if (!nav || !nav.bridge) return;
         const body = doc.body;
         if (body) {
+          const describeContextTarget = (target) => {
+            const el = target && target.closest ? target.closest('a[href],img,video,audio,source,[role="link"]') || target : target;
+            let href = '', mediaSrc = '', mediaType = '', linkText = '';
+            if (!el) return {};
+            const tag = (el.tagName || '').toLowerCase();
+            if (tag === 'a' || el.getAttribute('role') === 'link') {
+              try { href = new URL(el.getAttribute('href') || '', state.url).href; } catch (_) {}
+              linkText = (el.innerText || el.getAttribute('aria-label') || '').trim().slice(0, 180);
+            }
+            if (tag === 'img') { mediaSrc = el.currentSrc || el.src || ''; mediaType = 'image'; }
+            else if (tag === 'video' || tag === 'audio' || tag === 'source') { mediaSrc = el.currentSrc || el.src || el.getAttribute('src') || ''; mediaType = tag; }
+            if (!href && el.closest) {
+              const a = el.closest('a[href]'); if (a) { try { href = new URL(a.getAttribute('href') || '', state.url).href; } catch (_) {} linkText = (a.innerText || '').trim().slice(0, 180); }
+            }
+            const selectedText = String((doc.getSelection && doc.getSelection().toString()) || '').trim().slice(0, 500);
+            return { href, mediaSrc, mediaType, selectedText, linkText };
+          };
+          let longPressTimer = null, longPressStart = null, longPressTriggered = false;
+          const cancelLongPress = () => { if (longPressTimer) clearTimeout(longPressTimer); longPressTimer = null; longPressStart = null; };
+          doc.addEventListener('contextmenu', e => {
+            const payload = describeContextTarget(e.target);
+            if (!payload.href && !payload.mediaSrc && !payload.selectedText) return;
+            e.preventDefault();
+            showContextMenu(payload, e.clientX, e.clientY);
+          }, true);
+          doc.addEventListener('pointerdown', e => {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
+            cancelLongPress(); longPressTriggered = false;
+            longPressStart = { x: e.clientX, y: e.clientY, target: e.target };
+            longPressTimer = setTimeout(() => {
+              if (!longPressStart) return;
+              const payload = describeContextTarget(longPressStart.target);
+              if (!payload.href && !payload.mediaSrc && !payload.selectedText) return;
+              longPressTriggered = true;
+              showContextMenu(payload, longPressStart.x, longPressStart.y);
+            }, 520);
+          }, { capture: true, passive: true });
+          doc.addEventListener('pointermove', e => {
+            if (longPressStart && (Math.abs(e.clientX - longPressStart.x) > 12 || Math.abs(e.clientY - longPressStart.y) > 12)) cancelLongPress();
+          }, { capture: true, passive: true });
+          ['pointerup','pointercancel','scroll'].forEach(type => doc.addEventListener(type, cancelLongPress, { capture: true, passive: true }));
+          doc.addEventListener('click', e => { if (longPressTriggered) { e.preventDefault(); e.stopPropagation(); longPressTriggered = false; } }, true);
+
           const audit = {
             textLength: (body.innerText || '').length,
             links: doc.querySelectorAll('a[href]').length,
@@ -476,6 +586,13 @@
     return 'https://www.bing.com/search?q=' + encodeURIComponent(s);
   }
 
+  function showToast(message) {
+    let el = document.getElementById('browser-toast');
+    if (!el) { el = document.createElement('div'); el.id = 'browser-toast'; el.className = 'browser-toast'; el.setAttribute('role', 'status'); el.setAttribute('aria-live', 'polite'); document.body.appendChild(el); }
+    el.textContent = String(message || ''); el.hidden = false;
+    clearTimeout(el._hideTimer); el._hideTimer = setTimeout(() => { el.hidden = true; }, 2600);
+  }
+
   function hideStart() {
     const startScreen = $('start-screen');
     if (startScreen) startScreen.classList.add('hidden');
@@ -563,29 +680,52 @@
       const item = document.createElement('div'); item.className = 'browser-tab' + (tab.id === state.activeTabId ? ' active' : '');
       const select = document.createElement('button'); select.type = 'button'; select.className = 'browser-tab-select';
       let hostLabel = ''; try { hostLabel = tab.url ? new URL(tab.url).hostname : ''; } catch (_) {}
-      select.textContent = tab.title || hostLabel || (state.lang === 'vi' ? 'Tab mới' : 'New tab');
-      select.title = tab.url || select.textContent; select.addEventListener('click', () => switchTab(tab.id));
+      select.textContent = (tab.private ? '◉ ' : '') + (tab.title || hostLabel || (state.lang === 'vi' ? 'Tab mới' : 'New tab'));
+      select.title = (tab.private ? (state.lang === 'vi' ? 'Tab riêng tư · ' : 'Private tab · ') : '') + (tab.url || select.textContent); select.addEventListener('click', () => switchTab(tab.id));
       const close = document.createElement('button'); close.type = 'button'; close.className = 'browser-tab-close'; close.textContent = '×'; close.title = state.lang === 'vi' ? 'Đóng tab' : 'Close tab';
       close.addEventListener('click', e => { e.stopPropagation(); closeTab(tab.id); });
       item.append(select, close); strip.appendChild(item);
     });
-    try { sessionStorage.setItem('solo_tabs_v1', JSON.stringify({ tabs: state.tabs, activeTabId: state.activeTabId })); } catch (_) {}
+    try {
+      // Persist only UI metadata, never Bridge session IDs or authentication tokens.
+      const regularTabs = state.tabs.filter(t => !t.private).slice(-12).map(t => ({ id: t.id, title: t.title, url: t.url || '' }));
+      const activeStored = regularTabs.some(t => t.id === state.activeTabId) ? state.activeTabId : (regularTabs[0] && regularTabs[0].id) || null;
+      sessionStorage.setItem('solo_tabs_v1', JSON.stringify({ tabs: regularTabs, activeTabId: activeStored }));
+    } catch (_) {}
   }
-  function newTab(url) {
-    const tab = { id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title: state.lang === 'vi' ? 'Tab mới' : 'New tab', url: '' };
+  function newTab(url, options) {
+    options = options || {};
+    if (state.tabs.length >= 12) {
+      const disposable = state.tabs.find(t => t.id !== state.activeTabId && (t.private || !t.url));
+      if (disposable) closeTab(disposable.id);
+      else { showToast(state.lang === 'vi' ? 'Đã đạt giới hạn 12 tab. Hãy đóng một tab trước.' : '12-tab limit reached. Close a tab first.'); return null; }
+    }
+    const tab = { id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), title: options.private ? (state.lang === 'vi' ? 'Tab riêng tư' : 'Private tab') : (state.lang === 'vi' ? 'Tab mới' : 'New tab'), url: '', private: !!options.private, nav: null };
     state.tabs.push(tab); state.activeTabId = tab.id; renderTabs();
-    if (url) navigate(url); else { state.url = ''; if (input) input.value = ''; if (frame) frame.src = 'about:blank'; showStart(); }
+    if (url) navigate(url); else { state.url = ''; if (input) input.value = ''; if (btnOpen) btnOpen.href = '#'; if (frame) frame.src = 'about:blank'; showStart(); }
+    return tab;
   }
   function switchTab(id) {
     const tab = state.tabs.find(t => t.id === id); if (!tab) return;
     state.activeTabId = id; state.url = tab.url || ''; renderTabs();
     if (input) input.value = state.url; if (btnOpen) btnOpen.href = state.url || '#';
-    // Re-navigate with this tab's own bridge session (isolation)
-    if (state.url) navigate(state.url, { force: true, skipHistory: true });
+    // Restore the existing tab's Bridge view instead of reloading the website.
+    const nav = ensureTabNav(tab);
+    const view = nav && nav.bridge && bridgeViewUrl(nav.bridge);
+    if (state.url && view) {
+      if (frame) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); frame.src = view + '&t=' + Date.now(); }
+      hideStart();
+    } else if (state.url) navigate(state.url, { force: true, skipHistory: true });
     else { if (frame) frame.src = 'about:blank'; showStart(); }
+  }
+  function destroyTabSession(tab) {
+    const b = tab && tab.nav && tab.nav.bridge;
+    if (!b || !b.sessionId || !b.token) return;
+    fetch('/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '?token=' + encodeURIComponent(b.token), { method: 'DELETE' }).catch(() => {});
   }
   function closeTab(id) {
     const index = state.tabs.findIndex(t => t.id === id); if (index < 0) return;
+    const tab = state.tabs[index]; destroyTabSession(tab);
     const wasActive = state.activeTabId === id; state.tabs.splice(index, 1);
     if (!state.tabs.length) { newTab(); return; }
     if (wasActive) switchTab(state.tabs[Math.min(index, state.tabs.length - 1)].id); else renderTabs();
@@ -593,6 +733,7 @@
   async function saveVisit(url) {
     if (!url || !/^https?:/i.test(url)) return;
     const tab = getActiveTab(); if (tab) { tab.url = url; try { tab.title = new URL(url).hostname; } catch (_) {} renderTabs(); }
+    if (tab && tab.private) return; // private tabs do not write browsing history
     try { await fetch('/api/browser/history', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url, title: (tab && tab.title) || url }) }); } catch (_) {}
   }
   async function addCurrentBookmark() {

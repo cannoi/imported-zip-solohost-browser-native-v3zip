@@ -448,7 +448,9 @@ app.post('/api/browser/sessions', async (req, res) => {
     if (!domBridge.rateOk('create:' + ip)) {
       return res.status(429).json({ ok: false, error: 'rate_limited' });
     }
-    const out = await domBridge.createSession({ clientKey: ip });
+    const privateMode = !!(req.body && req.body.privateMode);
+    const privateSuffix = privateMode ? ':private:' + require('crypto').randomBytes(12).toString('hex') : '';
+    const out = await domBridge.createSession({ clientKey: ip + privateSuffix, privateMode });
     res.json({ ok: true, ...out });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });

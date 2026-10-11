@@ -1,8 +1,8 @@
-# SoloHost Browser V10.13.0
+# SoloHost Browser V10.14.0
 
-Version 10.13.0 improves Bridge interaction reliability and responsiveness: per-session events are serialized; checkbox/radio/select/contenteditable controls and semantic labels are handled explicitly; repeat audit/AI-compat work is deduplicated. Requests initiated by Bing pages are exempted from the ad filter so verification resources are not accidentally blocked. Bing verification is handed to the system browser for normal user completion; CAPTCHA is not bypassed. Adaptive rendering still preserves website styling and Bing remains the default search engine.
+Version 10.14.0 improves Bridge interaction reliability and responsiveness: per-session events are serialized; checkbox/radio/select/contenteditable controls and semantic labels are handled explicitly; repeat audit/AI-compat work is deduplicated. Requests initiated by Bing pages are exempted from the ad filter so verification resources are not accidentally blocked. Bing verification is handed to the system browser for normal user completion; CAPTCHA is not bypassed. Adaptive rendering still preserves website styling and Bing remains the default search engine.
 
-See `docs/V10.13.0_INTERACTION_BING_REPORT.md` for changes, limitations, and validation.
+See `docs/V10.14.0_INTERACTION_BING_REPORT.md` for changes, limitations, and validation.
 
 Lightweight private browser for **Pi Network SoloHost**.
 
