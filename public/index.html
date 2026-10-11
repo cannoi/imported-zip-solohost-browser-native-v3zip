@@ -36,37 +36,49 @@
       allow="autoplay; encrypted-media; fullscreen; picture-in-picture"
       allowfullscreen
     ></iframe>
+    <div class="splash-screen" id="splash-screen" aria-hidden="false">
+      <div class="splash-inner">
+        <img class="splash-logo" src="/splash-logo.jpg" alt="SoloHost Browser" width="128" height="128" decoding="async">
+        <h1 class="splash-title">SoloHost Browser</h1>
+        <p class="splash-tagline">Simple · Private · Lightweight</p>
+      </div>
+    </div>
+
     <div class="start-screen" id="start-screen">
-      <div class="start-inner">
-        <div class="start-mark">S</div>
-        <h1>SoloHost</h1>
-        <p id="start-sub">Simple · Private · Lightweight</p>
-        <div class="home-utils" id="home-utils">
-          <section class="home-card" id="home-playlists">
+      <div class="start-inner start-inner--utils">
+        <div class="home-utils home-utils--grid" id="home-utils">
+          <section class="home-card home-card--lg" id="home-playlists">
             <header class="home-card-h">
-              <strong id="home-pl-title">▶ Playlist</strong>
-              <button type="button" class="icon-btn tiny" id="btn-pl-add" title="New playlist">＋</button>
+              <strong id="home-pl-title">♪ Playlist</strong>
+              <button type="button" class="icon-btn tiny" id="btn-pl-add" title="New playlist" aria-label="New">＋</button>
             </header>
             <div class="home-card-body" id="pl-list"></div>
             <form class="home-row" id="pl-add-form">
-              <input type="url" id="pl-url-input" placeholder="https://youtube.com/watch?v=…" autocomplete="off">
-              <button type="submit" class="icon-btn tiny" id="pl-url-add" title="Add to playlist">＋</button>
+              <input type="url" id="pl-url-input" placeholder="Video URL…" autocomplete="off">
+              <button type="submit" class="icon-btn tiny" id="pl-url-add" title="Add">＋</button>
             </form>
-            <div class="home-row">
+            <div class="home-row home-actions">
               <button type="button" class="chip" id="btn-pl-play" title="Play">▶</button>
-              <button type="button" class="chip" id="btn-pl-music" title="Music mode">♪</button>
+              <button type="button" class="chip" id="btn-pl-music" title="Music">♪</button>
               <button type="button" class="chip" id="btn-pl-next" title="Next">⏭</button>
             </div>
           </section>
-          <section class="home-card" id="home-scripts">
+
+          <section class="home-card home-card--lg" id="home-scripts">
             <header class="home-card-h">
               <strong id="home-sc-title">⚡ Scripts</strong>
-              <button type="button" class="icon-btn tiny" id="btn-sc-refresh" title="Refresh">↻</button>
+              <button type="button" class="icon-btn tiny" id="btn-sc-refresh" title="Refresh" aria-label="Refresh">↻</button>
             </header>
             <div class="home-card-body" id="sc-list"></div>
-            <p class="home-hint" id="sc-hint">Sample scripts run without AI (navigate / wait).</p>
+            <form class="home-row" id="sc-add-form">
+              <input type="text" id="sc-name-input" placeholder="Script name" autocomplete="off">
+              <input type="url" id="sc-url-input" placeholder="https://…" autocomplete="off">
+              <button type="submit" class="icon-btn tiny" title="Add script">＋</button>
+            </form>
+            <p class="home-hint" id="sc-hint">Samples: no AI. Custom: AI Action when available.</p>
           </section>
-          <section class="home-card" id="home-apps">
+
+          <section class="home-card home-card--lg" id="home-apps">
             <header class="home-card-h">
               <strong id="home-app-title">⊞ SoloHost Apps</strong>
             </header>

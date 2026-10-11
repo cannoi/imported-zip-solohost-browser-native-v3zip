@@ -546,8 +546,10 @@
       if ($('home-sc-title')) $('home-sc-title').textContent = vi ? '⚡ Tập lệnh' : '⚡ Scripts';
       if ($('home-app-title')) $('home-app-title').textContent = vi ? '⊞ App SoloHost' : '⊞ SoloHost Apps';
       if ($('sc-hint')) $('sc-hint').textContent = vi
-        ? 'Mẫu chạy không cần AI (điều hướng / chờ giờ).'
-        : 'Samples run without AI (navigate / wait).';
+        ? '◎ Mẫu: không cần AI · ✦ Lệnh mới: ưu tiên AI Action'
+        : '◎ Sample: no AI · ✦ Custom: AI Action first';
+      if ($('sc-name-input')) $('sc-name-input').placeholder = vi ? 'Tên lệnh' : 'Script name';
+      if ($('sc-url-input')) $('sc-url-input').placeholder = vi ? 'URL điều hướng…' : 'Navigate URL…';
       if ($('pl-url-input')) $('pl-url-input').placeholder = vi ? 'Dán URL video…' : 'Paste video URL…';
       if ($('app-url-input')) $('app-url-input').placeholder = 'http://127.0.0.1:8090';
     } catch (_) {}
@@ -736,6 +738,21 @@
   }
 
 
+  
+  function hideSplash() {
+    const el = $('splash-screen');
+    if (!el) return;
+    el.classList.add('is-done');
+    el.setAttribute('aria-hidden', 'true');
+    setTimeout(() => { try { el.remove(); } catch (_) {} }, 500);
+  }
+  function startSplash() {
+    const el = $('splash-screen');
+    if (!el) return;
+    // Always show ~5s on cold open
+    setTimeout(hideSplash, 5000);
+  }
+
   function showStart() {
     const startScreen = $('start-screen');
     if (startScreen) startScreen.classList.remove('hidden');
@@ -836,7 +853,18 @@
     } catch (_) { list.textContent = state.lang === 'vi' ? 'Không tải được dữ liệu.' : 'Could not load library.'; }
   }
 
+
+  function isLocalSoloHostUrl(url) {
+    try {
+      const u = new URL(url);
+      const h = u.hostname.toLowerCase();
+      return h === '127.0.0.1' || h === 'localhost' || h === '::1';
+    } catch { return false; }
+  }
+
   async function navigate(raw, opts) {
+    // mark: loopback SoloHost apps use same-origin proxy (runs on Pi host)
+
     opts = opts || {};
     let url = normalizeUrl(raw);
     if (!url || !frame) return;
@@ -1286,8 +1314,12 @@
       row.className = 'home-item';
       const lab = document.createElement('span');
       lab.className = 'label';
-      lab.textContent = (state.lang === 'vi' && sc.nameVi) ? sc.nameVi : (sc.name || sc.id);
-      lab.title = (state.lang === 'vi' && sc.descriptionVi) ? sc.descriptionVi : (sc.description || '');
+      const nm = (state.lang === 'vi' && sc.nameVi) ? sc.nameVi : (sc.name || sc.id);
+      lab.textContent = (sc.sample ? '◎ ' : '✦ ') + nm;
+      lab.title = (sc.sample
+        ? (state.lang === 'vi' ? 'Mẫu · không cần AI' : 'Sample · no AI')
+        : (state.lang === 'vi' ? 'AI Action' : 'AI Action')) + ' — ' +
+        ((state.lang === 'vi' && sc.descriptionVi) ? sc.descriptionVi : (sc.description || ''));
       const run = document.createElement('button');
       run.type = 'button'; run.className = 'chip'; run.textContent = '▶';
       run.title = state.lang === 'vi' ? 'Chạy' : 'Run';
@@ -1325,13 +1357,13 @@
     homeLib.scriptRun = null;
   }
 
-  function runScript(sc) {
+  function runScriptLocal(sc) {
     stopScript();
     const steps = (sc && sc.steps) || [];
     homeLib.scriptRun = { id: sc.id, timers: [], step: 0 };
     const run = homeLib.scriptRun;
     let delay = 0;
-    steps.forEach((step, i) => {
+    steps.forEach((step) => {
       if (step.type === 'waitUntil' && step.time) {
         delay = msUntilTime(step.time);
       } else if (step.type === 'waitMs') {
@@ -1353,6 +1385,48 @@
         run.timers.push(tid);
       }
     });
+  }
+
+  async function runScriptWithAi(sc) {
+    // Prefer backend agent / AI action when available; fall back to local steps
+    try {
+      const task = (state.lang === 'vi' ? (sc.nameVi || sc.name) : sc.name) +
+        ': ' + ((state.lang === 'vi' ? sc.descriptionVi : sc.description) || '') +
+        ' Steps: ' + JSON.stringify(sc.steps || []).slice(0, 800);
+      const r = await fetch('/api/browser/agent/step', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: task,
+          lang: state.lang || 'en',
+          context: { scriptId: sc.id, steps: sc.steps }
+        })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (j && j.ok && j.action && j.action.type === 'navigate' && j.action.url) {
+        navigate(j.action.url);
+        return;
+      }
+      if (j && j.ok && j.client && j.client.type === 'open_url' && j.client.url) {
+        navigate(j.client.url);
+        return;
+      }
+      // If AI cannot act, still run local steps when present
+      if (sc.steps && sc.steps.length) return runScriptLocal(sc);
+      alert(state.lang === 'vi'
+        ? 'AI Action chưa sẵn sàng. Thêm bước navigate hoặc cấu hình AI trong Settings.'
+        : 'AI Action not ready. Add navigate steps or configure AI in Settings.');
+    } catch (_) {
+      if (sc.steps && sc.steps.length) runScriptLocal(sc);
+    }
+  }
+
+  function runScript(sc) {
+    if (!sc) return;
+    // Sample templates: always local (no AI required)
+    if (sc.sample) return runScriptLocal(sc);
+    // User scripts: AI Action first, local fallback
+    return runScriptWithAi(sc);
   }
 
   function renderApps() {
@@ -1413,6 +1487,22 @@
       playPlaylistItem();
     });
     if ($('btn-sc-refresh')) $('btn-sc-refresh').addEventListener('click', () => refreshHomeLibrary());
+    if ($('sc-add-form')) $('sc-add-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = ($('sc-name-input') && $('sc-name-input').value || 'Script').trim();
+      const url = ($('sc-url-input') && $('sc-url-input').value || '').trim();
+      if (!url && !name) return;
+      const steps = url ? [{ type: 'navigate', url: url }] : [];
+      await libFetch('/api/library/scripts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name, nameVi: name, description: url || name, steps: steps })
+      });
+      if ($('sc-name-input')) $('sc-name-input').value = '';
+      if ($('sc-url-input')) $('sc-url-input').value = '';
+      await refreshHomeLibrary();
+    });
+
     if ($('app-add-form')) $('app-add-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = ($('app-name-input') && $('app-name-input').value || 'App').trim();
