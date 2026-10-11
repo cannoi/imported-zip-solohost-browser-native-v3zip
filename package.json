@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.18.0-home-splash",
+  "version": "10.18.2-home-icons",
   "description": "SoloHost Browser \u2014 Engine-first Playwright browser backend with persistent sessions and site-policy-aware auth",
   "main": "server.js",
   "engines": {

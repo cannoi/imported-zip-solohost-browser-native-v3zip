@@ -542,9 +542,12 @@
   function applyLang() {
     try {
       const vi = state.lang === 'vi';
-      if ($('home-pl-title')) $('home-pl-title').textContent = vi ? '▶ Danh sách phát' : '▶ Playlist';
-      if ($('home-sc-title')) $('home-sc-title').textContent = vi ? '⚡ Tập lệnh' : '⚡ Scripts';
-      if ($('home-app-title')) $('home-app-title').textContent = vi ? '⊞ App SoloHost' : '⊞ SoloHost Apps';
+      if ($('home-pl-title')) $('home-pl-title').textContent = vi ? 'Nhạc' : 'Playlist';
+      if ($('home-sc-title')) $('home-sc-title').textContent = vi ? 'Lệnh' : 'Scripts';
+      if ($('home-app-title')) $('home-app-title').textContent = vi ? 'Apps' : 'Apps';
+      if ($('panel-pl-h')) $('panel-pl-h').textContent = vi ? '♪ Danh sách phát' : '♪ Playlist';
+      if ($('panel-sc-h')) $('panel-sc-h').textContent = vi ? '⚡ Tập lệnh' : '⚡ Scripts';
+      if ($('panel-app-h')) $('panel-app-h').textContent = vi ? '⊞ App SoloHost' : '⊞ SoloHost Apps';
       if ($('sc-hint')) $('sc-hint').textContent = vi
         ? '◎ Mẫu: không cần AI · ✦ Lệnh mới: ưu tiên AI Action'
         : '◎ Sample: no AI · ✦ Custom: AI Action first';
@@ -740,17 +743,31 @@
 
   
   function hideSplash() {
-    const el = $('splash-screen');
-    if (!el) return;
-    el.classList.add('is-done');
-    el.setAttribute('aria-hidden', 'true');
-    setTimeout(() => { try { el.remove(); } catch (_) {} }, 500);
+    try {
+      const el = document.getElementById('splash-screen');
+      if (!el) return;
+      el.classList.add('is-done');
+      el.setAttribute('aria-hidden', 'true');
+      el.style.opacity = '0';
+      el.style.visibility = 'hidden';
+      el.style.pointerEvents = 'none';
+      el.style.display = 'none';
+      setTimeout(function () { try { el.remove(); } catch (_) {} }, 400);
+    } catch (_) {}
   }
   function startSplash() {
-    const el = $('splash-screen');
-    if (!el) return;
-    // Always show ~5s on cold open
-    setTimeout(hideSplash, 5000);
+    try {
+      const el = document.getElementById('splash-screen');
+      if (!el) return;
+      // Tap/click skips wait
+      el.addEventListener('click', hideSplash, { once: true });
+      // Hard timeout 5s — always dismiss
+      setTimeout(hideSplash, 5000);
+      // Safety net if something blocks timers briefly
+      setTimeout(hideSplash, 6500);
+    } catch (_) {
+      try { hideSplash(); } catch (__) {}
+    }
   }
 
   function showStart() {
@@ -1201,6 +1218,7 @@
   } catch (_) {}
   if (!state.tabs.length) { state.tabs = [{ id: 't' + Date.now().toString(36), title: state.lang === 'vi' ? 'Tab mới' : 'New tab', url: '' }]; state.activeTabId = state.tabs[0].id; }
   renderTabs();
+  startSplash();
   showStart();
 
   try {
@@ -1243,7 +1261,32 @@
     renderPlaylists();
     renderScripts();
     renderApps();
+    updateHomeCounts();
   }
+
+  function updateHomeCounts() {
+    const plN = (homeLib.playlists || []).reduce((n, p) => n + ((p.items && p.items.length) || 0), 0);
+    const scN = (homeLib.scripts || []).length;
+    const apN = (homeLib.apps || []).length;
+    const set = (id, v) => { const el = $(id); if (el) el.textContent = String(v); };
+    set('pl-count', plN);
+    set('sc-count', scN);
+    set('app-count', apN);
+  }
+
+  function closeHomePanels() {
+    ['panel-playlists', 'panel-scripts', 'panel-apps'].forEach((id) => {
+      const el = $(id);
+      if (el) el.hidden = true;
+    });
+  }
+
+  function openHomePanel(panelId) {
+    closeHomePanels();
+    const el = $(panelId);
+    if (el) el.hidden = false;
+  }
+
 
   function renderPlaylists() {
     const box = $('pl-list');
@@ -1453,6 +1496,13 @@
   }
 
   function bindHomeLibrary() {
+    document.querySelectorAll('.home-icon-btn[data-panel]').forEach((btn) => {
+      btn.addEventListener('click', () => openHomePanel(btn.getAttribute('data-panel')));
+    });
+    document.querySelectorAll('.home-panel-close').forEach((btn) => {
+      btn.addEventListener('click', () => closeHomePanels());
+    });
+
     if ($('btn-pl-add')) $('btn-pl-add').addEventListener('click', async () => {
       const title = state.lang === 'vi' ? 'Danh sách phát' : 'Playlist';
       await libFetch('/api/library/playlists', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) });
