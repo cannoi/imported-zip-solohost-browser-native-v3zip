@@ -133,17 +133,74 @@
     return tab.nav;
   }
 
+  function normalizeNavUrl(url) {
+    try {
+      const u = new URL(String(url || '').trim());
+      u.hash = '';
+      // stable form for history compare
+      return u.href;
+    } catch (_) {
+      return String(url || '').trim();
+    }
+  }
+
   function pushNav(tab, url) {
     const nav = ensureTabNav(tab);
     if (!nav) return;
-    // truncate forward history
-    if (nav.index < nav.stack.length - 1) nav.stack = nav.stack.slice(0, nav.index + 1);
-    if (nav.stack[nav.stack.length - 1] !== url) {
+    url = normalizeNavUrl(url);
+    if (!url || isInternalBridgeViewUrl(url)) return;
+    // truncate any forward entries when branching from middle / from home (index -1)
+    if (nav.index < nav.stack.length - 1) {
+      nav.stack = nav.stack.slice(0, Math.max(0, nav.index + 1));
+    }
+    const last = nav.stack.length ? nav.stack[nav.stack.length - 1] : null;
+    if (last !== url) {
       nav.stack.push(url);
-      if (nav.stack.length > 50) nav.stack.shift();
-      else nav.index = nav.stack.length - 1;
-    } else {
-      nav.index = nav.stack.length - 1;
+      while (nav.stack.length > 50) nav.stack.shift();
+    }
+    nav.index = nav.stack.length - 1;
+  }
+
+  function goBack() {
+    const tab = getActiveTab();
+    const nav = ensureTabNav(tab);
+    if (!nav || !nav.stack.length) {
+      showStart();
+      state.url = '';
+      if (input) input.value = '';
+      if (frame) { try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {} }
+      return;
+    }
+    if (nav.index > 0) {
+      nav.index -= 1;
+      const target = nav.stack[nav.index];
+      clientLog('info', 'nav.back', { index: nav.index, url: target, stack: nav.stack.length });
+      navigate(target, { skipHistory: true, force: true });
+      return;
+    }
+    // First entry in stack → return to Home without wiping history (Forward can restore)
+    if (nav.index === 0) {
+      nav.index = -1;
+      clientLog('info', 'nav.back_home', { stack: nav.stack.length });
+      showStart();
+      state.url = '';
+      if (input) input.value = '';
+      if (frame) { try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {} }
+      return;
+    }
+    // index already -1
+    showStart();
+  }
+
+  function goForward() {
+    const tab = getActiveTab();
+    const nav = ensureTabNav(tab);
+    if (!nav || !nav.stack.length) return;
+    if (nav.index < nav.stack.length - 1) {
+      nav.index += 1;
+      const target = nav.stack[nav.index];
+      clientLog('info', 'nav.forward', { index: nav.index, url: target });
+      navigate(target, { skipHistory: true, force: true });
     }
   }
 
@@ -1155,30 +1212,18 @@
     e.preventDefault();
     navigate(input && input.value);
   });
-  if ($('btn-back')) $('btn-back').addEventListener('click', () => {
-    const tab = getActiveTab();
-    const nav = ensureTabNav(tab);
-    if (nav && nav.index > 0) {
-      nav.index -= 1;
-      navigate(nav.stack[nav.index], { skipHistory: true, force: true });
-      return;
-    }
-    try { frame.contentWindow.history.back(); } catch (_) {}
+  if ($('btn-back')) $('btn-back').addEventListener('click', (e) => {
+    e.preventDefault();
+    goBack();
   });
-  if ($('btn-fwd')) $('btn-fwd').addEventListener('click', () => {
-    const tab = getActiveTab();
-    const nav = ensureTabNav(tab);
-    if (nav && nav.index >= 0 && nav.index < nav.stack.length - 1) {
-      nav.index += 1;
-      navigate(nav.stack[nav.index], { skipHistory: true, force: true });
-      return;
-    }
-    try { frame.contentWindow.history.forward(); } catch (_) {}
+  if ($('btn-fwd')) $('btn-fwd').addEventListener('click', (e) => {
+    e.preventDefault();
+    goForward();
   });
-  if ($('btn-reload')) $('btn-reload').addEventListener('click', () => {
+  if ($('btn-reload')) $('btn-reload').addEventListener('click', (e) => {
+    e.preventDefault();
     if (!state.url) return;
-    try { frame.contentWindow.location.reload(); }
-    catch (_) { frame.src = state.url; }
+    navigate(state.url, { skipHistory: true, force: true });
   });
   if ($('btn-reader')) $('btn-reader').addEventListener('click', () => {
     state.readerOn = !state.readerOn;
@@ -1201,11 +1246,17 @@
   if ($('btn-home')) $('btn-home').addEventListener('click', () => {
     state.url = '';
     if (input) input.value = '';
-    if (frame) frame.src = 'about:blank';
+    if (frame) { try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {} }
     if (btnOpen) btnOpen.href = '#';
     showStart();
     const active = getActiveTab();
-    if (active) { active.url = ''; active.title = 'New Tab'; renderTabs(); }
+    if (active) {
+      active.url = '';
+      active.title = state.lang === 'vi' ? 'Tab mới' : 'New tab';
+      const nav = ensureTabNav(active);
+      if (nav) nav.index = -1; // keep stack so Forward can restore
+      renderTabs();
+    }
   });
 
   // Default search engine settings. Custom templates only accept HTTP(S) URLs and encoded query placeholders.
@@ -1721,5 +1772,5 @@
         frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
         return true;
       } catch (_) { return false; }
-    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { if (state.url !== url && nav) { pushNav(tab, url); saveVisit(url); } applyUrlToUi(url, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); frame.src = view + '&t=' + Date.now(); } } } };
+    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); frame.src = view + '&t=' + Date.now(); } } } };
 })();

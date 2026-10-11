@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.18.6-no-auto-refresh",
+  "version": "10.18.7-back-fix",
   "description": "SoloHost Browser \u2014 Engine-first Playwright browser backend with persistent sessions and site-policy-aware auth",
   "main": "server.js",
   "engines": {
