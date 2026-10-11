@@ -20,8 +20,19 @@
     if (S.running) return { status: 'error', message: 'Agent already running', history: [] };
     hooks = Object.assign({ onStatus() {}, onStep() {}, onConfirm(_text, answer) { answer(false); } }, hooks || {});
     opts = opts || {};
-    const bridge = browser().getActiveBridge && browser().getActiveBridge();
-    if (!bridge || !bridge.sessionId || !bridge.token) return { status: 'error', message: 'Không có phiên trình duyệt backend. Hãy mở một trang trước.' , history: [] };
+    let bridge = browser().getActiveBridge && browser().getActiveBridge();
+    if (!bridge || !bridge.sessionId || !bridge.token) {
+      try {
+        hooks.onStatus('Đang tạo phiên backend (Playwright)…');
+        // Ensure a tab session exists by navigating home or blank engine session
+        if (browser().navigate) await browser().navigate('https://example.com/');
+        await sleep(800);
+        bridge = browser().getActiveBridge && browser().getActiveBridge();
+      } catch (_) {}
+    }
+    if (!bridge || !bridge.sessionId || !bridge.token) {
+      return { status: 'error', message: 'Không tạo được phiên backend. Hãy mở một trang (Go) trước, rồi chạy lại Agent.' , history: [] };
+    }
     S.running = true; S.stop = false; S.pollAbort = false; S.bridge = bridge; S.taskId = null;
     let cursor = 0, history = Array.isArray(opts.history) ? opts.history.slice() : [];
     const seen = new Set();

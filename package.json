@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.9.1-agent-playwright-ui",
+  "version": "10.9.2-hybrid-bridge",
   "description": "SoloHost Browser \u2014 Playwright Chromium engine + adaptive DOM Bridge + backend AI agent",
   "main": "server.js",
   "engines": {
