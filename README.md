@@ -1,4 +1,4 @@
-# SoloHost Browser V10.9.7
+# SoloHost Browser V10.9.8
 
 Lightweight private browser for **Pi Network SoloHost**.
 
@@ -12,6 +12,15 @@ Native **WebKitGTK cannot** paint into the remote SoloHost web page without a di
 
 Address bar, tabs, back/forward/home/reload, bookmarks, history, AI panel, Feedback, Settings, Logs.
 
+
+## V10.9.8 — Mobile-first rendering and engine recovery
+
+- Chromium remains the primary Playwright engine; startup falls back to Firefox/WebKit when an installed engine cannot launch. Runtime browser disconnects place the failing engine on a short cooldown before fallback retry.
+- Mobile viewport and touch emulation are enabled by default (`SOLOHOST_BROWSER_MOBILE=1`); set it to `0` for desktop context.
+- DOM Bridge snapshots and proxy HTML both apply responsive layout rules; `m.youtube.com` is preserved instead of forcibly redirected to `www.youtube.com`.
+- Google `/sorry/`/unusual-traffic responses are recognized as upstream verification. Search queries use a clearly labeled DuckDuckGo fallback when available; Google CAPTCHA is not bypassed.
+- Closed Playwright pages/contexts are recreated before navigation and bridge actions.
+- See `docs/V10.9.8_MOBILE_ENGINE_RECOVERY_REPORT.md` for diagnosis, scope, and validation limits.
 
 ## V10.9.7 — Login, YouTube playback and AI Agent recovery
 

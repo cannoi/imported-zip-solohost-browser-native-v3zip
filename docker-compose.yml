@@ -9,6 +9,8 @@ services:
       HOST: "0.0.0.0"
       HOME: "/tmp/solohost-browser"
       SOLOHOST_PLAYWRIGHT: "1"
+      SOLOHOST_BROWSER_ENGINE: "chromium"
+      SOLOHOST_BROWSER_MOBILE: "1"
       SOLOHOST_WEBKIT: "0"
       SOLOHOST_WEBKIT_BRIDGE: "0"
       SOLOHOST_DATA_DIR: "/app/data"

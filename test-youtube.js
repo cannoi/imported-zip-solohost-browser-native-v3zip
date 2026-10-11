@@ -6,6 +6,7 @@ const proxy = require('./lib/frame-proxy');
 // --- pure helpers ---
 assert.strictEqual(proxy.youtubeVideoId(new URL('https://www.youtube.com/watch?v=VE3vaEdKOCk')), 'VE3vaEdKOCk');
 assert.strictEqual(proxy.youtubeVideoId(new URL('https://youtu.be/Qi3i7bzTacI?t=3')), 'Qi3i7bzTacI');
+assert.strictEqual(new URL(proxy.normalizeTargetUrl('https://m.youtube.com/watch?v=VE3vaEdKOCk')).hostname, 'm.youtube.com', 'preserve mobile YouTube host');
 assert.strictEqual(proxy.youtubeVideoId(new URL('https://www.youtube.com/shorts/abcDEF12345')), 'abcDEF12345');
 assert.strictEqual(proxy.youtubeVideoId(new URL('https://www.youtube.com/results?search_query=x')), null);
 assert.ok(proxy.youtubePlayerPage('VE3vaEdKOCk', 'T <b>', 'http://h:1').includes('youtube.com/embed/VE3vaEdKOCk'));
