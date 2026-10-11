@@ -149,7 +149,7 @@
       const view = bridgeViewUrl(b);
       if (!frame || !view) return { ok: false, reason: 'no_viewport' };
       try {
-        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups');
+        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
         frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
       } catch (_) {
         return { ok: false, reason: 'frame_error' };
@@ -912,9 +912,9 @@
       const view = bridgeViewUrl(nav.bridge);
       if (!view) return false;
       try {
-        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups');
+        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
         frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
         return true;
       } catch (_) { return false; }
-    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { if (state.url !== url && nav) { pushNav(tab, url); saveVisit(url); } applyUrlToUi(url, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups'); frame.src = view + '&t=' + Date.now(); } } } };
+    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { if (state.url !== url && nav) { pushNav(tab, url); saveVisit(url); } applyUrlToUi(url, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); frame.src = view + '&t=' + Date.now(); } } } };
 })();

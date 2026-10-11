@@ -14,7 +14,7 @@ const client = fs.readFileSync(path.join(__dirname, 'public/browser-agent.js'), 
 assert.ok(client.includes('/api/browser/agent/tasks'));
 assert.ok(!client.includes('contentDocument'), 'UI agent must not inspect iframe DOM');
 assert.ok(!client.includes('el.click()'), 'UI agent must not execute page clicks');
-const server = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8');
+const server = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8') + '\n' + fs.readFileSync(path.join(__dirname, 'server-app.js'), 'utf8');
 assert.ok(server.includes('/api/browser/agent/sessions/:sessionId/tasks/:taskId/confirm'));
 const panel = fs.readFileSync(path.join(__dirname, 'public/ai-panel.js'), 'utf8');
 assert.ok(!panel.includes('onActions: executeActions') && !panel.includes('function executeActions('), 'AI actions must not be dispatched twice');

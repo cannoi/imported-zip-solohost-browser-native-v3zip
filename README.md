@@ -1,4 +1,4 @@
-# SoloHost Browser V10.7.0
+# SoloHost Browser V10.9.7
 
 Lightweight private browser for **Pi Network SoloHost**.
 
@@ -11,6 +11,20 @@ Native **WebKitGTK cannot** paint into the remote SoloHost web page without a di
 ## Features preserved
 
 Address bar, tabs, back/forward/home/reload, bookmarks, history, AI panel, Feedback, Settings, Logs.
+
+
+## V10.9.7 — Login, YouTube playback and AI Agent recovery
+
+- Fixed a JavaScript syntax error in `lib/browser-agent.js` that caused the server to silently fall back to `agent_off` for both the planner and backend task agent.
+- Google sign-in pages and sparse search forms now keep their sanitized interactive DOM controls instead of being replaced by a screenshot-only fallback.
+- YouTube watch URLs are routed to the titled player handler instead of being intercepted by the generic shell.
+- The DOM Bridge viewport CSP allows only official YouTube embed origins; the viewport sandbox allows nested player scripts while the bridge document itself remains `script-src 'none'`.
+- The normal test command now checks every shipped JavaScript file and includes Browser Agent, backend-agent and YouTube regression tests.
+- Updated stale tests that assumed all routes lived in `server.js`; current routes are mounted from `server-app.js`.
+
+### Important limits
+
+This remains a Docker-hosted Chromium backend with a sanitized DOM snapshot viewport, not a pixel-streamed full Chrome window. Google sign-in may still require an external browser if Google enforces CAPTCHA/device verification. YouTube playback depends on the target video, embed permissions, browser policy, network and SoloHost deployment; DRM/Widevine is not claimed. No automated test here proves live Google sign-in or video playback in the final SoloHost container.
 
 ## Run
 

@@ -13,13 +13,15 @@ assert.ok(fs.existsSync(path.join(root, 'public/ai-panel.js')));
 assert.ok(fs.existsSync(path.join(root, 'public/ai-module/ai-module.js')));
 assert.ok(fs.existsSync(path.join(root, 'lib/app-adapter.js')));
 const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
-assert.ok(server.includes('mountAIRoutes'));
-assert.ok(server.includes('mountFeedbackRoutes'));
-assert.ok(server.includes('/api/proxy'));
-assert.ok(server.includes('/api/browser/history'));
-assert.ok(server.includes('/api/browser/bookmarks'));
-assert.ok(!server.includes("require('./browser-gateway')"));
-assert.ok(server.includes('playwright-engine') || server.includes('playwrightEngine'));
+const serverApp = fs.readFileSync(path.join(root, 'server-app.js'), 'utf8');
+const fullServer = server + '\n' + serverApp;
+assert.ok(fullServer.includes('mountAIRoutes'));
+assert.ok(fullServer.includes('mountFeedbackRoutes'));
+assert.ok(fullServer.includes('/api/proxy'));
+assert.ok(fullServer.includes('/api/browser/history'));
+assert.ok(fullServer.includes('/api/browser/bookmarks'));
+assert.ok(!fullServer.includes("require('./browser-gateway')"));
+assert.ok(fullServer.includes('playwright-engine') || fullServer.includes('playwrightEngine'));
 const fb = fs.readFileSync(path.join(root, 'lib/feedback-module/feedback-service.js'), 'utf8');
 assert.ok(fb.includes('SHFH-CANNOI-0905428801'));
 const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
@@ -37,7 +39,7 @@ assert.ok(appJs.includes('function addCurrentBookmark'));
 assert.ok(appJs.includes('saveVisit(url)'));
 assert.ok(appJs.includes('function isInternalBridgeViewUrl'), 'bridge viewport URL must not become the active website URL');
 assert.ok(appJs.includes('navigate_internal_view_blocked'), 'internal viewport navigation must be blocked');
-assert.ok(server.includes('internal_url_not_navigable'), 'server must reject recursive navigation into its own session view');
+assert.ok(fullServer.includes('internal_url_not_navigable'), 'server must reject recursive navigation into its own session view');
 assert.ok(appJs.indexOf('if (href && isInternalBridgeViewUrl(href))') < appJs.indexOf('state.url = realHref'), 'internal bridge view must be excluded before syncing iframe URL');
 console.log('✓ package.json');
 console.log('✓ required files');
@@ -88,3 +90,24 @@ assert.ok(proxy.normalizeTargetUrl('http://14.176.78.46:62160/api/proxy?url=' + 
   console.log('✓ proxy rendering and SSRF regression checks');
   console.log('All static tests passed successfully.');
 })().catch(err => { console.error(err); process.exitCode = 1; });
+
+// Regression checks for the reported login/video/agent failures.
+const browserAgentSource = fs.readFileSync(path.join(root, 'lib/browser-agent.js'), 'utf8');
+assert.ok(browserAgentSource.includes('function systemPrompt'), 'agent planner source should load');
+const domBridge = require('./lib/engine/dom-bridge');
+const loginHtml = '<!doctype html><html><head><title>Sign in</title></head><body><form><input type="email" data-sh-id="e1"><input type="password" data-sh-id="e2"><button data-sh-id="e3">Next</button></form></body></html>';
+const loginView = domBridge.buildHybridView({ url: 'https://accounts.google.com/v3/signin', title: 'Sign in', html: loginHtml }, {
+  url: 'https://accounts.google.com/v3/signin', title: 'Sign in', html: loginHtml, textLen: 12, mapCount: 3, hasPassword: true
+});
+assert.ok(loginView.includes('type="password"') && loginView.includes('data-sh-id="e2"'), 'login DOM controls must remain interactive instead of screenshot-only');
+const googleView = domBridge.buildHybridView({ url: 'https://www.google.com/', title: 'Google', html: '<!doctype html><html><body><form><input type="search" name="q" data-sh-id="e1"><button data-sh-id="e2">Search</button></form></body></html>' }, {
+  url: 'https://www.google.com/', title: 'Google', html: '<!doctype html><html><body><form><input type="search" name="q" data-sh-id="e1"><button data-sh-id="e2">Search</button></form></body></html>', textLen: 6, mapCount: 2, screenshot: 'data:image/jpeg;base64,AAAA'
+});
+assert.ok(googleView.includes('type="search"') && !googleView.includes('Page shell is mostly script-driven'), 'sparse Google search controls must stay interactive despite a screenshot');
+const ytView = domBridge.buildHybridView({ url: 'https://www.youtube.com/watch?v=AAAAAAAAAAA', title: 'Video', html: '<html><body><a href="https://www.youtube.com/watch?v=AAAAAAAAAAA">video</a></body></html>', youtubeIds: ['AAAAAAAAAAA'] }, {
+  url: 'https://www.youtube.com/watch?v=AAAAAAAAAAA', title: 'Video', html: '<html><body><a href="https://www.youtube.com/watch?v=AAAAAAAAAAA">video</a></body></html>', youtubeIds: ['AAAAAAAAAAA'], textLen: 100, mapCount: 2
+});
+assert.ok(ytView.includes('youtube.com/embed/AAAAAAAAAAA') && ytView.includes('allowfullscreen'), 'YouTube hybrid view must contain a playable embed');
+assert.ok(fullServer.includes('frame-src https://www.youtube.com'), 'viewport CSP must allow official YouTube player frames');
+assert.ok(fs.readFileSync(path.join(root, 'public/app.js'), 'utf8').includes('allow-popups allow-scripts'), 'viewport sandbox must allow nested player scripts');
+console.log('✓ login DOM, YouTube embed and agent regressions');

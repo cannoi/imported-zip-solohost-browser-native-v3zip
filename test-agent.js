@@ -124,7 +124,7 @@ const { createAIService } = require('./lib/ai-module/ai-service');
   for (const id of ['agentToggle', 'agentBar', 'agentStop', 'agentYes', 'agentNo', 'agentConfirm', 'chatForm', 'chatInput', 'pane-feedback', 'pane-settings', 'pane-logs']) {
     assert.ok(html.includes('id="' + id + '"'), 'missing #' + id);
   }
-  const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8');
+  const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'server-app.js'), 'utf8');
   assert.ok(server.includes('/api/browser/agent/step'));
   assert.ok(server.includes("require('./lib/browser-agent')"));
   const svc = fs.readFileSync(path.join(root, 'lib/ai-module/ai-service.js'), 'utf8');

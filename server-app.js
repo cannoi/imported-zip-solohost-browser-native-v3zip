@@ -511,7 +511,9 @@ app.get('/api/browser/sessions/:id/view', (req, res) => {
   const html = session.html || '<!doctype html><p>Empty</p>';
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-store');
-  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline' https: http:; font-src https: http: data:; media-src https: http:; frame-src 'none'; script-src 'none'; base-uri 'self'");
+  // The bridge document itself cannot execute scripts. YouTube's nested player
+  // needs its own scripts and frame origin, so allow only the official embed hosts.
+  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline' https: http:; font-src https: http: data:; media-src https: http:; frame-src https://www.youtube.com https://www.youtube-nocookie.com; script-src 'none'; base-uri 'self'; form-action https: http:");
   res.send(html);
 });
 
