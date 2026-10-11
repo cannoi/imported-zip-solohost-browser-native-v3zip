@@ -94,3 +94,12 @@ In the AI panel → Chat, tap 🤖 and give a task; the AI operates the open pag
 - Content readiness checks recognize meaningful text, controls, links, images, media and worker audit metrics. Blank responses now trigger a clean fallback instead of being reported as successful pages.
 - Clears prior-page snapshot state at navigation start so a failed page cannot leave stale content masquerading as the current page.
 - Added regression tests for empty HTML, CSS-only documents, media-only pages, and internal viewport navigation guards.
+
+
+## V10.8 — Backend-owned AI Panel browser actions
+
+The Browser Agent now runs as a backend task against the authenticated browser session. The UI sends the task, polls progress, displays step results, and asks the user to confirm sensitive actions. It does not inspect the iframe DOM or directly click/type in the page. Backend actions use the WebKit worker/DOM Bridge; the viewport receives updated sanitized snapshots from the same session.
+
+Supported task patterns include opening URLs, web/search queries, clicking links and controls, filling non-secret fields, selecting options, scrolling, reading long pages in chunks, summarizing/extracting visible page information, and diagnosing browser logs. Passwords, OTPs, card data and other secrets are never supplied to the agent. Sensitive actions require user confirmation.
+
+Compatibility note: WebKitGTK is the backend engine, not Chromium. CAPTCHA, DRM, anti-bot pages, and some highly dynamic/cross-origin iframe content may still require opening the page in an external browser. The frontend snapshot intentionally does not execute website scripts in the SoloHost origin.

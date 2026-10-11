@@ -67,23 +67,9 @@ function browserContext() {
     lang: st.lang || (document.documentElement.lang || 'en'),
     theme: st.theme || document.documentElement.getAttribute('data-theme') || 'rainbow',
     app: 'SoloHost Browser',
-    version: '9.0.17'
+    version: '10.8.0'
   };
 }
-function executeActions(actions) {
-  (actions || []).forEach(a => {
-    if (!a || a.ok === false) return;
-    const name = a.action || a.name;
-    const value = a.value || (a.args && (a.args.url || a.args.value)) || '';
-    if (name === 'open_url' && value && window.SoloBrowser && typeof window.SoloBrowser.navigate === 'function') {
-      window.SoloBrowser.navigate(String(value));
-    }
-    if (name === 'open_security') window.open('/security.html', '_blank');
-    if (name === 'toggle_theme') document.getElementById('btn-theme')?.click();
-    if (name === 'open_tab') document.querySelector('.tab[data-tab="' + (value || 'chat') + '"]')?.click();
-  });
-}
-
 const aiChat = document.getElementById('chatLog') || document.getElementById('aiChat');
 const aiInput = document.getElementById('chatInput') || document.getElementById('aiInput');
 function appendMsg(role, html) {
@@ -103,7 +89,7 @@ const ai = window.UniversalAI.create({
     refreshStatus();
     loadSettings();
   },
-  onActions: executeActions
+  // Actions are dispatched once by sendAI(); do not also execute them from UniversalAI.onActions.
 });
 
 function closeAIPanel() {
@@ -153,9 +139,14 @@ async function applyAiActions(actions) {
   for (const a of actions) {
     const name = a.name || a.action;
     const args = a.args || {};
+    const actionValue = args.url || args.value || a.url || a.value || '';
     try {
-      if (name === 'open_url' && args.url && window.SoloBrowser && window.SoloBrowser.navigate) {
-        window.SoloBrowser.navigate(args.url);
+      if (name === 'open_url' && actionValue && window.SoloBrowser && window.SoloBrowser.navigate) {
+        await window.SoloBrowser.navigate(String(actionValue), { force: true });
+      } else if (name === 'open_security') {
+        window.open('/security.html', '_blank', 'noopener');
+      } else if (name === 'open_tab') {
+        document.querySelector('.tab[data-tab="' + String(actionValue || 'chat').replace(/[^a-z-]/gi, '') + '"]')?.click();
       } else if (name === 'toggle_theme') {
         document.getElementById('btn-theme')?.click();
       } else if (name === 'diagnose_logs') {
@@ -184,7 +175,6 @@ async function sendAI() {
     const out = await ai.chat(text, ctx);
     if (out && Array.isArray(out.actions)) await applyAiActions(out.actions);
     loading.remove();
-    executeActions(out.actions);
     const local = out.source === 'local' || out.configured === false;
     appendMsg('ai', escapeHtml(out.reply || 'Không có phản hồi').replace(/\n/g, '<br>') +
       (local ? '<div style="opacity:.55;font-size:.75rem">Local guide</div>' : ''));

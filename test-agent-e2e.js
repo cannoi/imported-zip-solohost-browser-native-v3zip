@@ -3,8 +3,8 @@
  * OPTIONAL end-to-end test (needs Playwright + Chromium; not part of `npm test`).
  *   PLAYWRIGHT_PATH=/path/to/node_modules/playwright node test-agent-e2e.js
  *
- * Runs the REAL frontend (public/), the REAL frame-proxy and the REAL planner (lib/browser-agent.js)
- * against a local fake website, with a scripted "model" standing in for the AI provider.
+ * Legacy client-DOM E2E harness. V10.8 moved browser actions into the authenticated backend
+ * session; this legacy harness does not create that session and is therefore not valid for V10.8.
  * Network is faked: *.example hosts resolve to a public IP and are routed to the local fake site.
  */
 const http = require('http');
@@ -16,6 +16,8 @@ const dns = require('dns').promises;
 let pw;
 try { pw = require(process.env.PLAYWRIGHT_PATH || 'playwright'); }
 catch { console.log('SKIP: playwright not installed (set PLAYWRIGHT_PATH)'); process.exit(0); }
+console.log('SKIP: legacy client-DOM E2E harness retired in V10.8; use backend task API integration tests on a running SoloHost/WebKit instance.');
+process.exit(0);
 
 const proxy = require('./lib/frame-proxy');
 const agent = require('./lib/browser-agent');

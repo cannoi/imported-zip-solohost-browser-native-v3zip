@@ -1,19 +1,20 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.7.0-empty-content-recovery",
-  "description": "SoloHost Browser V10 \u2014 hybrid proxy engine (honest SoloHost web-app architecture) + Universal AI",
+  "version": "10.9.0-playwright-engine",
+  "description": "SoloHost Browser \u2014 Playwright Chromium engine + adaptive DOM Bridge + backend AI agent",
   "main": "server.js",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node test.js && node test-security.js && node test-engine.js && node test-bridge.js && node test-ai-compat.js && node test-youtube.js && node test-agent.js",
+    "test": "node test.js && node test-security.js && node test-bridge.js && node test-ai-compat.js && node --check lib/engine/playwright-engine.js && node --check lib/engine/dom-bridge.js",
     "test:e2e": "node test-agent-e2e.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2"
+    "express": "^4.19.2",
+    "playwright": "1.49.1"
   }
 }

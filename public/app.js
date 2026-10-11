@@ -904,5 +904,5 @@
     else { const active = getActiveTab(); if (active && active.url) navigate(active.url); }
   } catch (_) {}
 
-  window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary };
+  window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary, getActiveBridge() { const tab = getActiveTab(); const nav = ensureTabNav(tab); return nav && nav.bridge ? { sessionId: nav.bridge.sessionId, token: nav.bridge.token, backend: nav.bridge.backend, url: state.url || '' } : null; }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { if (state.url !== url && nav) { pushNav(tab, url); saveVisit(url); } applyUrlToUi(url, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups'); frame.src = view + '&t=' + Date.now(); } } } };
 })();

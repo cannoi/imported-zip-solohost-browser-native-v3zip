@@ -21,6 +21,9 @@ const DATA_DIR = path.join(__dirname, 'data');
 const appLog = require('./lib/app-log');
 const engineCaps = require('./lib/engine/capabilities');
 const { webkitManager, installShutdownHooks } = require('./lib/engine/webkit-manager');
+const playwrightEngine = require('./lib/engine/playwright-engine');
+try { playwrightEngine.installShutdownHooks(); } catch (_) {}
+const agentProgress = require('./lib/agent-progress');
 const domBridge = require('./lib/engine/dom-bridge');
 const aiCompat = require('./lib/ai-compat');
 installShutdownHooks();
@@ -125,11 +128,13 @@ app.get('/api/engine/status', async (_req, res) => {
   try {
     const base = engineCaps.detect();
     const wk = await webkitManager.status();
+    const pw = await playwrightEngine.status();
     res.json({
       ok: true,
       ...base,
       webkitWorker: wk,
-      mode: (wk && wk.ready) ? 'webkit-worker+proxy-fallback' : base.mode
+      playwright: pw,
+      mode: (pw && pw.ready) ? 'playwright+proxy-fallback' : ((wk && wk.ready) ? 'webkit-worker+proxy-fallback' : base.mode)
     });
   } catch (e) {
     res.json({ ok: true, ...engineCaps.detect(), webkitWorker: { ready: false, error: String(e.message || e) } });
@@ -223,6 +228,22 @@ const ai = createAIService({
 });
 mountAIRoutes(app, ai);
 
+app.get('/api/agent/progress', (req, res) => {
+  res.json({ ok: true, events: agentProgress.list(Number(req.query.limit) || 40) });
+});
+app.get('/api/agent/progress/stream', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Connection', 'keep-alive');
+  res.write(': ok\n\n');
+  const onProg = (evt) => {
+    try { res.write('data: ' + JSON.stringify(evt) + '\n\n'); } catch (_) {}
+  };
+  agentProgress.bus.on('progress', onProg);
+  req.on('close', () => agentProgress.bus.off('progress', onProg));
+});
+
+
 // Optional AI compatibility assist (never required for browsing)
 app.post('/api/browser/ai-compat', async (req, res) => {
   try {
@@ -245,6 +266,8 @@ app.post('/api/browser/ai-compat', async (req, res) => {
 
 // Browser Agent planner: observation + task -> next validated action (executed by public/browser-agent.js)
 const browserAgent = require('./lib/browser-agent');
+
+const backendAgent = require('./lib/backend-agent');
 const agentHits = new Map();
 function agentRateOk(key) {
   const now = Date.now();
@@ -254,6 +277,46 @@ function agentRateOk(key) {
   if (agentHits.size > 500) agentHits.delete(agentHits.keys().next().value);
   return true;
 }
+// Backend-owned Browser Agent tasks. The UI sends only the task and polls progress;
+// observations and browser actions remain inside the authenticated backend session.
+app.post('/api/browser/agent/tasks', async (req, res) => {
+  try {
+    if (!agentRateOk(req.ip || 'anon')) return res.status(429).json({ ok: false, code: 'RATE_LIMIT', error: 'Too many agent tasks, wait a minute.' });
+    const body = req.body || {};
+    const session = domBridge.authSession(String(body.sessionId || ''), String(body.token || req.get('x-session-token') || ''));
+    if (!session) return res.status(401).json({ ok: false, error: 'browser_session_unauthorized' });
+    const out = await backendAgent.start({ ai, session, task: body.task, lang: body.lang, history: body.history, maxSteps: body.maxSteps });
+    appLog.log('info', 'agent.task.started', { taskId: out.taskId, sessionId: session.id });
+    res.status(202).json(out);
+  } catch (e) {
+    appLog.log('warn', 'agent.task.start_fail', { error: String(e.message || e).slice(0, 200) });
+    res.status(400).json({ ok: false, error: String(e.message || e).slice(0, 300) });
+  }
+});
+app.get('/api/browser/agent/sessions/:sessionId/tasks/:taskId', (req, res) => {
+  const session = domBridge.authSession(req.params.sessionId, String(req.get('x-session-token') || req.query.token || ''));
+  if (!session) return res.status(401).json({ ok: false, error: 'browser_session_unauthorized' });
+  const out = backendAgent.status(req.params.taskId, session.id, req.query.after);
+  if (!out) return res.status(404).json({ ok: false, error: 'task_not_found' });
+  res.json(out);
+});
+app.post('/api/browser/agent/sessions/:sessionId/tasks/:taskId/stop', (req, res) => {
+  const body = req.body || {};
+  const session = domBridge.authSession(req.params.sessionId, String(req.get('x-session-token') || body.token || ''));
+  if (!session) return res.status(401).json({ ok: false, error: 'browser_session_unauthorized' });
+  const out = backendAgent.stop(req.params.taskId, session.id);
+  if (!out) return res.status(404).json({ ok: false, error: 'task_not_found' });
+  res.json(out);
+});
+app.post('/api/browser/agent/sessions/:sessionId/tasks/:taskId/confirm', (req, res) => {
+  const body = req.body || {};
+  const session = domBridge.authSession(req.params.sessionId, String(req.get('x-session-token') || body.token || ''));
+  if (!session) return res.status(401).json({ ok: false, error: 'browser_session_unauthorized' });
+  const out = backendAgent.confirm(req.params.taskId, session.id, String(body.confirmationId || ''), body.approved === true);
+  if (!out) return res.status(409).json({ ok: false, error: 'confirmation_not_pending' });
+  res.json(out);
+});
+
 app.post('/api/browser/agent/step', async (req, res) => {
   try {
     if (!agentRateOk(req.ip || 'anon')) return res.status(429).json({ ok: false, code: 'RATE_LIMIT', error: 'Too many agent steps, wait a minute.' });
@@ -443,14 +506,12 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ success: false, error: String((err && err.message) || err) });
 });
 
+
 const server = http.createServer(app);
 server.listen(PORT, HOST, () => {
   console.log(`SoloHost Browser v${PKG.version} listening on http://${HOST}:${PORT}`);
   appLog.log('info', 'server.listen', { host: HOST, port: PORT, version: PKG.version });
 });
-server.on('error', (err) => {
-  console.error('Server listen error:', err);
-  process.exit(1);
-});
+server.on('error', (err) => { console.error(err); process.exit(1); });
 process.on('SIGTERM', () => server.close(() => process.exit(0)));
 process.on('SIGINT', () => server.close(() => process.exit(0)));
