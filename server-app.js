@@ -88,7 +88,7 @@ let aiCompat = softRequire('ai-compat', './lib/ai-compat', {
 try { installShutdownHooks(); } catch (_) {}
 try { appLog.configure(DATA_DIR); } catch (_) {}
 const PKG = (() => {
-  try { return require('./package.json'); } catch { return { version: '10.21.0' }; }
+  try { return require('./package.json'); } catch { return { version: '10.22.0' }; }
 })();
 
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* ignore */ }
@@ -259,7 +259,7 @@ function healthPayload() {
     status: 'ok',
     ok: true,
     service: 'solohost-browser',
-    version: PKG.version || '10.21.0',
+    version: PKG.version || '10.22.0',
     mode: 'hybrid-proxy',
     engine: engineCaps.detect(),
     port: PORT,
@@ -552,7 +552,7 @@ try {
   const fbOpts = {
     appId: process.env.SHFH_APP_ID || 'solohost-browser',
     appName: 'SoloHost Browser',
-    version: PKG.version || '10.21.0'
+    version: PKG.version || '10.22.0'
   };
   if (process.env.SHFH_HUB_ID) fbOpts.hubId = process.env.SHFH_HUB_ID;
   if (process.env.SHFH_HUB_URL) fbOpts.baseUrl = process.env.SHFH_HUB_URL;
@@ -583,12 +583,15 @@ app.post('/api/browser/sessions', async (req, res) => {
     }
     const privateMode = !!(req.body && req.body.privateMode);
     const profileId = String((req.body && req.body.profileId) || '').toLowerCase();
-    const stableClientKey = /^[a-f0-9]{32}$/.test(profileId) ? 'profile:' + profileId : 'ip:' + String(ip);
+    const hasStableProfile = /^[a-f0-9]{32}$/.test(profileId);
+    // Never bind persisted credentials to a client IP, and never share a global
+    // fallback profile between clients that omitted their profile ID.
+    const stableClientKey = hasStableProfile ? 'profile:' + profileId : 'ephemeral:' + require('crypto').randomBytes(16).toString('hex');
     const locale = String((req.body && req.body.locale) || '').slice(0, 40);
     let timezoneId = String((req.body && req.body.timezoneId) || '').slice(0, 80);
     try { new Intl.DateTimeFormat('en-US', { timeZone: timezoneId }); } catch (_) { timezoneId = ''; }
     const privateSuffix = privateMode ? ':private:' + require('crypto').randomBytes(12).toString('hex') : '';
-    const out = await domBridge.createSession({ clientKey: stableClientKey + privateSuffix, privateMode, locale, timezoneId });
+    const out = await domBridge.createSession({ clientKey: stableClientKey + privateSuffix, privateMode, persist: hasStableProfile && !privateMode, locale, timezoneId });
     res.json({ ok: true, ...out });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
@@ -685,6 +688,40 @@ app.delete('/api/browser/sessions/:id', async (req, res) => {
   if (!session) return res.status(401).json({ ok: false, error: 'unauthorized' });
   await domBridge.destroySession(session.id);
   res.json({ ok: true, closed: true });
+});
+
+// Explicit session persistence (cookies/localStorage/IndexedDB) — no secrets in response
+app.post('/api/browser/sessions/:id/persist', async (req, res) => {
+  try {
+    const tok = req.get('x-session-token') || req.query.token || '';
+    const session = domBridge.authSession(req.params.id, tok);
+    if (!session) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    if (!session.pwSessionId || !playwrightEngine.forcePersist) {
+      return res.status(400).json({ ok: false, error: 'no_playwright_session' });
+    }
+    const out = await playwrightEngine.forcePersist(session.pwSessionId);
+    res.json(out);
+  } catch (e) {
+    res.status(400).json({ ok: false, error: String(e.message || e).slice(0, 160) });
+  }
+});
+app.get('/api/browser/profiles', (req, res) => {
+  try {
+    const profiles = playwrightEngine.listPersistedProfiles ? playwrightEngine.listPersistedProfiles() : [];
+    res.json({ ok: true, profiles });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e).slice(0, 120) });
+  }
+});
+app.delete('/api/browser/profiles/:key', (req, res) => {
+  try {
+    const out = playwrightEngine.clearPersistedProfile
+      ? playwrightEngine.clearPersistedProfile(req.params.key)
+      : { ok: false, error: 'unavailable' };
+    res.json(out);
+  } catch (e) {
+    res.status(400).json({ ok: false, error: String(e.message || e).slice(0, 120) });
+  }
 });
 
 

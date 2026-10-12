@@ -14,7 +14,7 @@ const PORT = Number(process.env.PORT || 8080);
 const HOST = process.env.HOST || '0.0.0.0';
 const PUBLIC_DIR = path.join(__dirname, 'public');
 const PKG = (() => {
-  try { return require('./package.json'); } catch { return { version: '10.21.0' }; }
+  try { return require('./package.json'); } catch { return { version: '10.22.0' }; }
 })();
 
 try { fs.mkdirSync(path.join(__dirname, 'data'), { recursive: true }); } catch (_) {}

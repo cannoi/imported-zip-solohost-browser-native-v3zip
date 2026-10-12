@@ -29,3 +29,10 @@ Existing UI, Bridge, tabs, context menu, AI/Feedback/Settings/Logs, security che
 
 ## v10.21.0 — Adaptive Bridge templates
 See `docs/V10.21.0_ADAPTIVE_BRIDGE_TEMPLATES_REPORT.md` for the bridge fidelity fix, page-family detection, regression tests, and limitations.
+
+
+## v10.22.0 — Session persistence hardening
+- Upgraded Playwright and its Docker base image together to 1.51.1 so browser storage snapshots can include IndexedDB as well as cookies and localStorage.
+- Persist browser state on page load and on a low-frequency interval, in addition to existing navigation/interaction/close saves.
+- Use a stable default profile identity when a profile ID is absent; do not key persistent sessions by the client IP.
+- See `docs/V10.22.0_SESSION_PERSISTENCE_REPORT.md` for scope, limitations and validation.
