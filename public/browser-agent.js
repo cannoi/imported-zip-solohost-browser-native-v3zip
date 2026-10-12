@@ -38,6 +38,11 @@
     const seen = new Set();
     try {
       hooks.onStatus('Đang gửi nhiệm vụ đến Browser Backend…');
+      if (!bridge || !bridge.sessionId || !bridge.token) {
+        if (browser().ensureBridgeSession) await browser().ensureBridgeSession();
+        bridge = browser().getBridgeSession ? browser().getBridgeSession() : bridge;
+      }
+      if (!bridge || !bridge.sessionId) throw new Error('browser_session_unauthorized');
       const started = await api('/api/browser/agent/tasks', { method: 'POST', body: JSON.stringify({ sessionId: bridge.sessionId, token: bridge.token, task, lang: (browser().state && browser().state.lang) || 'en', history, maxSteps: opts.maxSteps || 200, maxMs: opts.maxMs || (Number(localStorage.getItem('solo_agent_time_min')||60)*60000), workMemory: opts.workMemory || null }) });
       S.taskId = started.taskId;
       while (!S.pollAbort && !S.stop) {

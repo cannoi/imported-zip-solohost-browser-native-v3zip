@@ -607,36 +607,48 @@
           }
         }
         doc.addEventListener('click', (e) => {
+          // Universal link handler (depth 1..n): any <a href> navigates inside SoloHost
+          const aEl = e.target && e.target.closest && e.target.closest('a[href]');
+          if (aEl) {
+            const hrefRaw = aEl.getAttribute('href') || '';
+            if (hrefRaw && hrefRaw.charAt(0) !== '#' && !/^(javascript|mailto|tel):/i.test(hrefRaw)) {
+              e.preventDefault();
+              e.stopPropagation();
+              try {
+                let abs = hrefRaw;
+                try {
+                  const u = new URL(hrefRaw, state.url || (typeof location !== 'undefined' ? location.href : 'https://example.com'));
+                  if (u.pathname === '/api/proxy' && u.searchParams.get('url')) abs = u.searchParams.get('url');
+                  else abs = u.href;
+                } catch (_) {}
+                if (!/^https?:/i.test(abs) && !/^http:\/\/127\.0\.0\.1/i.test(abs)) {
+                  try { abs = new URL(hrefRaw, state.url || 'https://example.com').href; } catch (_) {}
+                }
+                if (isYouTubeVideoUrl(abs)) {
+                  clientLog('info', 'youtube.video_handoff', { url: abs });
+                  navigate(abs, { force: true, mode: MODE.PROXY });
+                  return;
+                }
+                if (isNativeMediaOrDocumentUrl(abs)) {
+                  navigate(abs, { force: true });
+                  return;
+                }
+                if (aEl.target === '_blank' || e.ctrlKey || e.metaKey) {
+                  newTab(abs);
+                } else {
+                  navigate(abs, { force: true });
+                }
+              } catch (err) {
+                clientLog('warn', 'link.navigate_fail', { detail: String(err && err.message || err) });
+              }
+              return;
+            }
+          }
           const el = e.target && e.target.closest && e.target.closest('[data-sh-id]');
           if (!el) return;
           const tag = (el.tagName || '').toLowerCase();
-          if (tag === 'a' && (e.ctrlKey || e.metaKey || el.target === '_blank')) {
-            e.preventDefault();
-            const href = el.getAttribute('href');
-            try {
-              const abs = new URL(href, state.url || 'https://example.com').href;
-              newTab(abs);
-            } catch (_) {}
-            return;
-          }
-          if (tag === 'a') {
-            try {
-              const abs = new URL(el.getAttribute('href') || '', state.url || 'https://example.com').href;
-              if (isNativeMediaOrDocumentUrl(abs)) {
-                e.preventDefault(); e.stopPropagation(); navigate(abs, { force: true }); return;
-              }
-              // Hand video clicks from YouTube's live DOM to the official player route.
-              // Do not click through the Playwright page and then display its script-stripped snapshot.
-              if (isYouTubeVideoUrl(abs)) {
-                e.preventDefault(); e.stopPropagation();
-                clientLog('info', 'youtube.video_handoff', { url: abs, detail: 'official_embed_player_route' });
-                navigate(abs, { force: true, mode: MODE.PROXY });
-                return;
-              }
-            } catch (_) {}
-          }
           const inputType = (el.getAttribute('type') || '').toLowerCase();
-          if (tag === 'a' || tag === 'button' || tag === 'label' || ['button','link','tab','checkbox','switch','option','menuitem'].includes(el.getAttribute('role')) ||
+          if (tag === 'button' || tag === 'label' || ['button','link','tab','checkbox','switch','option','menuitem'].includes(el.getAttribute('role')) ||
               (tag === 'input' && ['checkbox','radio','submit','button','reset'].includes(inputType)) ) {
             e.preventDefault();
             e.stopPropagation();
@@ -2019,7 +2031,29 @@
   // Extra bind after paint (mobile WebView)
   setTimeout(function () { try { bindHomeLibrary(); refreshHomeLibrary(); } catch (_) {} }, 300);
   document.documentElement.setAttribute('data-solo-home-utils-ready', '1');
-  window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary, addCurrentUrlToPlaylist, refreshHomeLibrary, runScript, stopScript, showTasksPanel() { showStart(); openHomePanel('panel-scripts'); refreshHomeLibrary(); }, openHomePanel, getActiveBridge() { const tab = getActiveTab(); const nav = ensureTabNav(tab); return nav && nav.bridge ? { sessionId: nav.bridge.sessionId, token: nav.bridge.token, backend: nav.bridge.backend, url: state.url || '' } : null; },
+
+  function getBridgeSession() {
+    const tab = getActiveTab();
+    const nav = ensureTabNav(tab);
+    return nav && nav.bridge ? { sessionId: nav.bridge.sessionId, token: nav.bridge.token, backend: nav.bridge.backend, url: state.url || '' } : null;
+  }
+  async function ensureBridgeSession() {
+    let b = getBridgeSession();
+    if (b && b.sessionId && b.token) return b;
+    try {
+      // Create a lightweight session via navigate to about:blank / example
+      if (typeof ensureEngineSession === 'function') {
+        await ensureEngineSession(getActiveTab());
+      } else if (typeof createBridgeSession === 'function') {
+        await createBridgeSession(getActiveTab());
+      } else {
+        // Soft navigate to open a backend session
+        await navigate('https://example.com/', { force: true, skipHistory: true });
+      }
+    } catch (_) {}
+    return getBridgeSession();
+  }
+  window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary, addCurrentUrlToPlaylist, refreshHomeLibrary, runScript, stopScript, showTasksPanel() { showStart(); openHomePanel('panel-scripts'); refreshHomeLibrary(); }, openHomePanel, getActiveBridge: getBridgeSession, getBridgeSession, ensureBridgeSession,
     softRefreshActiveBridge: softRefreshActiveBridge, refreshBridgeView() {
       const tab = getActiveTab();
       const nav = ensureTabNav(tab);
