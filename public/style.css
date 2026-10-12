@@ -901,3 +901,26 @@ button:disabled { opacity:.35; cursor:not-allowed; }
   font-weight: 700; font-size: 15px; cursor: pointer;
 }
 .access-gate-error { color: #ff7b7b !important; opacity: 1 !important; font-size: 0.8rem !important; }
+
+/* AI Agent messages & continue */
+.msg { display: flex; gap: 8px; align-items: flex-start; margin: 10px 0; line-height: 1.45; }
+.msg .msg-icon { flex: 0 0 auto; font-size: 1rem; line-height: 1.4; opacity: 0.9; }
+.msg .msg-body { flex: 1; min-width: 0; word-break: break-word; }
+.msg.agent-step { opacity: 0.92; font-size: 0.92rem; }
+.msg.agent-step small { display: block; opacity: 0.65; margin-top: 4px; font-size: 0.8rem; }
+.msg .agent-md-table pre {
+  margin: 6px 0 0; padding: 10px; border-radius: 10px;
+  background: rgba(0,0,0,.25); overflow-x: auto; font-size: 0.78rem; white-space: pre-wrap;
+}
+.msg .agent-embed-img { max-width: 100%; border-radius: 10px; margin-top: 6px; display: block; }
+.msg .agent-embed-yt { margin-top: 6px; }
+.agent-continue-bar {
+  display: none; gap: 8px; padding: 8px 12px; flex-wrap: wrap;
+  border-top: 1px solid rgba(255,255,255,.08);
+}
+.agent-continue-btn {
+  flex: 1; min-width: 120px; padding: 10px 12px; border: 0; border-radius: 10px;
+  background: linear-gradient(135deg, #5b8cff, #7c5cff); color: #fff; font-weight: 700; cursor: pointer;
+}
+.agent-continue-btn.ghost { background: transparent; border: 1px solid rgba(255,255,255,.2); color: inherit; font-weight: 600; }
+.agent-inline-btn { margin-left: 6px; padding: 4px 10px; border-radius: 8px; border: 0; background: #5b8cff; color: #fff; cursor: pointer; }

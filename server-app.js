@@ -106,6 +106,12 @@ app.use((req, res, next) => {
 // Access password: always required for remote/public IP clients.
 // Local/loopback/private LAN can skip when BROWSER_ACCESS_PASSWORD is empty (SoloHost on-device).
 // Health checks stay public so SoloHost can monitor container readiness.
+function accessPassword() {
+  // Always enforce a password so remote/public and first-open always gate.
+  // SoloHost config BROWSER_ACCESS_PASSWORD overrides the default.
+  const v = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
+  return v || String(process.env.DEFAULT_ACCESS_PASSWORD || 'solohost').trim();
+}
 function clientIp(req) {
   const xf = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
   const ip = xf || req.ip || (req.socket && req.socket.remoteAddress) || '';
@@ -147,17 +153,10 @@ app.use((req, res, next) => {
     req.path === '/reader-injector.js'
   )) return next();
 
-  const configured = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
+  const configured = accessPassword();
   const ip = clientIp(req);
   const local = isLocalOrPrivateIp(ip);
-  // Remote public access must always authenticate
-  if (!configured) {
-    if (local) return next();
-    res.setHeader('WWW-Authenticate', 'Basic realm="SoloHost Browser", charset="UTF-8"');
-    return res.status(401).type('text/plain').send(
-      'Remote access requires BROWSER_ACCESS_PASSWORD. Set it in SoloHost app settings, then restart.'
-    );
-  }
+  // Password always required (local + remote) so splash → gate always shows
   const auth = String(req.headers.authorization || '');
   const m = auth.match(/^Basic\s+(.+)$/i);
   let supplied = '';
@@ -188,7 +187,7 @@ app.use((req, res, next) => {
 
 
 app.get('/api/access/status', (req, res) => {
-  const configured = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
+  const configured = accessPassword();
   const cookie = String(req.headers.cookie || '');
   const authenticated = cookie.includes('solo_access=1');
   const showGate = !!configured && !authenticated;
@@ -203,7 +202,7 @@ app.get('/api/access/status', (req, res) => {
 });
 
 app.post('/api/access/login', (req, res) => {
-  const configured = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
+  const configured = accessPassword();
   if (!configured) {
     res.setHeader('Set-Cookie', 'solo_access=1; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400');
     return res.json({ ok: true, authenticated: true, note: 'no_password_configured' });
@@ -481,7 +480,7 @@ app.post('/api/browser/agent/tasks', async (req, res) => {
     const body = req.body || {};
     const session = domBridge.authSession(String(body.sessionId || ''), String(body.token || req.get('x-session-token') || ''));
     if (!session) return res.status(401).json({ ok: false, error: 'browser_session_unauthorized' });
-    const out = await backendAgent.start({ ai, session, task: body.task, lang: body.lang, history: body.history, maxSteps: body.maxSteps });
+    const out = await backendAgent.start({ ai, session, task: body.task, lang: body.lang, history: body.history, maxSteps: body.maxSteps, maxMs: body.maxMs, workMemory: body.workMemory });
     appLog.log('info', 'agent.task.started', { taskId: out.taskId, sessionId: session.id });
     res.status(202).json(out);
   } catch (e) {

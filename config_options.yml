@@ -11,3 +11,9 @@ fields:
     required: false
     help: "Required when opening the app via public IP. Local SoloHost can leave empty."
     default: ""
+
+  - name: AGENT_TIME_LIMIT_MIN
+    label: AI Agent time limit (minutes)
+    type: number
+    preserve_if_blank: true
+    help: "Max minutes per AI Agent task (default 60)."

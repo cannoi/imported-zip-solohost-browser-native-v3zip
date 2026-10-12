@@ -914,8 +914,8 @@
       const vi = state.lang === 'vi';
       if (title) title.textContent = vi ? 'Mật khẩu truy cập' : 'Access password';
       if (hint) hint.textContent = vi
-        ? 'Nhập mật khẩu SoloHost Browser để tiếp tục.'
-        : 'Enter the SoloHost Browser password to continue.';
+        ? 'Nhập mật khẩu để mở app (mặc định: solohost — đổi trong cài đặt SoloHost).'
+        : 'Enter password to open the app (default: solohost — change in SoloHost settings).';
       const input = $('access-gate-input');
       if (input) setTimeout(() => input.focus(), 50);
       return false;
@@ -1317,7 +1317,7 @@
   if ($('history-clear')) $('history-clear').addEventListener('click', async () => {
   if ($('btn-private-tab')) $('btn-private-tab').addEventListener('click', () => {
     const id = 't' + Date.now().toString(36);
-    const tab = { id, title: state.lang === 'vi' ? 'Tab ẩn danh' : 'Private tab', url: '', private: true };
+    const tab = { id, title: state.lang === 'vi' ? 'Tab ẩn danh mới' : 'New private tab', url: '', private: true };
     state.tabs.push(tab);
     state.activeTabId = id;
     renderTabs();
