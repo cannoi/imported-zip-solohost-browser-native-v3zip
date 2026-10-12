@@ -19,7 +19,7 @@
       <button type="button" class="icon-btn" id="btn-new-tab" title="New tab" aria-label="New tab">＋</button>
       <button type="button" class="icon-btn" id="btn-bookmark" title="Bookmark" aria-label="Bookmark">☆</button>
       <button type="button" class="icon-btn" id="btn-menu" title="Settings" aria-label="Settings" aria-expanded="false" aria-controls="settings-menu">☰</button>
-      <a class="icon-btn" id="btn-open-tab" href="#" target="_blank" rel="noopener noreferrer" title="Open" aria-label="Open">↗</a>
+      <button type="button" class="icon-btn" id="btn-private-tab" title="Private tab" aria-label="Private tab">🕶️</button>
     </div>
   </header>
 
@@ -42,6 +42,17 @@
         <h1 class="splash-title">SoloHost Browser</h1>
         <p class="splash-tagline">Simple · Private · Lightweight</p>
       </div>
+    </div>
+
+    <div class="access-gate" id="access-gate" hidden>
+      <form class="access-gate-card" id="access-gate-form" autocomplete="on">
+        <div class="access-gate-logo">🔒</div>
+        <h2 id="access-gate-title">Access password</h2>
+        <p id="access-gate-hint">Enter the SoloHost Browser password to continue.</p>
+        <input type="password" id="access-gate-input" name="password" placeholder="Password" autocomplete="current-password" required>
+        <p class="access-gate-error" id="access-gate-error" hidden></p>
+        <button type="submit" class="access-gate-btn" id="access-gate-submit">Unlock</button>
+      </form>
     </div>
 
     <div class="start-screen" id="start-screen">

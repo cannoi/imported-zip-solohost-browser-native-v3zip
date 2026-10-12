@@ -4,7 +4,8 @@
   const $ = (id) => document.getElementById(id);
   const frame = $('main-webview');
   const input = $('url-input');
-  const btnOpen = $('btn-open-tab');
+  const btnOpen = $('btn-open-tab'); // legacy (removed from chrome)
+  const btnPrivate = $('btn-private-tab');
   const btnLang = $('btn-lang');
   const btnTheme = $('btn-theme');
   const THEMES = ['rainbow', 'dark', 'light'];
@@ -894,6 +895,73 @@
 
 
   
+
+  async function checkAccessGate() {
+    const gate = $('access-gate');
+    if (!gate) return true;
+    try {
+      const r = await fetch('/api/access/status', { cache: 'no-store', credentials: 'same-origin' });
+      const j = await r.json();
+      if (!j || !j.required) {
+        gate.hidden = true;
+        gate.setAttribute('hidden', '');
+        return true;
+      }
+      gate.hidden = false;
+      gate.removeAttribute('hidden');
+      const title = $('access-gate-title');
+      const hint = $('access-gate-hint');
+      const vi = state.lang === 'vi';
+      if (title) title.textContent = vi ? 'Mật khẩu truy cập' : 'Access password';
+      if (hint) hint.textContent = vi
+        ? 'Nhập mật khẩu SoloHost Browser để tiếp tục.'
+        : 'Enter the SoloHost Browser password to continue.';
+      const input = $('access-gate-input');
+      if (input) setTimeout(() => input.focus(), 50);
+      return false;
+    } catch (_) {
+      // If status fails on local, allow in
+      gate.hidden = true;
+      return true;
+    }
+  }
+
+  function bindAccessGate() {
+    const form = $('access-gate-form');
+    if (!form || form._bound) return;
+    form._bound = true;
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const input = $('access-gate-input');
+      const err = $('access-gate-error');
+      const pwd = (input && input.value) || '';
+      try {
+        const r = await fetch('/api/access/login', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pwd })
+        });
+        const j = await r.json().catch(() => ({}));
+        if (r.ok && j.ok) {
+          if (err) err.hidden = true;
+          const gate = $('access-gate');
+          if (gate) { gate.hidden = true; gate.setAttribute('hidden', ''); }
+          return;
+        }
+        if (err) {
+          err.hidden = false;
+          err.textContent = (state.lang === 'vi') ? 'Mật khẩu không đúng.' : 'Incorrect password.';
+        }
+      } catch (ex) {
+        if (err) {
+          err.hidden = false;
+          err.textContent = String(ex.message || ex);
+        }
+      }
+    });
+  }
+
   function hideSplash() {
     try {
       const el = document.getElementById('splash-screen');
@@ -912,11 +980,10 @@
       const el = document.getElementById('splash-screen');
       if (!el) return;
       // Tap/click skips wait
-      el.addEventListener('click', hideSplash, { once: true });
+      el.addEventListener('click', function(){ hideSplash(); checkAccessGate(); }, { once: true });
       // Hard timeout 5s — always dismiss
-      setTimeout(hideSplash, 5000);
-      // Safety net if something blocks timers briefly
-      setTimeout(hideSplash, 6500);
+      setTimeout(function () { hideSplash(); checkAccessGate(); }, 5000);
+      setTimeout(function () { hideSplash(); checkAccessGate(); }, 6500);
     } catch (_) {
       try { hideSplash(); } catch (__) {}
     }
@@ -1248,6 +1315,18 @@
   if ($('library-close')) $('library-close').addEventListener('click', () => { $('library-overlay').hidden = true; });
   document.querySelectorAll('[data-library]').forEach(b => b.addEventListener('click', () => openLibrary(b.dataset.library)));
   if ($('history-clear')) $('history-clear').addEventListener('click', async () => {
+  if ($('btn-private-tab')) $('btn-private-tab').addEventListener('click', () => {
+    const id = 't' + Date.now().toString(36);
+    const tab = { id, title: state.lang === 'vi' ? 'Tab ẩn danh' : 'Private tab', url: '', private: true };
+    state.tabs.push(tab);
+    state.activeTabId = id;
+    renderTabs();
+    showStart();
+    state.url = '';
+    if (input) input.value = '';
+    if (frame) { try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {} }
+    clientLog('info', 'tab.private_new', { id });
+  });
     if (state.libraryMode !== 'history') return;
     try { await fetch('/api/browser/history', { method: 'DELETE' }); openLibrary('history'); } catch (_) {}
   });
@@ -1379,6 +1458,7 @@
   startSplash();
   showStart();
   try { bindBridgeViewportHelpers(); } catch (_) {}
+  try { bindAccessGate(); } catch (_) {}
 
   try {
     const q = new URLSearchParams(location.search).get('url');

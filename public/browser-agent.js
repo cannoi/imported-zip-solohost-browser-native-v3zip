@@ -38,7 +38,7 @@
     const seen = new Set();
     try {
       hooks.onStatus('Đang gửi nhiệm vụ đến Browser Backend…');
-      const started = await api('/api/browser/agent/tasks', { method: 'POST', body: JSON.stringify({ sessionId: bridge.sessionId, token: bridge.token, task, lang: (browser().state && browser().state.lang) || 'en', history, maxSteps: opts.maxSteps || 15 }) });
+      const started = await api('/api/browser/agent/tasks', { method: 'POST', body: JSON.stringify({ sessionId: bridge.sessionId, token: bridge.token, task, lang: (browser().state && browser().state.lang) || 'en', history, maxSteps: opts.maxSteps || 40 }) });
       S.taskId = started.taskId;
       while (!S.pollAbort && !S.stop) {
         const st = await api('/api/browser/agent/sessions/' + encodeURIComponent(bridge.sessionId) + '/tasks/' + encodeURIComponent(S.taskId) + '?after=' + cursor, { method: 'GET' });

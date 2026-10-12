@@ -227,9 +227,16 @@ function parseRequestedTime(text) {
   return String(hour).padStart(2, '0') + ':' + String(minute).padStart(2, '0');
 }
 async function modifyRecentTask(text) {
-  const t = String(text || '').toLowerCase();
-  const changeIntent = /(?:đổi|doi|thay đổi|thay doi|sửa|sua|chỉnh|chinh|chuyển|chuyen|change|modify|update|make it|set it|pause|resume|disable|enable|tạm dừng|tam dung|bật lại|bat lai|tắt|tat|dừng|dung)/i.test(t);
-  const taskReference = /(?:task|nhiệm vụ|nhiem vu|lịch|lich|schedule|giờ đó|gio do|lúc đó|luc do|that|it|repeat|duration|phút|phut|minutes?|giờ|hours?|\b\d{1,2}\s*(?:am|pm|h|giờ)\b)/i.test(t);
+  const raw = String(text || '');
+  // Never hijack multi-step agent briefs or long role prompts
+  if (raw.length > 350) return null;
+  if (/role\s*:|goal\s*:|step-by-step|required output|guardrails|markdown/i.test(raw)) return null;
+  if (/(?:hãy thực hiện|hay thuc hien|làm đi|lam di|thực hiện ngay|thuc hien ngay|execute now|run this task)/i.test(raw) && raw.length > 80) return null;
+  const t = raw.toLowerCase();
+  // "dừng lại trước bước…" in agent briefs is NOT pause-task intent
+  const changeIntent = /(?:đổi|doi|thay đổi|thay doi|sửa|sua|chỉnh|chinh|change|modify|update|make it|set it|pause|resume|disable|enable|tạm dừng|tam dung|bật lại|bat lai|tắt nhiệm vụ|tat nhiem vu)/i.test(t)
+    && !/dừng lại trước|dung lai truoc|stop immediately before|do not (?:enter|perform) (?:any )?payment/i.test(t);
+  const taskReference = /(?:task|nhiệm vụ|nhiem vu|lịch phát|lich phat|schedule|giờ đó|gio do|lúc đó|luc do|repeat|duration|phút|phut|minutes?)/i.test(t);
   if (!changeIntent || !taskReference) return null;
   await loadAIMemory();
   let taskId = '';
@@ -285,6 +292,14 @@ async function sendAI() {
     appendMsg('ai', escapeHtml(ok ? (agentLang() === 'vi' ? 'Đã lưu skill có thể tái sử dụng: ' : 'Saved reusable skill: ') + intent.name : (agentLang() === 'vi' ? 'Không lưu được skill; hãy kiểm tra nội dung có chứa bí mật hay không.' : 'Could not save this skill; check that it contains no secrets.')));
     await persistTurn(text, ok ? 'Saved skill: ' + intent.name : 'Skill not saved');
     return;
+  }
+  // Multi-step agent briefs run immediately (never mis-route to schedule/task patch)
+  if (isAgentBrief(text) || shouldRunAgent(text)) {
+    // Prefer agent over local one-shot when the request is a long brief
+    if (isAgentBrief(text) || (shouldRunAgent(text) && String(text).length > 120)) {
+      await runAgentTask(text);
+      return;
+    }
   }
   try {
     const updatedTask = await modifyRecentTask(text);
@@ -580,13 +595,22 @@ document.getElementById('fbSend')?.addEventListener('click', async () => {
 let agentCtx = null;
 try { agentCtx = JSON.parse(localStorage.getItem('solo_agent_context') || 'null'); } catch (_) { agentCtx = null; }
 function agentLang() { return ((window.SoloBrowser && window.SoloBrowser.state && window.SoloBrowser.state.lang) || 'en') === 'vi' ? 'vi' : 'en'; }
+function isAgentBrief(text) {
+  const t = String(text || '');
+  if (t.length > 500) return true;
+  if (/role\s*:|goal\s*:|step-by-step instructions|required output format|guardrails/i.test(t)) return true;
+  if (/(?:so sánh|so sanh|compare|thu thập|thu thap|extract|scraping|báo cáo|bao cao|markdown table|top 3)/i.test(t) && t.length > 200) return true;
+  if (/(?:hãy thực hiện|hay thuc hien|thực hiện ngay|thuc hien ngay|làm đi|lam di|execute (?:now|this)|run (?:this )?task|bắt đầu ngay|bat dau ngay)/i.test(t)) return true;
+  return false;
+}
 function shouldRunAgent(text) {
   if (!window.SoloAgent) return false;
   if (agentCtx) return true;
   const t = String(text || '').trim();
-  // Avoid \b after Vietnamese verbs (JS word-boundary is ASCII-only and breaks "mở YouTube")
-  const imperative = /^(?:hãy\s+|vui lòng\s+|giúp tôi\s+|giup toi\s+|please\s+|can you\s+|could you\s+)?(?:mở|mo\b|truy cập|truy cap|đi tới|di toi|tìm kiếm|tim kiem|tìm và mở|tim va mo|bấm|bam|nhấn|nhan|nhập|nhap|cuộn|cuon|chọn|chon|open\b|visit\b|go to|navigate to|search(?: for)?|find and open|click\b|type into|scroll to|select\b|buy\b|purchase|checkout|order|add to cart|nghe|phát|phat|play\b)/i.test(t);
-  const hasTarget = /https?:\/\/|www\.|youtube|google|bing|facebook|tiktok|instagram|reddit|wikipedia|website|web page|trang web|trang hiện tại|trang nay|current page|first result|kết quả đầu|ket qua dau|video|link|liên kết|lien ket|search results|results page|product page|current product|\bcart\b|checkout|buy it|nhạc|nhac|music/i.test(t);
+  if (isAgentBrief(t)) return true;
+  // Avoid \b after Vietnamese verbs
+  const imperative = /^(?:hãy\s+|vui lòng\s+|giúp tôi\s+|giup toi\s+|please\s+|can you\s+|could you\s+)?(?:mở|mo\b|truy cập|truy cap|đi tới|di toi|tìm kiếm|tim kiem|tìm và mở|tim va mo|bấm|bam|nhấn|nhan|nhập|nhap|cuộn|cuon|chọn|chon|open\b|visit\b|go to|navigate to|search(?: for)?|find and open|click\b|type into|scroll to|select\b|buy\b|purchase|checkout|order|add to cart|nghe|phát|phat|play\b|nghiên cứu|nghien cuu|research)/i.test(t);
+  const hasTarget = /https?:\/\/|www\.|youtube|google|bing|facebook|tiktok|instagram|reddit|wikipedia|github|pypi|huggingface|website|web page|trang web|trang hiện tại|current page|video|link|nhạc|nhac|music|framework|llm|agent/i.test(t);
   return imperative && hasTarget && t.length < 12000;
 }
 
@@ -689,6 +713,7 @@ async function runAgentTask(text) {
   agentUi(true);
   if (statusEl) statusEl.textContent = vi ? 'Bắt đầu…' : 'Starting…';
 
+  const maxSteps = isAgentBrief(task) ? 40 : 18;
   const out = await window.SoloAgent.run(task, {
     onStatus(t) { if (statusEl) statusEl.textContent = t; },
     onStep(s) {
@@ -699,7 +724,7 @@ async function runAgentTask(text) {
       if (confirmText) confirmText.textContent = (vi ? 'AI muốn: ' : 'AI wants to: ') + t + (vi ? '. Cho phép?' : '. Allow?');
       if (confirmBox) confirmBox.hidden = false;
     }
-  }, { history });
+  }, { history, maxSteps });
 
   yes?.removeEventListener('click', onYes);
   no?.removeEventListener('click', onNo);

@@ -869,3 +869,35 @@ button:disabled { opacity:.35; cursor:not-allowed; }
   flex-basis: 100%;
 }
 .bg-music-dock.is-expanded iframe { height: 120px; }
+
+/* Access password gate (after splash when password configured) */
+.access-gate {
+  position: fixed; inset: 0; z-index: 10001;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(8,10,16,0.92); padding: 16px;
+}
+.access-gate[hidden] { display: none !important; }
+.access-gate-card {
+  width: min(360px, 100%);
+  padding: 24px 20px 20px;
+  border-radius: 16px;
+  background: var(--chrome-bg, #161a22);
+  border: 1px solid var(--chrome-line, #333);
+  box-shadow: 0 16px 48px rgba(0,0,0,.45);
+  text-align: center;
+}
+.access-gate-logo { font-size: 2rem; margin-bottom: 8px; }
+.access-gate-card h2 { margin: 0 0 6px; font-size: 1.15rem; }
+.access-gate-card p { margin: 0 0 14px; font-size: 0.85rem; opacity: 0.75; line-height: 1.4; }
+.access-gate-card input[type="password"] {
+  width: 100%; box-sizing: border-box;
+  padding: 12px 14px; border-radius: 10px;
+  border: 1px solid var(--chrome-line, #444);
+  background: #0e1117; color: inherit; font-size: 16px; margin-bottom: 10px;
+}
+.access-gate-btn {
+  width: 100%; padding: 12px; border: 0; border-radius: 10px;
+  background: linear-gradient(135deg, #5b8cff, #7c5cff); color: #fff;
+  font-weight: 700; font-size: 15px; cursor: pointer;
+}
+.access-gate-error { color: #ff7b7b !important; opacity: 1 !important; font-size: 0.8rem !important; }

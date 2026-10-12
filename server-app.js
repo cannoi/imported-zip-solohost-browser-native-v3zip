@@ -121,7 +121,32 @@ function isLocalOrPrivateIp(ip) {
   return false;
 }
 app.use((req, res, next) => {
-  if (['/health', '/ready', '/api/health', '/api/ready'].includes(req.path)) return next();
+  const openPaths = ['/health', '/ready', '/api/health', '/api/ready', '/api/access/status', '/api/access/login'];
+  if (openPaths.includes(req.path)) return next();
+  // Allow shell assets so splash + password form can render before unlock
+  if (req.method === 'GET' && (
+    req.path === '/' ||
+    req.path.startsWith('/style') ||
+    req.path.startsWith('/app.js') ||
+    req.path.startsWith('/public') ||
+    req.path.endsWith('.css') ||
+    req.path.endsWith('.js') ||
+    req.path.endsWith('.png') ||
+    req.path.endsWith('.jpg') ||
+    req.path.endsWith('.svg') ||
+    req.path.endsWith('.ico') ||
+    req.path.endsWith('.woff2') ||
+    req.path === '/index.html' ||
+    req.path === '/splash-logo.jpg' ||
+    req.path === '/ai-panel.css' ||
+    req.path === '/ai-panel.js' ||
+    req.path === '/ai-icon.png' ||
+    req.path.startsWith('/ai-module') ||
+    req.path.startsWith('/feedback-module') ||
+    req.path === '/browser-agent.js' ||
+    req.path === '/reader-injector.js'
+  )) return next();
+
   const configured = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
   const ip = clientIp(req);
   const local = isLocalOrPrivateIp(ip);
@@ -159,6 +184,39 @@ app.use((req, res, next) => {
   }
   res.setHeader('WWW-Authenticate', 'Basic realm="SoloHost Browser", charset="UTF-8"');
   res.status(401).type('text/plain').send('SoloHost Browser access password required.');
+});
+
+
+app.get('/api/access/status', (req, res) => {
+  const configured = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
+  const cookie = String(req.headers.cookie || '');
+  const authenticated = cookie.includes('solo_access=1');
+  const showGate = !!configured && !authenticated;
+  res.json({
+    ok: true,
+    required: showGate,
+    configured: !!configured,
+    authenticated,
+    local: isLocalOrPrivateIp(clientIp(req)),
+    message: showGate ? 'password_required' : 'ok'
+  });
+});
+
+app.post('/api/access/login', (req, res) => {
+  const configured = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
+  if (!configured) {
+    res.setHeader('Set-Cookie', 'solo_access=1; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400');
+    return res.json({ ok: true, authenticated: true, note: 'no_password_configured' });
+  }
+  const supplied = String((req.body && req.body.password) || '');
+  const crypto = require('crypto');
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(configured);
+  if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+    res.setHeader('Set-Cookie', 'solo_access=1; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400');
+    return res.json({ ok: true, authenticated: true });
+  }
+  res.status(401).json({ ok: false, error: 'invalid_password' });
 });
 
 // Same-origin style CORS only (no open *). SoloHost UI and API share origin.
