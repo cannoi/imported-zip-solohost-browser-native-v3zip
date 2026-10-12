@@ -295,8 +295,13 @@ async function sendAI() {
       appendMsg('ai', escapeHtml(reply)); await persistTurn(text, reply); if (window.SoloBrowser && window.SoloBrowser.showTasksPanel) window.SoloBrowser.showTasksPanel(); return;
     }
   } catch (e) { appendMsg('ai', escapeHtml(e.message || 'Task update failed')); await persistTurn(text, e.message || 'Task update failed'); return; }
-  // One conversational interface: clear browser-operation requests automatically go to Agent;
-  // questions, planning, explanations, and follow-up refinements stay in chat.
+  // 1) Fast path: clear open/search intents execute immediately (no AI delay)
+  const localAct = resolveLocalBrowserAction(text);
+  if (localAct) {
+    const ok = await executeLocalBrowserAction(localAct, text);
+    if (ok) return;
+  }
+  // 2) Complex browser ops → Agent; pure Q&A stays in chat
   if (shouldRunAgent(text)) { await runAgentTask(text); return; }
   const taskIntent = /(?:mỗi ngày|hằng ngày|hang ngay|daily|every day|lúc \d{1,2}|\d{1,2}\s*(?:h|giờ)|schedule|đặt lịch|dat lich)/i.test(text) && /youtube|nhạc|nhac|music|thiền|thien|meditation|lofi|video|mở|mo/i.test(text);
   if (taskIntent) {
@@ -323,7 +328,14 @@ async function sendAI() {
     try { const lr = await fetch('/api/logs').then(r => r.json()); logs = (lr.logs || []).filter(l => l && l.level !== 'debug').slice(-8).map(l => ({ level: l.level, event: l.event || l.message || '', at: l.at || l.timestamp || '' })); } catch (_) {}
     const ctx = Object.assign(browserContext(), { aiMemory: { memories: (aiMemory.memories || []).map(x => x.content).slice(0, 30), skills: (aiMemory.skills || []).map(x => ({ name: x.name, content: x.content })).slice(0, 20), profileUpdatedAt: aiMemory.updatedAt || null }, conversationSummary: (aiMemory.history || []).slice(-12).map(m => ({ role: m.role, content: String(m.content || '').slice(0, 1200) })), logs });
     const out = await ai.chat(text, ctx, { history: (aiMemory.history || []).slice(-16) });
-    if (out && Array.isArray(out.actions)) await applyAiActions(out.actions);
+    if (out && Array.isArray(out.actions) && out.actions.length) await applyAiActions(out.actions);
+    else if (out && out.reply) {
+      // Provider said it would open a site but forgot structured actions — recover
+      const recovered = resolveLocalBrowserAction(text) || resolveLocalBrowserAction(out.reply);
+      if (recovered && window.SoloBrowser && window.SoloBrowser.navigate) {
+        try { await window.SoloBrowser.navigate(String(recovered.url), { force: true }); } catch (_) {}
+      }
+    }
     for (const suggestion of (out.memorySuggestions || []).slice(0, 3)) {
       if (suggestion && suggestion.content) await saveMemoryRecord('memory', { content: suggestion.content });
     }
@@ -572,10 +584,79 @@ function shouldRunAgent(text) {
   if (!window.SoloAgent) return false;
   if (agentCtx) return true;
   const t = String(text || '').trim();
-  const imperative = /^(?:hãy\s+|vui lòng\s+|giúp tôi\s+|giup toi\s+|please\s+|can you\s+|could you\s+)?(?:mở|mo|truy cập|truy cap|đi tới|di toi|tìm kiếm|tim kiem|tìm và mở|tim va mo|bấm|bam|nhấn|nhan|nhập|nhap|cuộn|cuon|chọn|chon|open|visit|go to|navigate to|search(?: for)?|find and open|click|type into|scroll to|select|buy|purchase|checkout|order|add to cart)\b/i.test(t);
-  const hasTarget = /https?:\/\/|www\.|\b(?:youtube|google|bing|facebook|tiktok|instagram|reddit|wikipedia|website|web page|trang web|trang hiện tại|trang nay|current page|first result|kết quả đầu|ket qua dau|video|link|liên kết|lien ket|search results|results page|product page|current product|\bui\b|cart|checkout|buy it)\b/i.test(t);
+  // Avoid \b after Vietnamese verbs (JS word-boundary is ASCII-only and breaks "mở YouTube")
+  const imperative = /^(?:hãy\s+|vui lòng\s+|giúp tôi\s+|giup toi\s+|please\s+|can you\s+|could you\s+)?(?:mở|mo\b|truy cập|truy cap|đi tới|di toi|tìm kiếm|tim kiem|tìm và mở|tim va mo|bấm|bam|nhấn|nhan|nhập|nhap|cuộn|cuon|chọn|chon|open\b|visit\b|go to|navigate to|search(?: for)?|find and open|click\b|type into|scroll to|select\b|buy\b|purchase|checkout|order|add to cart|nghe|phát|phat|play\b)/i.test(t);
+  const hasTarget = /https?:\/\/|www\.|youtube|google|bing|facebook|tiktok|instagram|reddit|wikipedia|website|web page|trang web|trang hiện tại|trang nay|current page|first result|kết quả đầu|ket qua dau|video|link|liên kết|lien ket|search results|results page|product page|current product|\bcart\b|checkout|buy it|nhạc|nhac|music/i.test(t);
   return imperative && hasTarget && t.length < 12000;
 }
+
+/** Fast local browser action — no AI round-trip for clear open/search intents */
+function resolveLocalBrowserAction(text) {
+  const raw = String(text || '').trim();
+  if (!raw || raw.length > 500) return null;
+  const t = raw.replace(/^(?:hãy|vui lòng|giúp tôi|giup toi|please|can you|could you)\s+/i, '').trim();
+  // Direct URL
+  const urlM = t.match(/https?:\/\/[^\s<>"']+/i);
+  if (urlM && /^(?:mở|mo|open|truy cập|truy cap|đi tới|di toi|go to|visit)\b/i.test(t)) {
+    return { type: 'open_url', url: urlM[0], label: urlM[0] };
+  }
+  if (urlM && t === urlM[0]) return { type: 'open_url', url: urlM[0], label: urlM[0] };
+  // YouTube search / open
+  if (/youtube|\byt\b/i.test(t) && /mở|mo\b|open|tìm|tim|search|nghe|phát|phat|play|nhạc|nhac|music/i.test(t)) {
+    let q = t
+      .replace(/^(?:mở|mo|open|tìm(?:\s*kiếm)?|tim(?:\s*kiem)?|search|nghe|phát|phat|play)\s+/i, '')
+      .replace(/\b(?:trên|on|trong|in|từ|from)\s+/gi, ' ')
+      .replace(/\b(?:youtube|yt)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+    if (!q || q.length < 1) q = 'music';
+    const url = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
+    return { type: 'open_url', url: url, label: 'YouTube: ' + q };
+  }
+  // Google / Bing search
+  if (/(?:google|bing)\b/i.test(t) && /mở|mo\b|open|tìm|tim|search/i.test(t)) {
+    let q = t
+      .replace(/^(?:mở|mo|open|tìm(?:\s*kiếm)?|tim(?:\s*kiem)?|search)\s+/i, '')
+      .replace(/\b(?:trên|on|trong|in)\s+/gi, ' ')
+      .replace(/\b(?:google|bing)\b/gi, ' ')
+      .replace(/\s+/g, ' ')
+      .trim() || 'news';
+    const eng = /bing/i.test(t) ? 'bing' : 'google';
+    const url = eng === 'bing'
+      ? 'https://www.bing.com/search?q=' + encodeURIComponent(q)
+      : 'https://www.google.com/search?q=' + encodeURIComponent(q);
+    return { type: 'open_url', url: url, label: eng + ': ' + q };
+  }
+  // Generic "search X" / "tìm X"
+  const sm = t.match(/^(?:tìm(?:\s*kiếm)?|tim(?:\s*kiem)?|search(?:\s+for)?)\s+(.+)$/i);
+  if (sm && sm[1] && !/youtube|google|bing/i.test(t)) {
+    const q = sm[1].trim();
+    if (q.length >= 2) {
+      return { type: 'open_url', url: 'https://www.bing.com/search?q=' + encodeURIComponent(q), label: 'Search: ' + q };
+    }
+  }
+  return null;
+}
+
+async function executeLocalBrowserAction(action, text) {
+  if (!action || !action.url) return false;
+  const vi = agentLang() === 'vi';
+  try {
+    if (window.SoloBrowser && typeof window.SoloBrowser.navigate === 'function') {
+      await window.SoloBrowser.navigate(String(action.url), { force: true });
+      const reply = vi
+        ? ('Đã mở: ' + (action.label || action.url))
+        : ('Opened: ' + (action.label || action.url));
+      appendMsg('ai', escapeHtml(reply));
+      await persistTurn(text, reply);
+      return true;
+    }
+  } catch (e) {
+    appendMsg('ai', escapeHtml(String(e.message || e)));
+  }
+  return false;
+}
+
 function agentUi(show) {
   const bar = document.getElementById('agentBar');
   if (bar) bar.hidden = !show;

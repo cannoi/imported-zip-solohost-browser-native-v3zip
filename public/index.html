@@ -268,5 +268,20 @@
   })();
   </script>
 
+
+  <!-- Persistent music dock: keeps playing when home/panel is closed or window minimized (page still open) -->
+  <div id="bg-music-dock" class="bg-music-dock" hidden>
+    <div class="bg-music-meta">
+      <span id="bg-music-label">♪</span>
+      <span id="bg-music-title">—</span>
+    </div>
+    <div class="bg-music-actions">
+      <button type="button" class="chip" id="bg-music-prev" title="Prev">⏮</button>
+      <button type="button" class="chip" id="bg-music-play" title="Play/Pause">▶</button>
+      <button type="button" class="chip" id="bg-music-next" title="Next">⏭</button>
+      <button type="button" class="chip" id="bg-music-close" title="Stop">×</button>
+    </div>
+    <iframe id="bg-music-frame" title="Background music" src="about:blank" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+  </div>
 </body>
 </html>

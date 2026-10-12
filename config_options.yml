@@ -1,12 +1,13 @@
 title: "SoloHost Browser"
 eyebrow: SoloHost App
 description: "Simple private lightweight browser with AI tasks and music library."
-footer_hint: Leave access password empty to disable app login.
+footer_hint: Set access password for public IP remote access. Empty allows local/LAN only.
 output_file: .env
 after_save: Saved. Restart the app from SoloHost.
 fields:
   - name: BROWSER_ACCESS_PASSWORD
-    label: Browser access password (optional)
+    label: Browser access password (required for public IP)
     type: password
     required: false
+    help: "Required when opening the app via public IP. Local SoloHost can leave empty."
     default: ""

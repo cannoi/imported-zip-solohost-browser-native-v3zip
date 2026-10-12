@@ -1531,12 +1531,37 @@
     } catch (_) { return null; }
   }
 
+  function musicPlayerFrame() {
+    // Prefer background dock so audio continues when home panel is closed
+    return $('bg-music-frame') || $('playlist-player-frame');
+  }
+
+  function showMusicDock(on, titleText) {
+    const dock = $('bg-music-dock');
+    if (!dock) return;
+    if (on) {
+      dock.hidden = false;
+      dock.removeAttribute('hidden');
+      dock.classList.toggle('is-expanded', !!homeLib.musicMode);
+      if ($('bg-music-title') && titleText) $('bg-music-title').textContent = titleText;
+      if ($('bg-music-play')) $('bg-music-play').textContent = homeLib.isPlaying ? 'Ⅱ' : '▶';
+    } else {
+      dock.hidden = true;
+      dock.setAttribute('hidden', '');
+      const bg = $('bg-music-frame');
+      if (bg) bg.src = 'about:blank';
+    }
+  }
+
   function playPlaylistItem() {
     const pl = activePlaylist();
-    const player = $('playlist-player-frame'); const title = $('playlist-now-title'); const hint = $('playlist-player-hint');
+    const player = musicPlayerFrame();
+    const panelPlayer = $('playlist-player-frame');
+    const title = $('playlist-now-title'); const hint = $('playlist-player-hint');
     if (!pl || !pl.items || !pl.items.length) {
       if (player) player.src = 'about:blank';
-      homeLib.isPlaying = false; updateMusicControls();
+      if (panelPlayer && panelPlayer !== player) panelPlayer.src = 'about:blank';
+      homeLib.isPlaying = false; updateMusicControls(); showMusicDock(false);
       if (title) title.textContent = state.lang === 'vi' ? 'Chọn video để phát' : 'Choose a video';
       return;
     }
@@ -1546,13 +1571,19 @@
     const embed = getVideoEmbedUrl(it.url);
     if (title) { title.textContent = it.title || it.url; title.dataset.userTitle = '1'; }
     if (embed && player) {
-      player.src = withPlayerApi(embed);
+      const src = withPlayerApi(embed);
+      player.src = src;
+      // Keep panel preview in sync if open
+      if (panelPlayer && panelPlayer !== player) panelPlayer.src = src;
       homeLib.isPlaying = true; updateMusicControls();
-      if (hint) hint.textContent = state.lang === 'vi' ? 'Video phát ngay trong Playlist. Một số video có thể tắt tính năng nhúng.' : 'Video plays inside Playlist. Some videos may disable embedding.';
-      clientLog('info', 'playlist.embed_play', { source: it.source || 'video' });
+      showMusicDock(true, it.title || it.url);
+      if (hint) hint.textContent = state.lang === 'vi'
+        ? 'Đang phát nền — thu cửa sổ app vẫn nghe được (trình duyệt cho phép).'
+        : 'Background play — keeps playing if the app window stays open.';
+      clientLog('info', 'playlist.embed_play', { source: it.source || 'video', background: true });
     } else {
       if (player) player.src = 'about:blank';
-      homeLib.isPlaying = false; updateMusicControls();
+      homeLib.isPlaying = false; updateMusicControls(); showMusicDock(false);
       if (hint) hint.textContent = state.lang === 'vi' ? 'Nguồn này chưa có trình nhúng chính thức được hỗ trợ. Hãy thêm liên kết YouTube, Vimeo hoặc TikTok.' : 'This source has no supported official embed. Add a YouTube, Vimeo, or TikTok link.';
     }
   }
@@ -1567,7 +1598,7 @@
     if (repeat) { const labels = { off: state.lang === 'vi' ? 'Tắt lặp' : 'Repeat off', all: state.lang === 'vi' ? 'Lặp tất cả' : 'Repeat all', one: state.lang === 'vi' ? 'Lặp một bài' : 'Repeat one' }; repeat.classList.toggle('active', homeLib.repeatMode !== 'off'); repeat.textContent = homeLib.repeatMode === 'one' ? '🔂' : '🔁'; repeat.title = labels[homeLib.repeatMode] || labels.off; repeat.setAttribute('aria-pressed', homeLib.repeatMode !== 'off' ? 'true' : 'false'); }
   }
   function sendPlayerCommand(command, args = {}) {
-    const f = $('playlist-player-frame'); if (!f || !f.contentWindow) return false;
+    const f = musicPlayerFrame(); if (!f || !f.contentWindow) return false;
     try { const u = new URL(f.src); if (/youtube-nocookie\.com$/.test(u.hostname)) { f.contentWindow.postMessage(JSON.stringify({ event: 'command', func: command, args }), 'https://www.youtube-nocookie.com'); return true; }
       if (/player\.vimeo\.com$/.test(u.hostname)) { f.contentWindow.postMessage({ method: command === 'playVideo' ? 'play' : command === 'pauseVideo' ? 'pause' : 'setCurrentTime', value: args[0] }, 'https://player.vimeo.com'); return true; }
     } catch (_) {} return false;

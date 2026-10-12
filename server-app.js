@@ -103,18 +103,60 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
   next();
 });
-// Optional SoloHost app access password. Leave BROWSER_ACCESS_PASSWORD empty to disable it.
+// Access password: always required for remote/public IP clients.
+// Local/loopback/private LAN can skip when BROWSER_ACCESS_PASSWORD is empty (SoloHost on-device).
 // Health checks stay public so SoloHost can monitor container readiness.
+function clientIp(req) {
+  const xf = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+  const ip = xf || req.ip || (req.socket && req.socket.remoteAddress) || '';
+  return String(ip).replace(/^::ffff:/i, '');
+}
+function isLocalOrPrivateIp(ip) {
+  const s = String(ip || '');
+  if (!s || s === '127.0.0.1' || s === '::1' || s === 'localhost') return true;
+  if (/^10\.\d+\.\d+\.\d+$/.test(s)) return true;
+  if (/^192\.168\.\d+\.\d+$/.test(s)) return true;
+  if (/^172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+$/.test(s)) return true;
+  if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.\d+\.\d+$/.test(s)) return true; // CGNAT optional treat private
+  return false;
+}
 app.use((req, res, next) => {
-  const configured = String(process.env.BROWSER_ACCESS_PASSWORD || '');
-  if (!configured || ['/health','/ready','/api/health','/api/ready'].includes(req.path)) return next();
+  if (['/health', '/ready', '/api/health', '/api/ready'].includes(req.path)) return next();
+  const configured = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
+  const ip = clientIp(req);
+  const local = isLocalOrPrivateIp(ip);
+  // Remote public access must always authenticate
+  if (!configured) {
+    if (local) return next();
+    res.setHeader('WWW-Authenticate', 'Basic realm="SoloHost Browser", charset="UTF-8"');
+    return res.status(401).type('text/plain').send(
+      'Remote access requires BROWSER_ACCESS_PASSWORD. Set it in SoloHost app settings, then restart.'
+    );
+  }
   const auth = String(req.headers.authorization || '');
   const m = auth.match(/^Basic\s+(.+)$/i);
   let supplied = '';
-  try { if (m) supplied = Buffer.from(m[1], 'base64').toString('utf8').split(':').slice(1).join(':'); } catch (_) {}
-  const a = Buffer.from(supplied); const b = Buffer.from(configured);
+  try {
+    if (m) {
+      const decoded = Buffer.from(m[1], 'base64').toString('utf8');
+      // Accept "user:password" or just "password"
+      const idx = decoded.indexOf(':');
+      supplied = idx >= 0 ? decoded.slice(idx + 1) : decoded;
+    }
+  } catch (_) {}
+  // Also accept cookie session after first success
+  const cookie = String(req.headers.cookie || '');
+  const cookieOk = cookie.includes('solo_access=1');
   const crypto = require('crypto');
-  if (m && a.length === b.length && crypto.timingSafeEqual(a, b)) return next();
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(configured);
+  const basicOk = m && a.length === b.length && crypto.timingSafeEqual(a, b);
+  if (basicOk || cookieOk) {
+    if (basicOk && !cookieOk) {
+      res.setHeader('Set-Cookie', 'solo_access=1; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400');
+    }
+    return next();
+  }
   res.setHeader('WWW-Authenticate', 'Basic realm="SoloHost Browser", charset="UTF-8"');
   res.status(401).type('text/plain').send('SoloHost Browser access password required.');
 });
