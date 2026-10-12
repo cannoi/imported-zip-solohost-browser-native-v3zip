@@ -88,7 +88,7 @@ let aiCompat = softRequire('ai-compat', './lib/ai-compat', {
 try { installShutdownHooks(); } catch (_) {}
 try { appLog.configure(DATA_DIR); } catch (_) {}
 const PKG = (() => {
-  try { return require('./package.json'); } catch { return { version: '10.19.0' }; }
+  try { return require('./package.json'); } catch { return { version: '10.20.0' }; }
 })();
 
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* ignore */ }
@@ -142,7 +142,7 @@ function healthPayload() {
     status: 'ok',
     ok: true,
     service: 'solohost-browser',
-    version: PKG.version || '10.19.0',
+    version: PKG.version || '10.20.0',
     mode: 'hybrid-proxy',
     engine: engineCaps.detect(),
     port: PORT,
@@ -435,7 +435,7 @@ try {
   const fbOpts = {
     appId: process.env.SHFH_APP_ID || 'solohost-browser',
     appName: 'SoloHost Browser',
-    version: PKG.version || '10.19.0'
+    version: PKG.version || '10.20.0'
   };
   if (process.env.SHFH_HUB_ID) fbOpts.hubId = process.env.SHFH_HUB_ID;
   if (process.env.SHFH_HUB_URL) fbOpts.baseUrl = process.env.SHFH_HUB_URL;
@@ -465,8 +465,13 @@ app.post('/api/browser/sessions', async (req, res) => {
       return res.status(429).json({ ok: false, error: 'rate_limited' });
     }
     const privateMode = !!(req.body && req.body.privateMode);
+    const profileId = String((req.body && req.body.profileId) || '').toLowerCase();
+    const stableClientKey = /^[a-f0-9]{32}$/.test(profileId) ? 'profile:' + profileId : 'ip:' + String(ip);
+    const locale = String((req.body && req.body.locale) || '').slice(0, 40);
+    let timezoneId = String((req.body && req.body.timezoneId) || '').slice(0, 80);
+    try { new Intl.DateTimeFormat('en-US', { timeZone: timezoneId }); } catch (_) { timezoneId = ''; }
     const privateSuffix = privateMode ? ':private:' + require('crypto').randomBytes(12).toString('hex') : '';
-    const out = await domBridge.createSession({ clientKey: ip + privateSuffix, privateMode });
+    const out = await domBridge.createSession({ clientKey: stableClientKey + privateSuffix, privateMode, locale, timezoneId });
     res.json({ ok: true, ...out });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
@@ -614,6 +619,20 @@ app.get('/api/runtime/locale', async (_req, res) => {
   res.setHeader('Cache-Control', 'no-store'); res.json({ ok: true, ...value });
 });
 
+// Persistent AI memory is keyed by a random browser profile ID; sensitive credential-like text is rejected.
+try {
+  const aiMemory = require('./lib/ai-memory');
+  app.get('/api/ai/memory', (req, res) => {
+    const memory = aiMemory.get(req.query.profile);
+    if (!memory) return res.status(400).json({ ok: false, error: 'invalid_profile' });
+    res.setHeader('Cache-Control', 'no-store'); res.json({ ok: true, memory });
+  });
+  app.post('/api/ai/memory', (req, res) => {
+    const out = aiMemory.update(req.body && req.body.profile, req.body || {});
+    res.status(out.ok ? 200 : 400).json(out);
+  });
+} catch (e) { console.error('[warn] AI memory routes:', e.message); }
+
 // —— User library: playlists, AI tasks, SoloHost apps ——
 try {
   const lib = require('./lib/user-library');
@@ -664,7 +683,7 @@ try {
     if (!q) return res.status(400).json({ ok: false, error: 'query_required' });
     try {
       const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 4500);
-      const response = await fetch('https://www.youtube.com/results?search_query=' + encodeURIComponent(q), { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128 Safari/537.36', 'Accept-Language': 'en-US,en;q=0.8' } }).finally(() => clearTimeout(timer));
+      const response = await fetch('https://www.youtube.com/results?search_query=' + encodeURIComponent(q), { signal: controller.signal, headers: { 'User-Agent': 'SoloHostBrowser/10.20 scheduled-media-resolver', 'Accept-Language': String(req.get('accept-language') || 'en-US,en;q=0.8').slice(0, 200) } }).finally(() => clearTimeout(timer));
       const html = await response.text();
       const normalizedHtml = html.replace(/\\\"/g, '\"');
       const matches = [...normalizedHtml.matchAll(/\"videoId\"\s*:\s*\"([\w-]{11})\"/g)].map(m => m[1]);
@@ -676,8 +695,10 @@ try {
   app.post('/api/library/tasks', (req, res) => {
     const body = req.body || {}; const text = String(body.instruction || body.message || '').trim();
     if (!text) return res.status(400).json({ ok: false, error: 'instruction_required' });
-    const timeMatch = text.match(/(?:at|lúc|vào lúc|mỗi ngày lúc|hằng ngày lúc|daily at)\s*(\d{1,2})(?:[:h.](\d{2}))?/i) || text.match(/(\d{1,2})\s*(?:h|giờ)(?:\s*(\d{2}))?/i);
-    const hour = timeMatch ? Number(timeMatch[1]) : 21; const minute = timeMatch && timeMatch[2] ? Number(timeMatch[2]) : 0;
+    const timeMatch = text.match(/(?:at|lúc|vào lúc|mỗi ngày lúc|hằng ngày lúc|daily at)\s*(\d{1,2})(?:[:h.](\d{2}))?\s*(am|pm|h|giờ)?/i) || text.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm|h|giờ)\b/i);
+    let hour = timeMatch ? Number(timeMatch[1]) : 21; const minute = timeMatch && timeMatch[2] ? Number(timeMatch[2]) : 0;
+    const meridiem = String(timeMatch && timeMatch[3] || '').toLowerCase();
+    if (meridiem === 'pm' && hour < 12) hour += 12; if (meridiem === 'am' && hour === 12) hour = 0;
     if (hour > 23 || minute > 59) return res.status(400).json({ ok: false, error: 'invalid_time' });
     const time = String(hour).padStart(2,'0') + ':' + String(minute).padStart(2,'0');
     const durationMatch = text.match(/(\d+)\s*(?:phút|phut|minutes?|mins?)/i) || text.match(/(\d+)\s*(?:tiếng|tieng|giờ|hours?|hrs?)/i);

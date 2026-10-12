@@ -260,14 +260,13 @@ function check(name, cond, extra) {
   r = await runTask('scroll to bottom');
   check('scroll works and is observed', r.out.status === 'done' && /scrolled \d+/.test(r.out.message), JSON.stringify(r.out));
 
-  // 10) real UI path: toggle Agent, send task, confirm bar appears, Allow
+  // 10) real UI path: one chat input automatically routes an action task to Agent
   modelScript = (p) => {
     if (p.includes('clicked |')) return { action: { type: 'done', summary: 'UI bought it' } };
     if (p.includes('title: Laptop Pro 14')) return { action: { type: 'click', id: idOf(p, /Buy now/) } };
     return { action: { type: 'navigate', url: 'http://shop.example/product/1' } };
   };
   await page.click('#aiFab');
-  await page.click('#agentToggle');
   await page.fill('#chatInput', 'buy it from the UI');
   await page.click('#chatSend');
   await page.waitForSelector('#agentConfirm:not([hidden])', { timeout: 20000 });

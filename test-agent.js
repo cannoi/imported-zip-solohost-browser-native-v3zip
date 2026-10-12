@@ -121,7 +121,7 @@ const { createAIService } = require('./lib/ai-module/ai-service');
   const root = __dirname;
   const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
   assert.ok(html.indexOf('/browser-agent.js') > 0 && html.indexOf('/browser-agent.js') < html.indexOf('/ai-panel.js'), 'agent script loads before ai-panel.js');
-  for (const id of ['agentToggle', 'agentBar', 'agentStop', 'agentYes', 'agentNo', 'agentConfirm', 'chatForm', 'chatInput', 'pane-feedback', 'pane-settings', 'pane-logs']) {
+  for (const id of ['agentBar', 'agentStop', 'agentYes', 'agentNo', 'agentConfirm', 'chatForm', 'chatInput', 'pane-feedback', 'pane-settings', 'pane-logs']) {
     assert.ok(html.includes('id="' + id + '"'), 'missing #' + id);
   }
   const server = fs.readFileSync(path.join(root, 'server.js'), 'utf8') + '\n' + fs.readFileSync(path.join(root, 'server-app.js'), 'utf8');
@@ -130,7 +130,8 @@ const { createAIService } = require('./lib/ai-module/ai-service');
   const svc = fs.readFileSync(path.join(root, 'lib/ai-module/ai-service.js'), 'utf8');
   assert.ok(/chat, complete,/.test(svc), 'ai.complete exported');
   const panel = fs.readFileSync(path.join(root, 'public/ai-panel.js'), 'utf8');
-  assert.ok(panel.includes('agentOn()') && panel.includes('runAgentTask'));
+  assert.ok(panel.includes('shouldRunAgent(text)') && panel.includes('runAgentTask'));
+  assert.ok(!html.includes('id="agentToggle"'), 'AI Agent mode switch was replaced by automatic intent routing');
   const clientAgent = fs.readFileSync(path.join(root, 'public/browser-agent.js'), 'utf8');
   assert.ok(clientAgent.includes('window.SoloAgent') && clientAgent.includes('/api/browser/agent/tasks'));
   assert.ok(!clientAgent.includes('contentDocument') && !clientAgent.includes('el.click()'), 'agent UI must not inspect or operate page DOM');

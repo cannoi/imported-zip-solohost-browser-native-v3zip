@@ -23,11 +23,11 @@ window.UniversalAI = (() => {
       async catalog(){return json('/api/ai/catalog');},
       async chat(message,context={},extra={}){
         const out=await json('/api/ai/chat',{method:'POST',body:JSON.stringify({
-          message,context,history:history.slice(-8),actions:extra.actions||[]
+          message,context,history:(Array.isArray(extra.history) ? extra.history : history).slice(-16),actions:extra.actions||[]
         })});
         history.push({role:'user',content:message});
         history.push({role:'assistant',content:out.reply||''});
-        while(history.length>20) history.splice(0,2);
+        while(history.length>32) history.splice(0,2);
         if(Array.isArray(out.actions)) opts.onActions?.(out.actions);
         return out;
       },

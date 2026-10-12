@@ -5,8 +5,7 @@ footer_hint: Leave access password empty to disable app login.
 output_file: .env
 after_save: Saved. Restart the app from SoloHost.
 fields:
-  - id: BROWSER_ACCESS_PASSWORD
-    name: BROWSER_ACCESS_PASSWORD
+  - name: BROWSER_ACCESS_PASSWORD
     label: Browser access password (optional)
     type: password
     required: false

@@ -6,7 +6,7 @@ services:
     environment:
       PORT: "8080"
       BROWSER_ACCESS_PASSWORD: "${BROWSER_ACCESS_PASSWORD:-}"
-      TZ: "${TZ:-Asia/Ho_Chi_Minh}"
+      TZ: "${TZ:-UTC}"
       HOST: "0.0.0.0"
       HOME: "/tmp/solohost-browser"
       SOLOHOST_PLAYWRIGHT: "1"

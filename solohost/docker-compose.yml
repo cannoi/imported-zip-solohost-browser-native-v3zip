@@ -2,11 +2,11 @@ services:
   web:
     image: ghcr.io/cannoi/imported-zip-solohost-browser-native-v3zip:latest
     ports:
-      - "8080:8080"
+      - "8080"
     environment:
       PORT: "8080"
       BROWSER_ACCESS_PASSWORD: "${BROWSER_ACCESS_PASSWORD:-}"
-      TZ: "${TZ:-Asia/Ho_Chi_Minh}"
+      TZ: "${TZ:-UTC}"
       HOST: "0.0.0.0"
       HOME: "/tmp/solohost-browser"
       SOLOHOST_PLAYWRIGHT: "1"

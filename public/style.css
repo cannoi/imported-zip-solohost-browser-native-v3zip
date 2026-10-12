@@ -829,3 +829,14 @@ html[data-theme="rainbow"] .icon-btn, html[data-theme="rainbow"] .chip { border-
 .playlist-player .home-hint { padding:0 11px 9px; margin:0; }
 .runtime-locale { max-width:86px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; align-self:center; color:var(--chrome-muted); font-size:9px; }
 button:disabled { opacity:.35; cursor:not-allowed; }
+
+/* v10.20 Music library: player is the visual center, tracks live underneath. */
+#panel-playlists .playlist-player { flex: 0 0 auto; margin: 8px 0 4px; }
+#panel-playlists .playlist-player iframe { width: 100%; aspect-ratio: 16 / 9; max-height: min(36vh, 320px); }
+#panel-playlists .playlist-controls { flex: 0 0 auto; justify-content: center; gap: 7px; padding: 5px 0 8px; }
+#panel-playlists .playlist-controls .chip { min-width: 42px; min-height: 38px; }
+#panel-playlists #pl-list { flex: 1 1 auto; min-height: 70px; overflow-y: auto; border-top: 1px solid var(--chrome-line); padding-top: 5px; }
+#panel-playlists .playlist-track .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#panel-playlists .playlist-track.is-current { background: color-mix(in srgb, var(--accent, #66e3ff) 15%, transparent); border-radius: 8px; }
+#panel-playlists .active-playlist { color: var(--accent, #66e3ff); }
+#chatInput { min-width: 0; }
