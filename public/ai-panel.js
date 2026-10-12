@@ -164,6 +164,25 @@ async function sendAI() {
   aiInput.value = '';
   appendMsg('user', escapeHtml(text));
   if (agentOn()) { await runAgentTask(text); return; }
+  // Turn clear natural-language schedules into persisted AI Tasks before general chat.
+  const taskIntent = /(?:mỗi ngày|hằng ngày|hang ngay|daily|every day|lúc \d{1,2}|\d{1,2}\s*(?:h|giờ)|schedule|đặt lịch|dat lich)/i.test(text) && /youtube|nhạc|nhac|music|thiền|thien|meditation|lofi|video|mở|mo/i.test(text);
+  if (taskIntent) {
+    const loadingTask = appendMsg('ai', '…');
+    try {
+      const tr = await fetch('/api/library/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ instruction: text }) });
+      const tj = await tr.json(); loadingTask.remove();
+      if (tj.ok && tj.task) {
+        const vi = document.documentElement.lang === 'vi' || (navigator.language || '').toLowerCase().startsWith('vi') || /[ăâđêôơưáàảãạ]/i.test(text);
+        const taskName = vi ? (tj.task.nameVi || tj.task.name) : tj.task.name;
+        appendMsg('ai', escapeHtml((vi ? 'Đã tạo nhiệm vụ AI: ' : 'AI task created: ') + taskName + '. ' + (vi ? 'Nhiệm vụ chạy theo múi giờ cấu hình khi trình duyệt đang mở. Bạn có thể xem hoặc tạm dừng trong mục Nhiệm vụ AI.' : 'It runs in the configured time zone while the browser is open. View or pause it under AI Tasks.')));
+        if (window.SoloBrowser && window.SoloBrowser.showTasksPanel) window.SoloBrowser.showTasksPanel();
+        else document.querySelector('[data-panel="panel-scripts"]')?.click();
+        return;
+      }
+      appendMsg('ai', escapeHtml((tj && tj.error) || 'Could not create the task.'));
+      return;
+    } catch (e) { loadingTask.remove(); appendMsg('ai', escapeHtml(e.message || 'Task creation failed')); return; }
+  }
   const loading = appendMsg('ai', '…');
   try {
     let logs = [];

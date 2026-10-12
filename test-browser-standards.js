@@ -8,8 +8,8 @@ const bridge = fs.readFileSync(path.join(root, 'lib/engine/dom-bridge.js'), 'utf
 const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
 const pkg = require('./package.json');
 const caps = require('./lib/engine/capabilities').detect();
-assert.strictEqual(pkg.version, '10.16.0');
-assert.strictEqual(caps.version, '10.16.0');
+assert.strictEqual(pkg.version, '10.19.0');
+assert.strictEqual(caps.version, '10.19.0');
 assert.ok(engine.includes('SOLOHOST_BROWSER_PERSIST_SESSIONS'), 'persistent session storage can be disabled explicitly');
 assert.ok(engine.includes('context.storageState()') && engine.includes('0o600') && engine.includes('0o700'), 'session storage is persisted with restricted file permissions');
 assert.ok(engine.includes('playwright.popup_attached'), 'new popup pages are attached to the active session');
@@ -21,6 +21,7 @@ assert.ok(engine.includes('Only use the video embed fallback for a specific watc
 assert.ok(bridge.includes('normalizeKnownLandingUrl'), 'tracking URLs can normalize to safe canonical destinations');
 assert.ok(bridge.includes('externalAuthTarget') && bridge.includes('bridge.auth_external_required'), 'site authentication routes are handled separately from page rendering');
 assert.ok(app.includes('if (isExternalAuthPath(url)) return MODE.EXTERNAL'), 'known login flows use the system browser');
-assert.ok(app.includes('if (j.externalRequired) return loadViaExternal'), 'redirected auth flows are handed off to system browser');
+assert.ok(app.includes("j.externalRequired && j.externalReason !== 'bing_verification_required'"), 'auth flows are handed off while Bing verification remains visible in-app');
+assert.ok(bridge.includes('One final step') && bridge.includes('class="challenge"'), 'Bing verification page is presented with an embedded challenge and external fallback');
 assert.ok(!bridge.includes('(session.youtubeIds || []).length) {\n          session.html = buildHybridView'), 'a normal YouTube page is not replaced just because it contains video links');
 console.log('✓ engine-first browser policy / persistent sessions / popup and YouTube feed regression tests');

@@ -15,6 +15,8 @@
     theme: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_theme')) || 'rainbow',
     searchEngine: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_engine')) || 'bing',
     customSearchUrl: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_custom_url')) || '',
+    timeZone: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_timezone')) || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
+    localeReady: false,
     tabs: [],
     activeTabId: null,
     history: [],
@@ -83,6 +85,8 @@
     // trying to snapshot its internal browser UI through the DOM Bridge.
     if (isNativeMediaOrDocumentUrl(url)) return MODE.DIRECT;
     if (!h) return MODE.PROXY;
+    // Keep Bing's human verification page visible when embeddable; never solve it automatically.
+    try { const bu = new URL(url); if (/(^|\.)bing\.com$/.test(bu.hostname) && /captcha|challenge|verify|pow/i.test(bu.pathname + bu.search)) return MODE.DIRECT; } catch (_) {}
     // Site-owned authentication must use a normal system browser, not an embedded/automated view.
     if (isExternalAuthPath(url)) return MODE.EXTERNAL;
     // YouTube watch/Shorts/live URLs must reach the server's official-player shell.
@@ -161,6 +165,13 @@
     nav.index = nav.stack.length - 1;
   }
 
+  function syncNavButtons() {
+    const tab = getActiveTab(); const nav = ensureTabNav(tab);
+    const back = $('btn-back'); const fwd = $('btn-fwd');
+    if (back) { back.disabled = !nav || (nav.index <= 0 && !state.url); back.setAttribute('aria-disabled', String(back.disabled)); }
+    if (fwd) { fwd.disabled = !nav || nav.index >= nav.stack.length - 1; fwd.setAttribute('aria-disabled', String(fwd.disabled)); }
+  }
+
   function goBack() {
     const tab = getActiveTab();
     const nav = ensureTabNav(tab);
@@ -169,6 +180,7 @@
       state.url = '';
       if (input) input.value = '';
       if (frame) { try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {} }
+      syncNavButtons();
       return;
     }
     if (nav.index > 0) {
@@ -176,6 +188,7 @@
       const target = nav.stack[nav.index];
       clientLog('info', 'nav.back', { index: nav.index, url: target, stack: nav.stack.length });
       navigate(target, { skipHistory: true, force: true });
+      syncNavButtons();
       return;
     }
     // First entry in stack → return to Home without wiping history (Forward can restore)
@@ -186,10 +199,12 @@
       state.url = '';
       if (input) input.value = '';
       if (frame) { try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {} }
+      syncNavButtons();
       return;
     }
     // index already -1
     showStart();
+    syncNavButtons();
   }
 
   function goForward() {
@@ -202,6 +217,7 @@
       clientLog('info', 'nav.forward', { index: nav.index, url: target });
       navigate(target, { skipHistory: true, force: true });
     }
+    syncNavButtons();
   }
 
   async function tabBridgeSession(tab) {
@@ -235,7 +251,8 @@
     return '/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '/view?token=' + encodeURIComponent(b.token);
   }
 
-  async function loadViaBridge(tab, url) {
+  async function loadViaBridge(tab, url, retryStale) {
+    if (retryStale === undefined) retryStale = true;
     // Hard client timeout — never block UI for WebKit IPC (logs showed 35s+ ipc_timeout)
     const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
     const timer = ac ? setTimeout(() => ac.abort(), 28000) : null;
@@ -249,8 +266,14 @@
         signal: ac ? ac.signal : undefined
       });
       const j = await r.json().catch(() => null);
+      if (r.status === 401 || (j && /session_not_found|unauthorized/i.test(String(j.error || '')))) {
+        if (ensureTabNav(tab)) ensureTabNav(tab).bridge = null;
+        clientLog('warn', 'bridge.session_recover', { reason: j && j.error || 'unauthorized' });
+        if (retryStale) return loadViaBridge(tab, url, false);
+        return { ok: false, reason: 'bridge_session_stale', detail: j };
+      }
       if (!j || !j.ok) return { ok: false, reason: (j && j.error) || 'bridge_navigate_failed', detail: j };
-      if (j.externalRequired) return loadViaExternal(j.url || url, j.externalReason || 'site_auth_policy');
+      if (j.externalRequired && j.externalReason !== 'bing_verification_required') return loadViaExternal(googleExternalTarget(j.url || url), j.externalReason || 'site_auth_policy');
       const activeNav = ensureTabNav(tab);
       if (activeNav) activeNav.bridgeAudit = j.audit || {};
       if (!j.hasContent && j.error) return { ok: false, reason: j.error, detail: j };
@@ -305,7 +328,16 @@
     }
   }
 
+  function googleExternalTarget(url) {
+    try { const u = new URL(url); if (u.hostname.toLowerCase() === 'accounts.google.com' && /\/signin\/rejected/i.test(u.pathname)) { const next = u.searchParams.get('continue'); if (next && /^https:\/\//i.test(next)) return next; } } catch (_) {}
+    return url;
+  }
+
   function loadViaExternal(url, reason) {
+    const tab = getActiveTab(); const nav = ensureTabNav(tab);
+    if (nav) nav.bridge = null;
+    // Stop stale embedded pages from continuing to emit events after an auth/policy handoff.
+    if (frame) { try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {} }
     if (btnOpen) btnOpen.href = url;
     showProxyHint(
       (state.lang === 'vi'
@@ -651,16 +683,20 @@
   function applyLang() {
     try {
       const vi = state.lang === 'vi';
+      document.documentElement.lang = vi ? 'vi' : 'en';
       if ($('home-pl-title')) $('home-pl-title').textContent = vi ? 'Nhạc' : 'Playlist';
-      if ($('home-sc-title')) $('home-sc-title').textContent = vi ? 'Lệnh' : 'Scripts';
+      if ($('home-sc-title')) $('home-sc-title').textContent = vi ? 'Nhiệm vụ AI' : 'AI Tasks';
       if ($('home-app-title')) $('home-app-title').textContent = vi ? 'Apps' : 'Apps';
-      if ($('panel-pl-h')) $('panel-pl-h').textContent = vi ? '♪ Danh sách phát' : '♪ Playlist';
-      if ($('panel-sc-h')) $('panel-sc-h').textContent = vi ? '⚡ Tập lệnh' : '⚡ Scripts';
+      if ($('panel-pl-h')) $('panel-pl-h').textContent = vi ? '♪ Thư viện nhạc' : '♪ Music library';
+      if ($('playlist-now-label')) $('playlist-now-label').textContent = vi ? 'Đang phát' : 'Now playing';
+      if ($('playlist-now-title') && !$('playlist-now-title').dataset.userTitle) $('playlist-now-title').textContent = vi ? 'Chọn video để phát' : 'Choose a video';
+      if ($('playlist-player-hint')) $('playlist-player-hint').textContent = vi ? 'Video phát ngay trong Playlist, không rời thư viện nhạc.' : 'Videos play here without leaving your music library.';
+      if ($('panel-sc-h')) $('panel-sc-h').textContent = vi ? '⚡ Nhiệm vụ AI' : '⚡ AI Tasks';
       if ($('panel-app-h')) $('panel-app-h').textContent = vi ? '⊞ App SoloHost' : '⊞ SoloHost Apps';
       if ($('sc-hint')) $('sc-hint').textContent = vi
         ? '◎ Mẫu: không cần AI · ✦ Lệnh mới: ưu tiên AI Action'
         : '◎ Sample: no AI · ✦ Custom: AI Action first';
-      if ($('sc-name-input')) $('sc-name-input').placeholder = vi ? 'Tên lệnh' : 'Script name';
+      if ($('sc-name-input')) $('sc-name-input').placeholder = vi ? 'Tên nhiệm vụ' : 'Task name';
       if ($('sc-url-input')) $('sc-url-input').placeholder = vi ? 'URL điều hướng…' : 'Navigate URL…';
       if ($('pl-url-input')) $('pl-url-input').placeholder = vi ? 'Dán URL video…' : 'Paste video URL…';
       if ($('app-url-input')) $('app-url-input').placeholder = 'http://127.0.0.1:8090';
@@ -909,6 +945,7 @@
       const activeStored = regularTabs.some(t => t.id === state.activeTabId) ? state.activeTabId : (regularTabs[0] && regularTabs[0].id) || null;
       sessionStorage.setItem('solo_tabs_v1', JSON.stringify({ tabs: regularTabs, activeTabId: activeStored }));
     } catch (_) {}
+    syncNavButtons();
   }
   function newTab(url, options) {
     options = options || {};
@@ -1035,7 +1072,8 @@
     }
 
     if (preferred === MODE.EXTERNAL) {
-      result = loadViaExternal(url, 'site_policy_external');
+      const externalTarget = googleExternalTarget(url);
+      result = loadViaExternal(externalTarget, /accounts\.google\.com/i.test(url) ? 'google_auth_policy_external_session' : 'site_policy_external');
     } else if (preferred === MODE.DIRECT) {
       result = loadViaDirect(url);
       if (!result.ok) result = loadViaProxy(url);
@@ -1072,6 +1110,7 @@
     if (result.url && result.url !== url) applyUrlToUi(result.url, result.title);
     else if (result.title) applyUrlToUi(url, result.title);
 
+    syncNavButtons();
     clientLog('info', 'navigate_result', {
       url: state.url,
       mode: result.mode,
@@ -1216,6 +1255,11 @@
     e.preventDefault();
     goBack();
   });
+  document.addEventListener('keydown', (e) => {
+    const target = e.target; const typing = target && (target.matches('input,textarea,select') || target.isContentEditable);
+    if ((e.altKey && e.key === 'ArrowLeft') || (e.key === 'Backspace' && !typing) || e.key === 'BrowserBack') { e.preventDefault(); goBack(); }
+    else if ((e.altKey && e.key === 'ArrowRight') || e.key === 'BrowserForward') { e.preventDefault(); goForward(); }
+  });
   if ($('btn-fwd')) $('btn-fwd').addEventListener('click', (e) => {
     e.preventDefault();
     goForward();
@@ -1234,6 +1278,7 @@
   if ($('btn-translate')) $('btn-translate').addEventListener('click', () => aiProcess('translate'));
   if (btnLang) btnLang.addEventListener('click', () => {
     state.lang = state.lang === 'vi' ? 'en' : 'vi';
+    try { localStorage.setItem('solo_lang_manual', '1'); } catch (_) {}
     applyLang();
   });
   if (btnTheme) btnTheme.addEventListener('click', () => {
@@ -1315,12 +1360,15 @@
 
   applyTheme();
   applyLang();
+  syncRuntimeLocale();
+  startScheduledTasks();
   try {
     const saved = JSON.parse(sessionStorage.getItem('solo_tabs_v1') || 'null');
     if (saved && Array.isArray(saved.tabs) && saved.tabs.length) { state.tabs = saved.tabs.slice(0, 12); state.activeTabId = saved.activeTabId; if (!getActiveTab()) state.activeTabId = state.tabs[0].id; }
   } catch (_) {}
   if (!state.tabs.length) { state.tabs = [{ id: 't' + Date.now().toString(36), title: state.lang === 'vi' ? 'Tab mới' : 'New tab', url: '' }]; state.activeTabId = state.tabs[0].id; }
   renderTabs();
+  syncNavButtons();
   startSplash();
   showStart();
   try { bindBridgeViewportHelpers(); } catch (_) {}
@@ -1416,6 +1464,7 @@
     box.innerHTML = '';
     if (!homeLib.playlists.length) {
       box.innerHTML = '<div class="home-hint">' + (state.lang === 'vi' ? 'Chưa có danh sách. Bấm ＋ để tạo.' : 'No playlists yet. Tap ＋ to create.') + '</div>';
+      if ($('playlist-player-frame')) $('playlist-player-frame').src = 'about:blank';
       return;
     }
     homeLib.playlists.forEach((pl) => {
@@ -1432,7 +1481,7 @@
       del.onclick = async () => { await libFetch('/api/library/playlists/' + encodeURIComponent(pl.id), { method: 'DELETE' }); await refreshHomeLibrary(); };
       row.appendChild(label); row.appendChild(del);
       box.appendChild(row);
-      (pl.items || []).slice(0, 8).forEach((it, idx) => {
+      (pl.items || []).forEach((it, idx) => {
         const ir = document.createElement('div');
         ir.className = 'home-item';
         ir.style.paddingLeft = '0.75rem';
@@ -1456,18 +1505,42 @@
     return homeLib.playlists.find((p) => p.id === homeLib.activePlaylistId) || homeLib.playlists[0];
   }
 
+  function getVideoEmbedUrl(raw) {
+    try {
+      const u = new URL(String(raw || '').trim()); const h = u.hostname.toLowerCase().replace(/^www\./, '');
+      let id = '';
+      if (h === 'youtu.be') id = u.pathname.split('/').filter(Boolean)[0] || '';
+      else if (h.endsWith('youtube.com') || h === 'youtube-nocookie.com') {
+        if (u.pathname === '/watch') id = u.searchParams.get('v') || '';
+        else { const m = u.pathname.match(/^\/(?:shorts|live|embed|v)\/([\w-]{6,15})/); if (m) id = m[1]; }
+      }
+      if (/^[\w-]{6,15}$/.test(id)) return 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(id) + '?autoplay=1&rel=0&playsinline=1';
+      if (h === 'vimeo.com') { const m = u.pathname.match(/\/(\d+)/); if (m) return 'https://player.vimeo.com/video/' + m[1] + '?autoplay=1'; }
+      if (h === 'tiktok.com') { const m = u.pathname.match(/\/video\/(\d+)/); if (m) return 'https://www.tiktok.com/player/v1/' + m[1] + '?autoplay=1'; }
+      return null;
+    } catch (_) { return null; }
+  }
+
   function playPlaylistItem() {
     const pl = activePlaylist();
-    if (!pl || !pl.items || !pl.items.length) return;
+    const player = $('playlist-player-frame'); const title = $('playlist-now-title'); const hint = $('playlist-player-hint');
+    if (!pl || !pl.items || !pl.items.length) {
+      if (player) player.src = 'about:blank';
+      if (title) title.textContent = state.lang === 'vi' ? 'Chọn video để phát' : 'Choose a video';
+      return;
+    }
     const it = pl.items[homeLib.playIndex % pl.items.length];
     if (!it) return;
-    let url = it.url;
-    // Music / background-friendly: prefer YouTube embed when possible
-    if (homeLib.musicMode) {
-      const m = String(url).match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,})/i);
-      if (m) url = 'https://www.youtube.com/embed/' + m[1] + '?autoplay=1';
+    const embed = getVideoEmbedUrl(it.url);
+    if (title) { title.textContent = it.title || it.url; title.dataset.userTitle = '1'; }
+    if (embed && player) {
+      player.src = embed;
+      if (hint) hint.textContent = state.lang === 'vi' ? 'Video phát ngay trong Playlist. Một số video có thể tắt tính năng nhúng.' : 'Video plays inside Playlist. Some videos may disable embedding.';
+      clientLog('info', 'playlist.embed_play', { source: it.source || 'video' });
+    } else {
+      if (player) player.src = 'about:blank';
+      if (hint) hint.textContent = state.lang === 'vi' ? 'Nguồn này chưa có trình nhúng chính thức được hỗ trợ. Hãy thêm liên kết YouTube, Vimeo hoặc TikTok.' : 'This source has no supported official embed. Add a YouTube, Vimeo, or TikTok link.';
     }
-    navigate(url);
   }
 
   function renderScripts() {
@@ -1480,7 +1553,7 @@
       const lab = document.createElement('span');
       lab.className = 'label';
       const nm = (state.lang === 'vi' && sc.nameVi) ? sc.nameVi : (sc.name || sc.id);
-      lab.textContent = (sc.sample ? '◎ ' : '✦ ') + nm;
+      lab.textContent = (sc.active === false ? 'Ⅱ ' : (sc.sample ? '◎ ' : '✦ ')) + nm;
       lab.title = (sc.sample
         ? (state.lang === 'vi' ? 'Mẫu · không cần AI' : 'Sample · no AI')
         : (state.lang === 'vi' ? 'AI Action' : 'AI Action')) + ' — ' +
@@ -1488,10 +1561,11 @@
       const run = document.createElement('button');
       run.type = 'button'; run.className = 'chip'; run.textContent = '▶';
       run.title = state.lang === 'vi' ? 'Chạy' : 'Run';
-      run.onclick = () => runScript(sc);
+      run.onclick = () => { runScript(sc); }; 
       const stop = document.createElement('button');
-      stop.type = 'button'; stop.className = 'chip'; stop.textContent = '■';
-      stop.onclick = () => stopScript();
+      stop.type = 'button'; stop.className = 'chip'; stop.textContent = sc.active === false ? '▶' : 'Ⅱ';
+      stop.title = sc.active === false ? (state.lang === 'vi' ? 'Bật nhiệm vụ' : 'Enable task') : (state.lang === 'vi' ? 'Tạm dừng nhiệm vụ' : 'Pause task');
+      stop.onclick = async () => { await libFetch('/api/library/scripts/' + encodeURIComponent(sc.id), { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ active: sc.active === false }) }); await refreshHomeLibrary(); };
       const del = document.createElement('button');
       del.type = 'button'; del.className = 'icon-btn tiny'; del.textContent = '×';
       del.onclick = async () => { await libFetch('/api/library/scripts/' + encodeURIComponent(sc.id), { method: 'DELETE' }); await refreshHomeLibrary(); };
@@ -1626,6 +1700,62 @@
     });
   }
 
+  async function syncRuntimeLocale() {
+    try {
+      const r = await fetch('/api/runtime/locale', { cache: 'no-store' });
+      const j = await r.json();
+      if (!j || !j.ok) return;
+      const candidateZone = j.timeZone || state.timeZone;
+      try { new Intl.DateTimeFormat('en-US', { timeZone: candidateZone }); state.timeZone = candidateZone; } catch (_) { state.timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; }
+      try { localStorage.setItem('solo_timezone', state.timeZone); } catch (_) {}
+      const savedLang = localStorage.getItem('solo_lang');
+      if (!savedLang || localStorage.getItem('solo_lang_manual') !== '1') {
+        state.lang = j.lang === 'vi' ? 'vi' : 'en';
+        applyLang();
+      }
+      const locale = $('runtime-locale');
+      if (locale) { locale.textContent = (state.lang === 'vi' ? 'Múi giờ' : 'Time zone') + ': ' + state.timeZone; locale.title = (j.country ? j.country + ' · ' : '') + (j.source || 'local'); }
+    } catch (_) {}
+  }
+
+  function startScheduledTasks() {
+    const keyPrefix = 'solo_task_last_run_';
+    async function check() {
+      try {
+        const r = await fetch('/api/library/scripts'); const j = await r.json();
+        const tasks = (j.scripts || []).filter(x => x && x.active !== false && x.schedule && x.schedule.type === 'daily' && x.schedule.time);
+        let formatter;
+        try { formatter = new Intl.DateTimeFormat('en-GB', { timeZone: state.timeZone || 'UTC', hour: '2-digit', minute: '2-digit', year: 'numeric', month: '2-digit', day: '2-digit', hour12: false }); }
+        catch (_) { formatter = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', year: 'numeric', month: '2-digit', day: '2-digit', hour12: false }); }
+        const parts = formatter.formatToParts(new Date());
+        const get = t => parts.find(p => p.type === t)?.value || '';
+        const nowTime = get('hour') + ':' + get('minute'); const dateKey = get('year') + '-' + get('month') + '-' + get('day');
+        for (const task of tasks) {
+          const storageKey = keyPrefix + task.id;
+          if (task.schedule.time !== nowTime || localStorage.getItem(storageKey) === dateKey) continue;
+          localStorage.setItem(storageKey, dateKey);
+          const step = (task.steps || []).find(x => x.type === 'navigate' && x.url);
+          if (step) {
+            let yt = getVideoEmbedUrl(step.url);
+            if (!yt && /youtube\.com\/results/i.test(step.url)) {
+              try { const query = new URL(step.url).searchParams.get('search_query') || ''; const found = await fetch('/api/library/youtube/first?q=' + encodeURIComponent(query)).then(r => r.json()); if (found && found.ok) yt = found.embedUrl; } catch (_) {}
+            }
+            if (yt) {
+              openHomePanel('panel-playlists');
+              const player = $('playlist-player-frame'); if (player) player.src = yt;
+              const title = $('playlist-now-title'); if (title) { title.textContent = task.nameVi && state.lang === 'vi' ? task.nameVi : task.name; title.dataset.userTitle = '1'; }
+              if (homeLib.playlists.length) { const pl = activePlaylist(); if (pl) { homeLib.activePlaylistId = pl.id; } }
+            } else navigate(step.url, { force: true });
+            clientLog('info', 'ai_task.started', { taskId: task.id, time: nowTime, timeZone: state.timeZone, embedded: !!yt });
+            const duration = Number(task.schedule.durationMinutes || 0);
+            if (duration > 0) setTimeout(() => { const player = $('playlist-player-frame'); if (player) player.src = 'about:blank'; clientLog('info', 'ai_task.stopped', { taskId: task.id }); }, duration * 60000);
+          }
+        }
+      } catch (_) {}
+    }
+    check(); setInterval(check, 15000);
+  }
+
   function bindHomeLibrary() {
     const utils = document.getElementById('home-utils');
     if (utils && !utils._boundHome) {
@@ -1683,36 +1813,6 @@
       playPlaylistItem();
     });
     if ($('btn-sc-refresh')) $('btn-sc-refresh').addEventListener('click', () => refreshHomeLibrary());
-    if ($('sc-add-form')) $('sc-add-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const name = ($('sc-name-input') && $('sc-name-input').value || 'Script').trim();
-      const url = ($('sc-url-input') && $('sc-url-input').value || '').trim();
-      const time = ($('sc-time-input') && $('sc-time-input').value || '').trim();
-      const intervalMin = Math.max(0, Number(($('sc-interval-input') && $('sc-interval-input').value) || 0) || 0);
-      if (!url && !name) return;
-      const steps = [];
-      if (time) steps.push({ type: 'waitUntil', time: time });
-      if (url) steps.push({ type: 'navigate', url: url });
-      if (intervalMin > 0) steps.push({ type: 'repeatEveryMs', ms: intervalMin * 60 * 1000 });
-      await libFetch('/api/library/scripts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: name,
-          nameVi: name,
-          description: [url, time ? ('@' + time) : '', intervalMin ? ('every ' + intervalMin + 'm') : ''].filter(Boolean).join(' · '),
-          steps: steps,
-          schedule: time || null,
-          intervalMin: intervalMin || 0
-        })
-      });
-      if ($('sc-name-input')) $('sc-name-input').value = '';
-      if ($('sc-url-input')) $('sc-url-input').value = '';
-      if ($('sc-time-input')) $('sc-time-input').value = '';
-      if ($('sc-interval-input')) $('sc-interval-input').value = '';
-      await refreshHomeLibrary();
-    });
-
     if ($('app-add-form')) $('app-add-form').addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = ($('app-name-input') && $('app-name-input').value || 'App').trim();
@@ -1760,7 +1860,7 @@
   // Extra bind after paint (mobile WebView)
   setTimeout(function () { try { bindHomeLibrary(); refreshHomeLibrary(); } catch (_) {} }, 300);
   document.documentElement.setAttribute('data-solo-home-utils-ready', '1');
-  window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary, addCurrentUrlToPlaylist, refreshHomeLibrary, runScript, stopScript, getActiveBridge() { const tab = getActiveTab(); const nav = ensureTabNav(tab); return nav && nav.bridge ? { sessionId: nav.bridge.sessionId, token: nav.bridge.token, backend: nav.bridge.backend, url: state.url || '' } : null; },
+  window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary, addCurrentUrlToPlaylist, refreshHomeLibrary, runScript, stopScript, showTasksPanel() { showStart(); openHomePanel('panel-scripts'); refreshHomeLibrary(); }, openHomePanel, getActiveBridge() { const tab = getActiveTab(); const nav = ensureTabNav(tab); return nav && nav.bridge ? { sessionId: nav.bridge.sessionId, token: nav.bridge.token, backend: nav.bridge.backend, url: state.url || '' } : null; },
     softRefreshActiveBridge: softRefreshActiveBridge, refreshBridgeView() {
       const tab = getActiveTab();
       const nav = ensureTabNav(tab);

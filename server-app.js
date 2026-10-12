@@ -88,7 +88,7 @@ let aiCompat = softRequire('ai-compat', './lib/ai-compat', {
 try { installShutdownHooks(); } catch (_) {}
 try { appLog.configure(DATA_DIR); } catch (_) {}
 const PKG = (() => {
-  try { return require('./package.json'); } catch { return { version: '10.16.0' }; }
+  try { return require('./package.json'); } catch { return { version: '10.19.0' }; }
 })();
 
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* ignore */ }
@@ -103,6 +103,22 @@ app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) res.setHeader('Cache-Control', 'no-store');
   next();
 });
+// Optional SoloHost app access password. Leave BROWSER_ACCESS_PASSWORD empty to disable it.
+// Health checks stay public so SoloHost can monitor container readiness.
+app.use((req, res, next) => {
+  const configured = String(process.env.BROWSER_ACCESS_PASSWORD || '');
+  if (!configured || ['/health','/ready','/api/health','/api/ready'].includes(req.path)) return next();
+  const auth = String(req.headers.authorization || '');
+  const m = auth.match(/^Basic\s+(.+)$/i);
+  let supplied = '';
+  try { if (m) supplied = Buffer.from(m[1], 'base64').toString('utf8').split(':').slice(1).join(':'); } catch (_) {}
+  const a = Buffer.from(supplied); const b = Buffer.from(configured);
+  const crypto = require('crypto');
+  if (m && a.length === b.length && crypto.timingSafeEqual(a, b)) return next();
+  res.setHeader('WWW-Authenticate', 'Basic realm="SoloHost Browser", charset="UTF-8"');
+  res.status(401).type('text/plain').send('SoloHost Browser access password required.');
+});
+
 // Same-origin style CORS only (no open *). SoloHost UI and API share origin.
 if (cors) {
   app.use(cors({
@@ -126,7 +142,7 @@ function healthPayload() {
     status: 'ok',
     ok: true,
     service: 'solohost-browser',
-    version: PKG.version || '10.16.0',
+    version: PKG.version || '10.19.0',
     mode: 'hybrid-proxy',
     engine: engineCaps.detect(),
     port: PORT,
@@ -419,7 +435,7 @@ try {
   const fbOpts = {
     appId: process.env.SHFH_APP_ID || 'solohost-browser',
     appName: 'SoloHost Browser',
-    version: PKG.version || '10.16.0'
+    version: PKG.version || '10.19.0'
   };
   if (process.env.SHFH_HUB_ID) fbOpts.hubId = process.env.SHFH_HUB_ID;
   if (process.env.SHFH_HUB_URL) fbOpts.baseUrl = process.env.SHFH_HUB_URL;
@@ -521,7 +537,7 @@ app.get('/api/browser/sessions/:id/view', (req, res) => {
   res.setHeader('X-SoloHost-Scroll-Y', String(Number(session.scrollY) || 0));
   // The bridge document itself cannot execute scripts. YouTube's nested player
   // needs its own scripts and frame origin, so allow only the official embed hosts.
-  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline' https: http:; font-src https: http: data:; media-src https: http:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://www.tiktok.com https://www.vimeo.com https://player.vimeo.com https://open.spotify.com https://player.twitch.tv https://www.twitch.tv https://www.dailymotion.com https://geo.dailymotion.com; script-src 'none'; base-uri 'self'; form-action https: http:");
+  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline' https: http:; font-src https: http: data:; media-src https: http:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://www.tiktok.com https://www.vimeo.com https://player.vimeo.com https://open.spotify.com https://player.twitch.tv https://www.twitch.tv https://www.dailymotion.com https://geo.dailymotion.com https://www.bing.com https://bing.com https://*.bing.com https://*.bing.net; script-src 'none'; base-uri 'self'; form-action https: http:");
   res.send(html);
 });
 
@@ -581,7 +597,24 @@ app.delete('/api/browser/bookmarks/:id', async (req, res, next) => {
 });
 
 
-// —— User library: playlists, scripts, SoloHost apps ——
+// Public-IP locale/time-zone hint. If the geolocation service is unavailable, client locale remains the fallback.
+let runtimeLocaleCache = { at: 0, value: null };
+app.get('/api/runtime/locale', async (_req, res) => {
+  if (runtimeLocaleCache.value && Date.now() - runtimeLocaleCache.at < 6 * 60 * 60 * 1000) return res.json({ ok: true, ...runtimeLocaleCache.value });
+  let value = { country: '', timeZone: process.env.TZ || 'UTC', lang: 'en', source: 'fallback' };
+  try {
+    const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 1800);
+    const response = await fetch('https://ipapi.co/json/', { signal: controller.signal, headers: { 'Accept': 'application/json' } }).finally(() => clearTimeout(timer));
+    if (response.ok) {
+      const geo = await response.json();
+      if (geo && !geo.error) value = { country: String(geo.country_code || ''), timeZone: String(geo.timezone || value.timeZone), lang: String(geo.country_code || '').toUpperCase() === 'VN' ? 'vi' : 'en', source: 'public_ip' };
+    }
+  } catch (_) {}
+  runtimeLocaleCache = { at: Date.now(), value };
+  res.setHeader('Cache-Control', 'no-store'); res.json({ ok: true, ...value });
+});
+
+// —— User library: playlists, AI tasks, SoloHost apps ——
 try {
   const lib = require('./lib/user-library');
   app.get('/api/library/playlists', (_req, res) => {
@@ -624,6 +657,36 @@ try {
   });
   app.get('/api/library/scripts', (_req, res) => {
     res.json({ ok: true, scripts: lib.listScripts() });
+  });
+  app.get('/api/library/tasks', (_req, res) => res.json({ ok: true, tasks: lib.listScripts() }));
+  app.get('/api/library/youtube/first', async (req, res) => {
+    const q = String(req.query.q || '').trim().slice(0, 160);
+    if (!q) return res.status(400).json({ ok: false, error: 'query_required' });
+    try {
+      const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 4500);
+      const response = await fetch('https://www.youtube.com/results?search_query=' + encodeURIComponent(q), { signal: controller.signal, headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/128 Safari/537.36', 'Accept-Language': 'en-US,en;q=0.8' } }).finally(() => clearTimeout(timer));
+      const html = await response.text();
+      const normalizedHtml = html.replace(/\\\"/g, '\"');
+      const matches = [...normalizedHtml.matchAll(/\"videoId\"\s*:\s*\"([\w-]{11})\"/g)].map(m => m[1]);
+      const id = matches[0] || ((html.match(/watch\?v=([\w-]{11})/) || [])[1]);
+      if (!response.ok || !id) return res.status(502).json({ ok: false, error: 'youtube_results_unavailable' });
+      res.setHeader('Cache-Control', 'no-store'); res.json({ ok: true, videoId: id, embedUrl: 'https://www.youtube-nocookie.com/embed/' + id + '?autoplay=1&rel=0&playsinline=1' });
+    } catch (e) { res.status(502).json({ ok: false, error: 'youtube_lookup_failed' }); }
+  });
+  app.post('/api/library/tasks', (req, res) => {
+    const body = req.body || {}; const text = String(body.instruction || body.message || '').trim();
+    if (!text) return res.status(400).json({ ok: false, error: 'instruction_required' });
+    const timeMatch = text.match(/(?:at|lúc|vào lúc|mỗi ngày lúc|hằng ngày lúc|daily at)\s*(\d{1,2})(?:[:h.](\d{2}))?/i) || text.match(/(\d{1,2})\s*(?:h|giờ)(?:\s*(\d{2}))?/i);
+    const hour = timeMatch ? Number(timeMatch[1]) : 21; const minute = timeMatch && timeMatch[2] ? Number(timeMatch[2]) : 0;
+    if (hour > 23 || minute > 59) return res.status(400).json({ ok: false, error: 'invalid_time' });
+    const time = String(hour).padStart(2,'0') + ':' + String(minute).padStart(2,'0');
+    const durationMatch = text.match(/(\d+)\s*(?:phút|phut|minutes?|mins?)/i) || text.match(/(\d+)\s*(?:tiếng|tieng|giờ|hours?|hrs?)/i);
+    let duration = durationMatch ? Number(durationMatch[1]) * (/giờ|hours?|hrs?|tiếng|tieng/i.test(durationMatch[0]) ? 60 : 1) : 60; duration = Math.max(1, Math.min(720, duration));
+    const query = /thiền|thien|meditation/i.test(text) ? 'nhac thien thu gian 1 tieng' : /lofi/i.test(text) ? 'lofi relaxing music' : 'relaxing music';
+    const url = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(query);
+    const name = /thiền|thien|meditation/i.test(text) ? 'Daily meditation music · ' + time : 'Scheduled YouTube music · ' + time;
+    const task = lib.createScript({ name, nameVi: /thiền|thien|meditation/i.test(text) ? 'Nhạc thiền hằng ngày · ' + time : 'Nhạc YouTube theo lịch · ' + time, description: text, descriptionVi: text, schedule: { type: 'daily', time, durationMinutes: duration }, steps: [{ type: 'waitUntil', time }, { type: 'navigate', url }, { type: 'stopAfterMinutes', minutes: duration }], active: true });
+    res.json({ ok: true, task, taskCreated: true, requiresBrowserOpen: true });
   });
   app.post('/api/library/scripts', (req, res) => {
     res.json({ ok: true, script: lib.createScript(req.body || {}) });

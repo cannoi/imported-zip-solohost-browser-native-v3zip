@@ -54,7 +54,7 @@
           </button>
           <button type="button" class="home-icon-btn" id="tile-scripts" data-panel="panel-scripts">
             <span class="home-icon-glyph" aria-hidden="true">⚡</span>
-            <span class="home-icon-label" id="home-sc-title">Scripts</span>
+            <span class="home-icon-label" id="home-sc-title">AI Tasks</span>
             <span class="home-icon-count" id="sc-count">0</span>
           </button>
           <button type="button" class="home-icon-btn" id="tile-apps" data-panel="panel-apps">
@@ -67,12 +67,17 @@
         <button type="button" class="home-panel-backdrop" id="home-panel-backdrop" hidden aria-label="Close"></button>
         <div class="home-panel" id="panel-playlists" hidden>
           <header class="home-panel-h">
-            <strong id="panel-pl-h">♪ Playlist</strong>
+            <strong id="panel-pl-h">♪ Music library</strong>
             <button type="button" class="icon-btn tiny home-panel-close" data-close title="Close">×</button>
           </header>
           <div class="home-card-body" id="pl-list"></div>
+          <section class="playlist-player" aria-label="Playlist player">
+            <div class="playlist-player-head"><span id="playlist-now-label">Now playing</span><span id="playlist-now-title">Choose a video</span></div>
+            <iframe id="playlist-player-frame" title="Playlist player" src="about:blank" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
+            <p class="home-hint" id="playlist-player-hint">Videos play here without leaving your music library.</p>
+          </section>
           <form class="home-row" id="pl-add-form">
-            <input type="url" id="pl-url-input" placeholder="Video URL…" autocomplete="off">
+            <input type="url" id="pl-url-input" placeholder="Paste a YouTube / video link…" autocomplete="off" required>
             <button type="submit" class="icon-btn tiny" id="pl-url-add" title="Add">＋</button>
           </form>
           <div class="home-row home-actions">
@@ -84,20 +89,9 @@
         </div>
 
         <div class="home-panel" id="panel-scripts" hidden>
-          <header class="home-panel-h">
-            <strong id="panel-sc-h">⚡ Scripts</strong>
-            <button type="button" class="icon-btn tiny home-panel-close" data-close title="Close">×</button>
-          </header>
+          <p class="home-hint" id="sc-hint">These are tasks you have assigned to AI Panel. Ask AI Panel to create or change a task; no manual task form is needed.</p>
           <div class="home-card-body" id="sc-list"></div>
-          <form class="home-row home-sc-form" id="sc-add-form">
-            <input type="text" id="sc-name-input" placeholder="Script name" autocomplete="off">
-            <input type="url" id="sc-url-input" placeholder="https://…" autocomplete="off">
-            <input type="time" id="sc-time-input" title="Schedule HH:MM" aria-label="Schedule time">
-            <input type="number" id="sc-interval-input" min="0" step="1" placeholder="Repeat min" title="Repeat every N minutes (0=once)" aria-label="Repeat minutes">
-            <button type="submit" class="icon-btn tiny" title="Add script">＋</button>
-          </form>
-          <p class="home-hint" id="sc-hint">◎ Sample · no AI · ✦ AI Action</p>
-          <button type="button" class="icon-btn tiny" id="btn-sc-refresh" title="Refresh" hidden>↻</button>
+          <button type="button" class="icon-btn tiny" id="btn-sc-refresh" title="Refresh">↻</button>
         </div>
 
         <div class="home-panel" id="panel-apps" hidden>
@@ -120,7 +114,7 @@
     <button type="button" class="icon-btn" id="btn-back" title="Back" aria-label="Back">←</button>
     <button type="button" class="icon-btn" id="btn-fwd" title="Next" aria-label="Next">→</button>
     <button type="button" class="icon-btn" id="btn-home" title="Home" aria-label="Home">⌂</button>
-    <button type="button" class="icon-btn" id="btn-reload" title="Reload" aria-label="Reload">↻</button>
+    <button type="button" class="icon-btn" id="btn-reload" title="Reload" aria-label="Reload">↻</button><span id="runtime-locale" class="runtime-locale" aria-live="polite"></span>
   </nav>
 
   <div class="more-backdrop" id="settings-backdrop" hidden></div>
