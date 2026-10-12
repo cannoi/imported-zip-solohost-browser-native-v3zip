@@ -25,3 +25,7 @@ Existing UI, Bridge, tabs, context menu, AI/Feedback/Settings/Logs, security che
 - Browser engine sessions now use a stable local profile ID rather than the client IP as their persistent storage identity, so ordinary IP changes do not silently switch cookie/storage profiles. UI language and best-effort public-IP time zone are passed to new Playwright sessions.
 - Browser compatibility audit aligns the declared locale/time zone and the bundled Chromium 131 user-agent with the actual configured engine profile. It does not hide automation, spoof unrelated fingerprints, transfer cookies from external browsers, solve CAPTCHAs or bypass site anti-bot controls.
 - Compose defaults the container system time zone to UTC; app-level time-zone detection still prefers public-IP geolocation with fallback. SoloHost config schema drops the unsupported `id` field from the optional password field.
+
+
+## v10.21.0 — Adaptive Bridge templates
+See `docs/V10.21.0_ADAPTIVE_BRIDGE_TEMPLATES_REPORT.md` for the bridge fidelity fix, page-family detection, regression tests, and limitations.

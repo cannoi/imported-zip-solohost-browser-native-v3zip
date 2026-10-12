@@ -84,7 +84,7 @@ function browserContext() {
     lang: st.lang || (document.documentElement.lang || 'en'),
     theme: st.theme || document.documentElement.getAttribute('data-theme') || 'rainbow',
     app: 'SoloHost Browser',
-    version: '10.20.0'
+    version: '10.21.0'
   };
 }
 const aiChat = document.getElementById('chatLog') || document.getElementById('aiChat');

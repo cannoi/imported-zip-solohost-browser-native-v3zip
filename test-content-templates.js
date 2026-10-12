@@ -1,0 +1,33 @@
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const router = require('./lib/engine/content-router');
+const bridge = require('./lib/engine/dom-bridge');
+const engine = require('./lib/engine/playwright-engine');
+const pkg = require('./package.json');
+const caps = require('./lib/engine/capabilities').detect();
+assert.strictEqual(pkg.version, '10.21.0');
+assert.strictEqual(caps.version, pkg.version);
+
+assert.deepStrictEqual(router.classify('https://www.google.co.uk/search?q=bridge').pageType, 'search');
+assert.strictEqual(router.classify('https://www.youtube.com/watch?v=abcdefghijk').mode, 'ENGINE', 'watch page stays in Chromium engine for real site interactions');
+assert.strictEqual(router.classify('https://www.youtube.com/embed/abcdefghijk').mode, 'EMBED');
+assert.strictEqual(router.classify('https://www.facebook.com/').pageType, 'social', 'social home is not automatically handed off');
+assert.strictEqual(router.classify('https://www.facebook.com/login/').pageType, 'login');
+assert.strictEqual(router.classify('https://www.amazon.co.uk/dp/B000000000').pageType, 'commerce');
+assert.strictEqual(router.classify('https://developer.mozilla.org/en-US/docs/Web').pageType, 'docs');
+assert.strictEqual(engine.classifyPageType('https://www.google.com/search?q=bridge'), 'search');
+assert.strictEqual(engine.classifyPageType('https://www.youtube.com/shorts/abcdefghijk'), 'video');
+assert.strictEqual(engine.classifyPageType('https://www.lazada.vn/products/item'), 'commerce');
+
+const raw = '<!doctype html><html><head><base href="https://evil.example/"><link rel="stylesheet" href="/site.css"></head><body><main><article><h1>Readable story</h1><p>Text</p></article></main></body></html>';
+const clean = bridge.sanitizeHtml(raw, 'https://news.example/story/1');
+assert.ok(clean.includes('<base href="https://news.example/story/1">'), 'validated page URL is used as base for relative CSS/assets');
+assert.ok(!clean.includes('https://evil.example/'), 'untrusted remote-supplied base tags are removed');
+assert.ok(clean.includes('href="/site.css"'), 'relative stylesheet remains and resolves against validated base');
+assert.ok(clean.includes('data-sh-page-type="article"'), 'article family marker applied to static bridge snapshot');
+assert.ok(clean.includes('[data-sh-page-type=article]'), 'article template CSS is present');
+const server = fs.readFileSync(path.join(__dirname, 'server-app.js'), 'utf8');
+assert.ok(server.includes("base-uri http: https:"), 'Bridge CSP permits the validated remote base URL for relative assets');
+console.log('Adaptive bridge templates, routing hints, relative assets and CSP regression: PASS');
