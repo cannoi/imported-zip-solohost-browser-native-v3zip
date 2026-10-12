@@ -914,8 +914,8 @@
       const vi = state.lang === 'vi';
       if (title) title.textContent = vi ? 'Mật khẩu truy cập' : 'Access password';
       if (hint) hint.textContent = vi
-        ? 'Nhập mật khẩu để mở app (mặc định: solohost — đổi trong cài đặt SoloHost).'
-        : 'Enter password to open the app (default: solohost — change in SoloHost settings).';
+        ? 'Nhập mật khẩu đã đặt khi khởi chạy app trên SoloHost.'
+        : 'Enter the password you set when starting the app in SoloHost.';
       const input = $('access-gate-input');
       if (input) setTimeout(() => input.focus(), 50);
       return false;
@@ -939,8 +939,8 @@
         const r = await fetch('/api/access/login', {
           method: 'POST',
           credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: pwd })
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ password: String(pwd || '').trim() })
         });
         const j = await r.json().catch(() => ({}));
         if (r.ok && j.ok) {

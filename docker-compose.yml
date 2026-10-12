@@ -5,10 +5,9 @@ services:
       - "8080:8080"
     environment:
       PORT: "8080"
-      BROWSER_ACCESS_PASSWORD: "${BROWSER_ACCESS_PASSWORD:-solohost}"
-      AGENT_TIME_LIMIT_MIN: "${AGENT_TIME_LIMIT_MIN:-60}"
-      TZ: "${TZ:-UTC}"
       HOST: "0.0.0.0"
+      BROWSER_ACCESS_PASSWORD: "${BROWSER_ACCESS_PASSWORD}"
+      TZ: "${TZ:-UTC}"
       HOME: "/tmp/solohost-browser"
       SOLOHOST_PLAYWRIGHT: "1"
       SOLOHOST_BROWSER_ENGINE: "chromium"

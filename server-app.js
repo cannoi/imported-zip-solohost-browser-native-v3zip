@@ -107,10 +107,25 @@ app.use((req, res, next) => {
 // Local/loopback/private LAN can skip when BROWSER_ACCESS_PASSWORD is empty (SoloHost on-device).
 // Health checks stay public so SoloHost can monitor container readiness.
 function accessPassword() {
-  // Always enforce a password so remote/public and first-open always gate.
-  // SoloHost config BROWSER_ACCESS_PASSWORD overrides the default.
-  const v = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
-  return v || String(process.env.DEFAULT_ACCESS_PASSWORD || 'solohost').trim();
+  // SoloHost injects BROWSER_ACCESS_PASSWORD from config_options → .env → compose.
+  // Trim BOM/quotes that some hosts add around env values.
+  let v = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
+  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
+    v = v.slice(1, -1).trim();
+  }
+  // Fallback only when env missing so gate still shows on first deploy
+  if (!v) v = String(process.env.DEFAULT_ACCESS_PASSWORD || 'solohost').trim();
+  return v;
+}
+function passwordsMatch(supplied, expected) {
+  const a = Buffer.from(String(supplied || ''), 'utf8');
+  const b = Buffer.from(String(expected || ''), 'utf8');
+  if (a.length !== b.length || a.length === 0) return false;
+  try {
+    return require('crypto').timingSafeEqual(a, b);
+  } catch (_) {
+    return false;
+  }
 }
 function clientIp(req) {
   const xf = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
@@ -171,10 +186,7 @@ app.use((req, res, next) => {
   // Also accept cookie session after first success
   const cookie = String(req.headers.cookie || '');
   const cookieOk = cookie.includes('solo_access=1');
-  const crypto = require('crypto');
-  const a = Buffer.from(supplied);
-  const b = Buffer.from(configured);
-  const basicOk = m && a.length === b.length && crypto.timingSafeEqual(a, b);
+  const basicOk = !!(m && passwordsMatch(supplied, configured));
   if (basicOk || cookieOk) {
     if (basicOk && !cookieOk) {
       res.setHeader('Set-Cookie', 'solo_access=1; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400');
@@ -185,6 +197,9 @@ app.use((req, res, next) => {
   res.status(401).type('text/plain').send('SoloHost Browser access password required.');
 });
 
+
+app.use(express.json({ limit: '64kb' }));
+app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 
 app.get('/api/access/status', (req, res) => {
   const configured = accessPassword();
@@ -207,14 +222,17 @@ app.post('/api/access/login', (req, res) => {
     res.setHeader('Set-Cookie', 'solo_access=1; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400');
     return res.json({ ok: true, authenticated: true, note: 'no_password_configured' });
   }
-  const supplied = String((req.body && req.body.password) || '');
-  const crypto = require('crypto');
-  const a = Buffer.from(supplied);
-  const b = Buffer.from(configured);
-  if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+  const body = req.body || {};
+  let supplied = String(body.password || body.pass || body.BROWSER_ACCESS_PASSWORD || '').trim();
+  if (!supplied && req.headers['x-access-password']) {
+    supplied = String(req.headers['x-access-password']).trim();
+  }
+  if (passwordsMatch(supplied, configured)) {
     res.setHeader('Set-Cookie', 'solo_access=1; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400');
+    try { require('./app-log').log('info', 'access.login_ok'); } catch (_) {}
     return res.json({ ok: true, authenticated: true });
   }
+  try { require('./app-log').log('warn', 'access.login_fail', { hasBody: !!req.body, len: supplied.length }); } catch (_) {}
   res.status(401).json({ ok: false, error: 'invalid_password' });
 });
 
