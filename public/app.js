@@ -284,25 +284,31 @@
       if (j.externalRequired && j.externalReason !== 'bing_verification_required') return loadViaExternal(googleExternalTarget(j.url || url), j.externalReason || 'site_auth_policy');
       const activeNav = ensureTabNav(tab);
       if (activeNav) activeNav.bridgeAudit = j.audit || {};
-      if (!j.hasContent && j.error) return { ok: false, reason: j.error, detail: j };
-      // If backend fell back to proxy inside server, treat as proxy success without bridge view
-      if (j.backend === 'proxy' && j.hasContent === false) {
+      // Prefer showing whatever the Bridge has; only fail hard when empty AND explicit error
+      if (!j.hasContent && j.error && !j.title) return { ok: false, reason: j.error, detail: j };
+      if (!j.hasContent && j.backend === 'proxy' && j.error === 'empty_content') {
         return { ok: false, reason: 'bridge_empty', detail: j };
       }
       const view = bridgeViewUrl(b);
       if (!frame || !view) return { ok: false, reason: 'no_viewport' };
       try {
         frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
-        if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); }
+        // Always reload the Bridge viewport after navigate — same session URL path would
+        // otherwise keep showing the previous page (data-sh-view equal → no load).
+        const bust = view + (view.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
+        frame.src = bust;
+        frame.setAttribute('data-sh-view', view);
       } catch (_) {
         return { ok: false, reason: 'frame_error' };
       }
+      const be = String(j.backend || b.backend || '');
       return {
         ok: true,
-        mode: (j.backend === 'webkit' || b.backend === 'webkit') ? MODE.ENGINE : MODE.PROXY,
-        backend: j.backend || b.backend,
+        mode: (be === 'webkit' || be === 'playwright') ? MODE.ENGINE : MODE.PROXY,
+        backend: be,
         url: j.url || url,
-        title: j.title || ''
+        title: j.title || '',
+        hasContent: !!j.hasContent
       };
     } catch (e) {
       const reason = (e && e.name === 'AbortError') ? 'bridge_client_timeout' : String((e && e.message) || e);

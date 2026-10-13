@@ -1027,3 +1027,10 @@ try {
 }
 
 }; // mount
+
+try {
+  const pe = require('./lib/engine/playwright-engine');
+  if (pe && pe.status) pe.status().then((st) => {
+    try { require('./lib/app-log').log('info', 'bridge.engine_warm', { ready: !!(st && st.ready) }); } catch (_) {}
+  }).catch(() => {});
+} catch (_) {}
