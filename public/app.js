@@ -91,32 +91,26 @@
 
   function classifyUrl(url) {
     const h = hostOf(url);
-    // Let Chromium's native viewer handle direct media, images and PDFs instead of
-    // trying to snapshot its internal browser UI through the DOM Bridge.
     if (isNativeMediaOrDocumentUrl(url)) return MODE.DIRECT;
-    if (!h) return MODE.ENGINE;
-    // Keep Bing's human verification page visible when embeddable; never solve it automatically.
+    if (!h) return MODE.PROXY;
     try { const bu = new URL(url); if (/(^|\.)bing\.com$/.test(bu.hostname) && /captcha|challenge|verify|pow/i.test(bu.pathname + bu.search)) return MODE.DIRECT; } catch (_) {}
-    // Site-owned authentication must use a normal system browser, not an embedded/automated view.
     if (isExternalAuthPath(url)) return MODE.EXTERNAL;
-    // YouTube watch/Shorts/live URLs must reach the server's official-player shell.
-    // The Bridge snapshot intentionally strips scripts/unsafe frames, so rendering these
-    // URLs in the automated DOM view leaves a visible page with a non-working player.
-    if (isYouTubeVideoUrl(url)) return MODE.ENGINE;
+    // YouTube → official player shell (PROXY) — unchanged from pre-noVNC
+    if (isYouTubeVideoUrl(url)) return MODE.PROXY;
     try {
       const yu = new URL(url);
       const yh = yu.hostname.replace(/^www\./, '').toLowerCase();
       let yp = yu.pathname || '/';
       if (yp.length > 1 && yp.endsWith('/')) yp = yp.slice(0, -1);
-      if ((yh === 'youtube.com' || yh === 'm.youtube.com' || yh === 'youtu.be') && (yp === '/' || yp === '/feed' || yp.indexOf('/feed/') === 0)) { return MODE.ENGINE; }
+      if ((yh === 'youtube.com' || yh === 'm.youtube.com' || yh === 'youtu.be') &&
+          (yp === '/' || yp === '/feed' || yp.indexOf('/feed/') === 0)) {
+        return MODE.PROXY;
+      }
     } catch (_) {}
-    // DRM/subscription streaming sites need their own full browser profile/DRM stack.
     if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
-    // Official embeddable players remain direct when on their official embed endpoint.
     if (isDirectEmbed(url)) return MODE.DIRECT;
-    // Dynamic sites use the JS-capable engine; do not rewrite them to proxy HTML pre-emptively.
     if (/google\./.test(h)) return MODE.ENGINE;
-    if (/youtube\.com|youtu\.be/.test(h)) return MODE.ENGINE;
+    if (/youtube\.com|youtu\.be/.test(h)) return MODE.PROXY;
     if (/(^|\.)(facebook|fb|instagram|whatsapp|messenger|tiktok|x|twitter|reddit)\.com$/.test(h)) return MODE.ENGINE;
     if (isLoginPath(url)) return MODE.ENGINE;
     return MODE.ENGINE;
