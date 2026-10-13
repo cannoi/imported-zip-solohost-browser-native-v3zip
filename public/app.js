@@ -302,7 +302,7 @@
       if (!frame || !view) return { ok: false, reason: 'no_viewport' };
       try {
         frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
-        frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
+        if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); }
       } catch (_) {
         return { ok: false, reason: 'frame_error' };
       }
@@ -401,10 +401,26 @@
   }
 
   async function softRefreshActiveBridge() {
-    // Disabled: rewriting the viewport caused flicker and scroll jumps.
-    // Kept as no-op for API compatibility (SoloBrowser.softRefreshActiveBridge).
-    return false;
+    // UI-only: repair missing images in the viewport. Never re-goto the backend page.
+    try {
+      const doc = frame && frame.contentDocument;
+      if (!doc) return false;
+      doc.querySelectorAll('img').forEach((img) => {
+        try {
+          if (!img.getAttribute('src') && img.dataset && img.dataset.src) img.src = img.dataset.src;
+          if (img.complete && img.naturalWidth === 0 && img.src) {
+            const u = img.src;
+            img.src = '';
+            img.src = u;
+          }
+        } catch (_) {}
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
+
 
   async function bridgeEvent(ev) {
     const tab = getActiveTab();
@@ -1068,14 +1084,25 @@
     const tab = state.tabs.find(t => t.id === id); if (!tab) return;
     state.activeTabId = id; state.url = tab.url || ''; renderTabs();
     if (input) input.value = state.url; if (btnOpen) btnOpen.href = state.url || '#';
-    // Restore the existing tab's Bridge view instead of reloading the website.
+    // Restore cached Bridge view only — never re-navigate Chromium for a tab switch.
     const nav = ensureTabNav(tab);
     const view = nav && nav.bridge && bridgeViewUrl(nav.bridge);
     if (state.url && view) {
-      if (frame) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); frame.src = view + '&t=' + Date.now(); }
+      if (frame) {
+        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
+        if (frame.getAttribute('data-sh-view') !== view) {
+          frame.src = view;
+          frame.setAttribute('data-sh-view', view);
+        }
+      }
       hideStart();
-    } else if (state.url) navigate(state.url, { force: true, skipHistory: true });
-    else { if (frame) frame.src = 'about:blank'; showStart(); }
+    } else if (state.url) {
+      // Session missing: one deliberate load, not a continuous loop
+      navigate(state.url, { force: true, skipHistory: true });
+    } else {
+      if (frame) { frame.src = 'about:blank'; frame.removeAttribute('data-sh-view'); }
+      showStart();
+    }
   }
   function destroyTabSession(tab) {
     const b = tab && tab.nav && tab.nav.bridge;
@@ -1147,7 +1174,7 @@
     url = toPlayableUrl(url);
 
     const now = Date.now();
-    if (!opts.force && state.url === url && now - (state.lastNavAt || 0) < 1200) {
+    if (!opts.force && state.url === url && now - (state.lastNavAt || 0) < 4000) {
       clientLog('warn', 'navigate_deduped', { url: url });
       return;
     }
@@ -2193,10 +2220,10 @@
       if (!view) return false;
       try {
         frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
-        frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
+        if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); }
         return true;
       } catch (_) { return false; }
-    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); frame.src = view + '&t=' + Date.now(); } } } };
+    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); } } } } };
 })();
 
   try {
