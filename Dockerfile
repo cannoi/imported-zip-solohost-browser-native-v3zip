@@ -1,7 +1,4 @@
-# SoloHost Browser v10.25.5 — CI-friendly (avoid apt hang on GitHub Actions)
-# Chromium is already in the Playwright base. Skip second browser download.
-# noVNC apt packages are OFF by default (WITH_NOVNC=0) so builds finish reliably.
-
+# SoloHost Browser v10.25.6 — express deps + UI on 8080 only
 FROM mcr.microsoft.com/playwright:v1.51.1-jammy
 
 WORKDIR /app
@@ -16,7 +13,7 @@ RUN if [ "$WITH_NOVNC" = "1" ]; then \
            xvfb x11vnc openbox novnc websockify \
       && rm -rf /var/lib/apt/lists/* /var/cache/apt/archives/*; \
     else \
-      echo "WITH_NOVNC=0: skip apt (faster CI). Rebuild with --build-arg WITH_NOVNC=1 for noVNC."; \
+      echo "WITH_NOVNC=0: skip apt (faster CI)."; \
     fi
 
 ENV NODE_ENV=production \
@@ -31,14 +28,16 @@ ENV NODE_ENV=production \
     npm_config_update_notifier=false \
     npm_config_fund=false \
     npm_config_audit=false \
+    npm_config_registry=https://registry.npmjs.org/ \
     DEBIAN_FRONTEND=noninteractive \
     PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 \
     DISPLAY=:99 \
     SOLOHOST_BROWSER_HEADFUL=0
 
-COPY package.json package-lock.json* ./
-RUN npm install --omit=dev --no-audit --no-fund \
+COPY package.json ./
+RUN npm install --omit=dev --no-audit --no-fund --registry=https://registry.npmjs.org/ \
+ && node -e "require('express'); require('cors'); require('dotenv'); console.log('deps-ok')" \
  && npm cache clean --force \
  && rm -rf /tmp/* /root/.npm/_logs 2>/dev/null || true
 
@@ -53,7 +52,7 @@ RUN chmod +x start.sh \
  && chmod -R a+rwX /app/data /tmp/solohost-browser \
  && node -e "require('./lib/app-adapter'); console.log('adapter-ok')"
 
-EXPOSE 8080 6080
+EXPOSE 8080
 
 HEALTHCHECK --interval=5s --timeout=3s --start-period=25s --retries=12 \
   CMD node -e "require('http').get('http://127.0.0.1:'+(process.env.PORT||8080)+'/api/health',r=>{let d='';r.on('data',c=>d+=c);r.on('end',()=>process.exit(r.statusCode===200&&d.indexOf('ok')>=0?0:1))}).on('error',()=>process.exit(1))"
