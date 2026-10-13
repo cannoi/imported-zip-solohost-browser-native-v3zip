@@ -7,7 +7,7 @@ const bridge = require('./lib/engine/dom-bridge');
 const engine = require('./lib/engine/playwright-engine');
 const pkg = require('./package.json');
 const caps = require('./lib/engine/capabilities').detect();
-assert.strictEqual(pkg.version, '10.22.0');
+assert.strictEqual(pkg.version, '10.25.0');
 assert.strictEqual(caps.version, pkg.version);
 
 assert.deepStrictEqual(router.classify('https://www.google.co.uk/search?q=bridge').pageType, 'search');

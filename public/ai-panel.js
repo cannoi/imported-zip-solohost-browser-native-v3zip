@@ -1,23 +1,63 @@
 
 function ensureAgentTimeSetting() {
   try {
-    const host = document.getElementById('ai-settings') || document.querySelector('[data-tab="settings"]') || document.getElementById('settings-pane');
-    if (!host || host.querySelector('#agent-time-limit')) return;
-    const row = document.createElement('label');
-    row.style.cssText = 'display:block;margin:10px 0;font-size:13px';
-    row.innerHTML = (typeof isVi === 'function' && isVi() ? 'Giới hạn thời gian Agent (phút)' : 'Agent time limit (minutes)') +
-      '<input type="number" id="agent-time-limit" min="5" max="60" value="' + (localStorage.getItem('solo_agent_time_min') || '60') + '" style="width:100%;margin-top:4px;padding:8px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445">';
-    host.appendChild(row);
-    row.querySelector('input').addEventListener('change', (e) => {
-      const v = Math.max(5, Math.min(60, Number(e.target.value) || 60));
-      localStorage.setItem('solo_agent_time_min', String(v));
-      e.target.value = String(v);
+    // Must bind to settings body pane — NEVER the tab button [data-tab="settings"]
+    const host =
+      document.querySelector('#pane-settings .settings-body') ||
+      document.getElementById('pane-settings') ||
+      document.getElementById('ai-settings') ||
+      document.getElementById('settings-pane');
+    if (!host) return;
+    document.querySelectorAll('.panel-tabs #agent-time-limit, .tab #agent-time-limit, .panel-tabs .agent-time-field').forEach((el) => {
+      try {
+        const row = el.closest('.agent-time-field') || el.closest('label') || el;
+        if (row && !host.contains(row)) row.remove();
+      } catch (_) {}
     });
+    const existing = host.querySelector('#agent-time-limit');
+    if (existing) {
+      if (!existing.dataset.bound) {
+        existing.dataset.bound = '1';
+        existing.value = localStorage.getItem('solo_agent_time_min') || existing.value || '60';
+        existing.addEventListener('change', (e) => {
+          const v = Math.max(5, Math.min(180, Number(e.target.value) || 60));
+          localStorage.setItem('solo_agent_time_min', String(v));
+          e.target.value = String(v);
+        });
+      }
+      return;
+    }
+    const row = document.createElement('div');
+    row.className = 'settings-field agent-time-field';
+    row.style.cssText = 'display:block;margin:12px 0 4px;clear:both;position:relative;z-index:0';
+    const vi = (typeof isVi === 'function' && isVi());
+    const label = vi ? 'Giới hạn thời gian Agent (phút)' : 'Agent time limit (minutes)';
+    const hint = vi
+      ? 'Mỗi nhiệm vụ Agent tối đa số phút này (mặc định 60). Có thể bấm Tiếp tục để resume.'
+      : 'Each Agent task runs up to this many minutes (default 60). Use Continue to resume.';
+    row.innerHTML =
+      '<label for="agent-time-limit" style="display:block;font-size:12px;opacity:.75;margin:0 0 4px">' + label + '</label>' +
+      '<input type="number" id="agent-time-limit" min="5" max="180" step="5" value="' +
+        (localStorage.getItem('solo_agent_time_min') || '60') +
+      '" style="width:100%;box-sizing:border-box;min-height:40px;padding:8px 10px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445">' +
+      '<p style="font-size:11px;opacity:.6;margin:6px 0 0;line-height:1.35">' + hint + '</p>';
+    const anchor = host.querySelector('#setSave, #btnSaveSettings, .settings-actions, #setTest');
+    if (anchor && anchor.parentNode === host) host.insertBefore(row, anchor);
+    else host.appendChild(row);
+    const input = row.querySelector('#agent-time-limit');
+    if (input) {
+      input.dataset.bound = '1';
+      input.addEventListener('change', (e) => {
+        const v = Math.max(5, Math.min(180, Number(e.target.value) || 60));
+        localStorage.setItem('solo_agent_time_min', String(v));
+        e.target.value = String(v);
+      });
+    }
   } catch (_) {}
 }
 'use strict';
 /**
- * Reference AI panel controller (from Snake Arcade).
+ * SoloHost Browser AI panel controller.
  * Host app may copy to public/ai-panel.js and adapt browserContext() / executeActions().
  * Depends on: UniversalAI, UniversalFeedback, markup in example/ui/ai-panel.html, styles in ai-panel.css.
  */
@@ -84,7 +124,7 @@ function browserContext() {
     lang: st.lang || (document.documentElement.lang || 'en'),
     theme: st.theme || document.documentElement.getAttribute('data-theme') || 'rainbow',
     app: 'SoloHost Browser',
-    version: '10.22.0'
+    version: '10.25.0'
   };
 }
 const aiChat = document.getElementById('chatLog') || document.getElementById('aiChat');
@@ -610,7 +650,7 @@ refreshStatus();
 loadSettings();
 fb.sync().catch(e => {
   const st = document.getElementById('fbStatus');
-  if (st) st.textContent = 'Hub: ' + e.message;
+  if (st) st.textContent = 'AI: ' + e.message;
 });
 setUnread(0);
 setFabVisible(true);

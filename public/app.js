@@ -80,6 +80,15 @@
     } catch (_) { return false; }
   }
 
+  // Direct audio files can play in the user's own browser without capturing backend audio.
+  function isDirectAudioUrl(raw) {
+    try {
+      const u = new URL(String(raw || '').trim());
+      if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password) return false;
+      return /\.(?:mp3|m4a|aac|wav|flac|opus|oga|ogg)(?:$)/i.test(u.pathname || '');
+    } catch (_) { return false; }
+  }
+
   function classifyUrl(url) {
     const h = hostOf(url);
     // Let Chromium's native viewer handle direct media, images and PDFs instead of
@@ -718,7 +727,7 @@
         : '◎ Starter tasks · ✦ New requests use the unified assistant';
       if ($('sc-name-input')) $('sc-name-input').placeholder = vi ? 'Tên nhiệm vụ' : 'Task name';
       if ($('sc-url-input')) $('sc-url-input').placeholder = vi ? 'URL điều hướng…' : 'Navigate URL…';
-      if ($('pl-url-input')) $('pl-url-input').placeholder = vi ? 'Dán URL video…' : 'Paste video URL…';
+      if ($('pl-url-input')) $('pl-url-input').placeholder = vi ? 'Dán URL audio / video…' : 'Paste audio / video URL…';
       if ($('app-url-input')) $('app-url-input').placeholder = 'http://127.0.0.1:8090';
     } catch (_) {}
 
@@ -915,10 +924,12 @@
       const r = await fetch('/api/access/status', { cache: 'no-store', credentials: 'same-origin' });
       const j = await r.json();
       if (!j || !j.required) {
+        try { sessionStorage.removeItem('solo_access_required'); } catch (_) {}
         gate.hidden = true;
         gate.setAttribute('hidden', '');
         return true;
       }
+      try { sessionStorage.setItem('solo_access_required', '1'); } catch (_) {}
       gate.hidden = false;
       gate.removeAttribute('hidden');
       const title = $('access-gate-title');
@@ -932,7 +943,14 @@
       if (input) setTimeout(() => input.focus(), 50);
       return false;
     } catch (_) {
-      // If status fails on local, allow in
+      // Network/status failure: keep gate visible if a password field was previously required
+      try {
+        if (sessionStorage.getItem('solo_access_required') === '1') {
+          gate.hidden = false;
+          gate.removeAttribute('hidden');
+          return false;
+        }
+      } catch (__) {}
       gate.hidden = true;
       return true;
     }
@@ -996,6 +1014,7 @@
       // Hard timeout 5s — always dismiss
       setTimeout(function () { hideSplash(); checkAccessGate(); }, 5000);
       setTimeout(function () { hideSplash(); checkAccessGate(); }, 6500);
+      setTimeout(function () { checkAccessGate(); }, 8000);
     } catch (_) {
       try { hideSplash(); } catch (__) {}
     }
@@ -1320,6 +1339,26 @@
     });
   }
 
+  if ($('btn-novnc')) $('btn-novnc').addEventListener('click', async () => {
+    const vi = /^vi(?:-|$)/i.test((navigator.language || 'en').toLowerCase());
+    let desktopWindow = null;
+    try {
+      desktopWindow = window.open('about:blank', '_blank');
+      const response = await fetch('/api/novnc/status', { credentials: 'same-origin', cache: 'no-store' });
+      const data = await response.json();
+      if (!data || !data.enabled || !data.url) {
+        try { if (desktopWindow) desktopWindow.close(); } catch (_) {}
+        alert(vi ? 'Desktop Chromium chưa bật. Hãy bật noVNC và đặt mật khẩu trong cấu hình SoloHost, sau đó khởi động lại app.' : 'Interactive Chromium desktop is disabled. Enable noVNC and set its password in SoloHost configuration, then restart the app.');
+        return;
+      }
+      if (desktopWindow) desktopWindow.location.href = data.url;
+      else window.location.href = data.url;
+    } catch (_) {
+      try { if (desktopWindow) desktopWindow.close(); } catch (_) {}
+      alert(vi ? 'Không thể kết nối noVNC. Hãy kiểm tra cấu hình và nhật ký máy chủ.' : 'Cannot connect to noVNC. Check configuration and server logs.');
+    }
+  });
+
   if ($('btn-new-tab')) $('btn-new-tab').addEventListener('click', () => newTab());
   if ($('btn-bookmark')) $('btn-bookmark').addEventListener('click', addCurrentBookmark);
   if ($('btn-library')) $('btn-library').addEventListener('click', () => openLibrary('bookmarks'));
@@ -1327,21 +1366,52 @@
   if ($('library-close')) $('library-close').addEventListener('click', () => { $('library-overlay').hidden = true; });
   document.querySelectorAll('[data-library]').forEach(b => b.addEventListener('click', () => openLibrary(b.dataset.library)));
   if ($('history-clear')) $('history-clear').addEventListener('click', async () => {
-  if ($('btn-private-tab')) $('btn-private-tab').addEventListener('click', () => {
-    const id = 't' + Date.now().toString(36);
-    const tab = { id, title: state.lang === 'vi' ? 'Tab ẩn danh mới' : 'New private tab', url: '', private: true };
-    state.tabs.push(tab);
-    state.activeTabId = id;
-    renderTabs();
-    showStart();
-    state.url = '';
-    if (input) input.value = '';
-    if (frame) { try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {} }
-    clientLog('info', 'tab.private_new', { id });
-  });
     if (state.libraryMode !== 'history') return;
     try { await fetch('/api/browser/history', { method: 'DELETE' }); openLibrary('history'); } catch (_) {}
   });
+    function openPrivateTab(startUrl) {
+    try {
+      const tab = newTab(startUrl || '', { private: true });
+      if (!tab) {
+        clientLog('warn', 'tab.private_new_failed', { reason: 'newTab_null' });
+        return null;
+      }
+      state.activeTabId = tab.id;
+      state.url = startUrl || '';
+      if (input) input.value = startUrl || '';
+      if (frame) {
+        try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {}
+      }
+      renderTabs();
+      if (startUrl) navigate(startUrl, { force: true });
+      else showStart();
+      clientLog('info', 'tab.private_new', { id: tab.id });
+      return tab;
+    } catch (e) {
+      clientLog('error', 'tab.private_new_error', { error: String(e && e.message || e).slice(0, 160) });
+      return null;
+    }
+  }
+  const privBtn = $('btn-private-tab') || document.getElementById('btn-private-tab');
+  if (privBtn && !privBtn.dataset.privateBound) {
+    privBtn.dataset.privateBound = '1';
+    privBtn.addEventListener('click', function (ev) {
+      try { ev.preventDefault(); ev.stopPropagation(); } catch (_) {}
+      openPrivateTab('');
+    }, true);
+  }
+  // Re-bind after short delay (mobile WebView late paint)
+  setTimeout(function () {
+    const b = document.getElementById('btn-private-tab');
+    if (b && !b.dataset.privateBound) {
+      b.dataset.privateBound = '1';
+      b.addEventListener('click', function (ev) {
+        try { ev.preventDefault(); ev.stopPropagation(); } catch (_) {}
+        openPrivateTab('');
+      }, true);
+    }
+  }, 400);
+
   if ($('library-overlay')) $('library-overlay').addEventListener('click', e => { if (e.target === $('library-overlay')) $('library-overlay').hidden = true; });
 
   const form = $('nav-form');
@@ -1642,6 +1712,8 @@
       dock.setAttribute('hidden', '');
       const bg = $('bg-music-frame');
       if (bg) bg.src = 'about:blank';
+      const audio = $('bg-music-audio');
+      if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.hidden = true; }
     }
   }
 
@@ -1661,8 +1733,27 @@
     const it = pl.items[homeLib.playIndex];
     if (!it) return;
     const embed = getVideoEmbedUrl(it.url);
+    const audio = $('bg-music-audio');
     if (title) { title.textContent = it.title || it.url; title.dataset.userTitle = '1'; }
-    if (embed && player) {
+    if (isDirectAudioUrl(it.url) && audio) {
+      if (player) player.src = 'about:blank';
+      if (panelPlayer && panelPlayer !== player) panelPlayer.src = 'about:blank';
+      audio.hidden = false;
+      audio.src = new URL(it.url).toString();
+      audio.load();
+      homeLib.isPlaying = true; updateMusicControls();
+      showMusicDock(true, it.title || it.url);
+      if (hint) hint.textContent = state.lang === 'vi'
+        ? 'Âm thanh trực tiếp đang phát trên thiết bị của bạn; nguồn phải là tệp audio HTTP(S) công khai và được trình duyệt hỗ trợ.'
+        : 'Direct audio plays in your device browser; the source must be a public HTTP(S) audio file supported by the browser.';
+      const playAttempt = audio.play();
+      if (playAttempt && typeof playAttempt.catch === 'function') playAttempt.catch(() => {
+        homeLib.isPlaying = false; updateMusicControls();
+        if (hint) hint.textContent = state.lang === 'vi' ? 'Nhấn Phát trên trình phát âm thanh để bắt đầu; trình duyệt có thể chặn tự phát.' : 'Press Play on the audio control to start; browser autoplay may be blocked.';
+      });
+      clientLog('info', 'playlist.direct_audio_play', { source: it.source || 'direct_audio', playback: 'client_native' });
+    } else if (embed && player) {
+      if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.hidden = true; }
       const src = withPlayerApi(embed);
       player.src = src;
       // Keep panel preview in sync if open
@@ -1674,6 +1765,7 @@
         : 'Background play — keeps playing if the app window stays open.';
       clientLog('info', 'playlist.embed_play', { source: it.source || 'video', background: true });
     } else {
+      if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.hidden = true; }
       if (player) player.src = 'about:blank';
       homeLib.isPlaying = false; updateMusicControls(); showMusicDock(false);
       if (hint) hint.textContent = state.lang === 'vi' ? 'Nguồn này chưa có trình nhúng chính thức được hỗ trợ. Hãy thêm liên kết YouTube, Vimeo hoặc TikTok.' : 'This source has no supported official embed. Add a YouTube, Vimeo, or TikTok link.';
@@ -1686,6 +1778,7 @@
   function updateMusicControls() {
     const play = $('btn-pl-play'), shuffle = $('btn-pl-shuffle'), repeat = $('btn-pl-repeat');
     if (play) { play.textContent = homeLib.isPlaying ? 'Ⅱ' : '▶'; play.title = state.lang === 'vi' ? (homeLib.isPlaying ? 'Tạm dừng' : 'Phát') : (homeLib.isPlaying ? 'Pause' : 'Play'); play.setAttribute('aria-label', play.title); }
+    const dockPlay = $('bg-music-play'); if (dockPlay) { dockPlay.textContent = homeLib.isPlaying ? 'Ⅱ' : '▶'; dockPlay.title = state.lang === 'vi' ? (homeLib.isPlaying ? 'Tạm dừng' : 'Phát') : (homeLib.isPlaying ? 'Pause' : 'Play'); }
     if (shuffle) { shuffle.classList.toggle('active', homeLib.shuffle); shuffle.setAttribute('aria-pressed', homeLib.shuffle ? 'true' : 'false'); shuffle.title = (state.lang === 'vi' ? 'Trộn bài: ' : 'Shuffle: ') + (homeLib.shuffle ? (state.lang === 'vi' ? 'Bật' : 'On') : (state.lang === 'vi' ? 'Tắt' : 'Off')); }
     if (repeat) { const labels = { off: state.lang === 'vi' ? 'Tắt lặp' : 'Repeat off', all: state.lang === 'vi' ? 'Lặp tất cả' : 'Repeat all', one: state.lang === 'vi' ? 'Lặp một bài' : 'Repeat one' }; repeat.classList.toggle('active', homeLib.repeatMode !== 'off'); repeat.textContent = homeLib.repeatMode === 'one' ? '🔂' : '🔁'; repeat.title = labels[homeLib.repeatMode] || labels.off; repeat.setAttribute('aria-pressed', homeLib.repeatMode !== 'off' ? 'true' : 'false'); }
   }
@@ -1702,6 +1795,29 @@
     else { let next = homeLib.playIndex + direction; if (next >= pl.items.length) { if (automatic && homeLib.repeatMode !== 'all') { homeLib.isPlaying = false; updateMusicControls(); return; } next = 0; } if (next < 0) next = pl.items.length - 1; homeLib.playIndex = next; }
     playPlaylistItem(); renderPlaylists();
   }
+  const directAudio = $('bg-music-audio');
+  if (directAudio) {
+    directAudio.addEventListener('play', () => { homeLib.isPlaying = true; updateMusicControls(); });
+    directAudio.addEventListener('pause', () => { if (!directAudio.ended) homeLib.isPlaying = false; updateMusicControls(); });
+    directAudio.addEventListener('ended', () => advancePlaylist(1, true));
+    directAudio.addEventListener('error', () => {
+      homeLib.isPlaying = false; updateMusicControls();
+      const hint = $('playlist-player-hint');
+      if (hint) hint.textContent = state.lang === 'vi' ? 'Không phát được tệp audio. Kiểm tra liên kết, định dạng, quyền truy cập hoặc CORS/chính sách máy chủ nguồn.' : 'Audio could not be played. Check the URL, format, access permissions, and source-server policy.';
+      clientLog('warn', 'playlist.direct_audio_error', { code: directAudio.error ? directAudio.error.code : 0 });
+    });
+  }
+  if ($('bg-music-play')) $('bg-music-play').addEventListener('click', () => {
+    const audio = $('bg-music-audio');
+    if (audio && !audio.hidden && audio.src) {
+      if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+    } else if (homeLib.isPlaying) { if (!sendPlayerCommand('pauseVideo')) { const f = musicPlayerFrame(); if (f) f.src = 'about:blank'; homeLib.isPlaying = false; } }
+    else playPlaylistItem();
+    updateMusicControls();
+  });
+  if ($('bg-music-next')) $('bg-music-next').addEventListener('click', () => advancePlaylist(1, false));
+  if ($('bg-music-prev')) $('bg-music-prev').addEventListener('click', () => advancePlaylist(-1, false));
+  if ($('bg-music-close')) $('bg-music-close').addEventListener('click', () => { const audio = $('bg-music-audio'); if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.hidden = true; } showMusicDock(false); homeLib.isPlaying = false; updateMusicControls(); });
   const musicFrame = $('playlist-player-frame');
   if (musicFrame) musicFrame.addEventListener('load', () => {
     try { const u = new URL(musicFrame.src); if (/youtube-nocookie\.com$/.test(u.hostname)) musicFrame.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'addEventListener', args: ['onStateChange'] }), 'https://www.youtube-nocookie.com'); } catch (_) {}
@@ -1973,6 +2089,11 @@
     });
     if ($('btn-pl-play')) $('btn-pl-play').addEventListener('click', () => {
       const pl = activePlaylist(); if (!pl || !pl.items || !pl.items.length) return;
+      const audio = $('bg-music-audio');
+      if (audio && !audio.hidden && audio.src) {
+        if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+        updateMusicControls(); return;
+      }
       if (!homeLib.isPlaying) { if (!$('playlist-player-frame')?.src || $('playlist-player-frame').src.endsWith('about:blank')) playPlaylistItem(); else if (!sendPlayerCommand('playVideo')) playPlaylistItem(); homeLib.isPlaying = true; }
       else { if (!sendPlayerCommand('pauseVideo')) { const f = $('playlist-player-frame'); if (f) f.src = 'about:blank'; homeLib.isPlaying = false; } else homeLib.isPlaying = false; }
       updateMusicControls();
@@ -2067,3 +2188,13 @@
       } catch (_) { return false; }
     }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); frame.src = view + '&t=' + Date.now(); } } } };
 })();
+
+  try {
+    window.addEventListener('message', function (ev) {
+      try {
+        if (!ev || !ev.data || ev.data.type !== 'solohost-open-novnc') return;
+        var btn = document.getElementById('btn-novnc');
+        if (btn) btn.click();
+      } catch (_) {}
+    });
+  } catch (_) {}

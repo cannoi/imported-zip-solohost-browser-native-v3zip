@@ -84,7 +84,8 @@ html, body {
   position: relative;
   width: 100%;
   max-width: 100%;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: visible;
 }
 html[data-theme="rainbow"] .chrome::after {
   content: "";
@@ -98,6 +99,8 @@ html[data-theme="rainbow"] .chrome::after {
 
 .chrome-nav,
 .chrome-actions {
+  flex: 0 0 auto;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 2px;
@@ -924,3 +927,16 @@ button:disabled { opacity:.35; cursor:not-allowed; }
 }
 .agent-continue-btn.ghost { background: transparent; border: 1px solid rgba(255,255,255,.2); color: inherit; font-weight: 600; }
 .agent-inline-btn { margin-left: 6px; padding: 4px 10px; border-radius: 8px; border: 0; background: #5b8cff; color: #fff; cursor: pointer; }
+
+/* v10.25 direct audio playback runs in the user's browser, not backend Chromium. */
+.bg-music-dock .bg-music-audio { width: 100%; min-width: 0; flex-basis: 100%; height: 40px; }
+.bg-music-audio[hidden] { display: none !important; }
+.bg-music-dock:has(.bg-music-audio:not([hidden])) iframe { display: none; }
+
+#btn-private-tab, #btn-novnc {
+  flex: 0 0 auto;
+  min-width: 40px;
+  pointer-events: auto !important;
+  position: relative;
+  z-index: 5;
+}

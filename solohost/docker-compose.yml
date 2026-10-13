@@ -2,21 +2,23 @@ services:
   web:
     image: ghcr.io/cannoi/imported-zip-solohost-browser-native-v3zip:latest
     ports:
-      - "8080"
+      - "8080:8080"
+      - "6080:6080"
     environment:
       PORT: "8080"
-      BROWSER_ACCESS_PASSWORD: "${BROWSER_ACCESS_PASSWORD:-}"
-      TZ: "${TZ:-UTC}"
       HOST: "0.0.0.0"
+      BROWSER_ACCESS_PASSWORD: "${BROWSER_ACCESS_PASSWORD}"
+      SOLOHOST_NOVNC_ENABLED: "${SOLOHOST_NOVNC_ENABLED:-0}"
+      SOLOHOST_NOVNC_PORT: "6080"
+      NOVNC_VNC_PASSWORD: "${NOVNC_VNC_PASSWORD:-}"
+      SOLOHOST_BROWSER_HEADFUL: "${SOLOHOST_BROWSER_HEADFUL:-1}"
       HOME: "/tmp/solohost-browser"
       SOLOHOST_PLAYWRIGHT: "1"
       SOLOHOST_BROWSER_ENGINE: "chromium"
-      SOLOHOST_BROWSER_MOBILE: "1"
       SOLOHOST_BROWSER_PERSIST_SESSIONS: "1"
       SOLOHOST_BROWSER_CONTENT_MODE: "adaptive"
       SOLOHOST_BROWSER_BLOCK_ADS: "1"
       SOLOHOST_WEBKIT: "0"
-      SOLOHOST_WEBKIT_BRIDGE: "0"
       SOLOHOST_DATA_DIR: "/app/data"
     restart: unless-stopped
     labels:

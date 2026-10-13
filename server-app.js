@@ -88,7 +88,7 @@ let aiCompat = softRequire('ai-compat', './lib/ai-compat', {
 try { installShutdownHooks(); } catch (_) {}
 try { appLog.configure(DATA_DIR); } catch (_) {}
 const PKG = (() => {
-  try { return require('./package.json'); } catch { return { version: '10.22.0' }; }
+  try { return require('./package.json'); } catch { return { version: '10.25.0' }; }
 })();
 
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* ignore */ }
@@ -108,13 +108,17 @@ app.use((req, res, next) => {
 // Health checks stay public so SoloHost can monitor container readiness.
 function accessPassword() {
   // SoloHost injects BROWSER_ACCESS_PASSWORD from config_options → .env → compose.
-  // Trim BOM/quotes that some hosts add around env values.
-  let v = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
+  let v = String(process.env.BROWSER_ACCESS_PASSWORD || process.env.ACCESS_PASSWORD || '').trim();
   if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
     v = v.slice(1, -1).trim();
   }
-  // Fallback only when env missing so gate still shows on first deploy
-  if (!v) v = String(process.env.DEFAULT_ACCESS_PASSWORD || 'solohost').trim();
+  // Fallback: read /app/data/.access_password if env empty (manual/debug)
+  if (!v) {
+    try {
+      const p = path.join(DATA_DIR, '.access_password');
+      if (fs.existsSync(p)) v = String(fs.readFileSync(p, 'utf8') || '').trim();
+    } catch (_) {}
+  }
   return v;
 }
 function passwordsMatch(supplied, expected) {
@@ -169,6 +173,9 @@ app.use((req, res, next) => {
   )) return next();
 
   const configured = accessPassword();
+  // Match the settings UI and SoloHost configuration: an empty password disables
+  // the gate completely instead of rejecting every protected API request.
+  if (!configured) return next();
   const ip = clientIp(req);
   const local = isLocalOrPrivateIp(ip);
   // Password always required (local + remote) so splash → gate always shows
@@ -185,7 +192,7 @@ app.use((req, res, next) => {
   } catch (_) {}
   // Also accept cookie session after first success
   const cookie = String(req.headers.cookie || '');
-  const cookieOk = cookie.includes('solo_access=1');
+  const cookieOk = /(?:^|;\s*)solo_access=1(?:;|$)/.test(cookie);
   const basicOk = !!(m && passwordsMatch(supplied, configured));
   if (basicOk || cookieOk) {
     if (basicOk && !cookieOk) {
@@ -204,7 +211,7 @@ app.use(express.urlencoded({ extended: false, limit: '64kb' }));
 app.get('/api/access/status', (req, res) => {
   const configured = accessPassword();
   const cookie = String(req.headers.cookie || '');
-  const authenticated = cookie.includes('solo_access=1');
+  const authenticated = /(?:^|;\s*)solo_access=1(?:;|$)/.test(cookie);
   const showGate = !!configured && !authenticated;
   res.json({
     ok: true,
@@ -259,7 +266,7 @@ function healthPayload() {
     status: 'ok',
     ok: true,
     service: 'solohost-browser',
-    version: PKG.version || '10.22.0',
+    version: PKG.version || '10.25.0',
     mode: 'hybrid-proxy',
     engine: engineCaps.detect(),
     port: PORT,
@@ -376,6 +383,16 @@ app.delete('/api/engine/session/:id', requireEngineEnabled, async (req, res) => 
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
+});
+
+app.get('/api/novnc/status', (req, res) => {
+  const enabled = String(process.env.SOLOHOST_NOVNC_ENABLED || '0') === '1';
+  const passwordConfigured = String(process.env.NOVNC_VNC_PASSWORD || '').length >= 8;
+  // Do not expose connection details to unauthenticated remote clients.
+  if (!enabled || !passwordConfigured) return res.json({ ok: true, enabled: false, reason: enabled ? 'vnc_password_not_configured' : 'disabled' });
+  const host = String(req.get('host') || '').split(':')[0].replace(/[^a-zA-Z0-9.\-\[\]:]/g, '');
+  const port = Number(process.env.SOLOHOST_NOVNC_PORT || 6080);
+  res.json({ ok: true, enabled: true, url: `http://${host}:${port}/vnc.html?autoconnect=true&resize=scale`, browserMode: String(process.env.SOLOHOST_BROWSER_HEADFUL || '0') === '1' ? 'shared-headed-chromium' : 'desktop-ready-browser-must-be-restarted-in-headed-mode' });
 });
 
 app.get('/api/health', (_req, res) => res.status(200).json(healthPayload()));
@@ -552,7 +569,7 @@ try {
   const fbOpts = {
     appId: process.env.SHFH_APP_ID || 'solohost-browser',
     appName: 'SoloHost Browser',
-    version: PKG.version || '10.22.0'
+    version: PKG.version || '10.25.0'
   };
   if (process.env.SHFH_HUB_ID) fbOpts.hubId = process.env.SHFH_HUB_ID;
   if (process.env.SHFH_HUB_URL) fbOpts.baseUrl = process.env.SHFH_HUB_URL;

@@ -31,6 +31,12 @@ Existing UI, Bridge, tabs, context menu, AI/Feedback/Settings/Logs, security che
 See `docs/V10.21.0_ADAPTIVE_BRIDGE_TEMPLATES_REPORT.md` for the bridge fidelity fix, page-family detection, regression tests, and limitations.
 
 
+## v10.23.0 — Browser AI identity, private-tab and access-gate fixes
+
+- Built-in bilingual app identity and current Browser AI knowledge.
+- Fixed private-tab action registration and password-gate configuration semantics.
+- See `docs/V10.23.0_BROWSER_AI_PRIVATE_AUTH_REPORT.md` for implemented work and remaining noVNC/audio limitations.
+
 ## v10.22.0 — Session persistence hardening
 - Upgraded Playwright and its Docker base image together to 1.51.1 so browser storage snapshots can include IndexedDB as well as cookies and localStorage.
 - Persist browser state on page load and on a low-frequency interval, in addition to existing navigation/interaction/close saves.
