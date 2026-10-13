@@ -385,22 +385,45 @@ app.delete('/api/engine/session/:id', requireEngineEnabled, async (req, res) => 
   }
 });
 
-app.get('/api/novnc/status', (req, res) => {
-  const enabled = String(process.env.SOLOHOST_NOVNC_ENABLED || '0') === '1';
-  if (!enabled) {
-    return res.json({ ok: true, enabled: false, reason: 'disabled' });
-  }
-  // Same-origin URL — works when SoloHost only publishes port 8080
+app.get('/api/novnc/status', async (req, res) => {
+  let novnc = { status: () => ({ featureEnabled: false, packagesPresent: false, ready: false }) };
+  try { novnc = require('./lib/novnc-launcher'); } catch (_) {}
+  const st = novnc.status();
+  if (!st.featureEnabled) return res.json({ ok: true, enabled: false, reason: 'disabled', primary: 'bridge' });
+  if (!st.packagesPresent) return res.json({ ok: true, enabled: false, reason: 'packages_missing', primary: 'bridge', hint: 'Rebuild with --build-arg WITH_NOVNC=1 for login desktop' });
   res.json({
     ok: true,
     enabled: true,
+    ready: !!st.ready,
     url: '/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify',
     passwordRequired: false,
-    browserMode: String(process.env.SOLOHOST_BROWSER_HEADFUL || '1') === '1' ? 'shared-headed-chromium' : 'desktop-ready'
+    primary: 'bridge',
+    role: 'login_secondary',
+    browserMode: st.ready ? 'shared-headed-chromium' : 'start_required'
   });
 });
 
-// Reverse-proxy noVNC on the main HTTP port (no public :6080 required)
+app.post('/api/novnc/start', async (req, res) => {
+  let novnc;
+  try { novnc = require('./lib/novnc-launcher'); } catch (e) {
+    return res.status(500).json({ ok: false, error: 'launcher_missing' });
+  }
+  try {
+    const out = await novnc.ensureStarted();
+    res.json({
+      ok: !!out.ok,
+      ready: !!out.ready,
+      error: out.error || null,
+      url: out.ok ? '/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify' : null,
+      primary: 'bridge',
+      role: 'login_secondary'
+    });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e) });
+  }
+});
+
+// Reverse-proxy noVNC on main port when desktop is running
 (function mountNovncProxy() {
   const http = require('http');
   const NOVNC_UPSTREAM = Number(process.env.SOLOHOST_NOVNC_PORT || 6080);
@@ -417,14 +440,12 @@ app.get('/api/novnc/status', (req, res) => {
     );
     preq.on('error', function () {
       if (!res.headersSent) {
-        res.status(503).type('html').send('<p>noVNC backend starting — retry in a few seconds.</p>');
+        res.status(503).type('html').send('<p>Starting login desktop… Retry in a few seconds, or use Bridge for normal browsing.</p>');
       }
     });
     req.pipe(preq);
   }
-  app.use('/novnc', function (req, res) {
-    proxyHttp(req, res);
-  });
+  app.use('/novnc', function (req, res) { proxyHttp(req, res); });
   if (server && typeof server.on === 'function') {
     server.on('upgrade', function (req, socket, head) {
       const u = String(req.url || '');

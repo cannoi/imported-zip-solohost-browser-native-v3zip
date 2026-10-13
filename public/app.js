@@ -1340,22 +1340,32 @@
   }
 
   if ($('btn-novnc')) $('btn-novnc').addEventListener('click', async () => {
-    const vi = /^vi(?:-|$)/i.test((navigator.language || 'en').toLowerCase());
-    let desktopWindow = null;
+    const vi = state.lang === 'vi';
     try {
-      desktopWindow = window.open('about:blank', '_blank');
+      // Lazy-start desktop only when user needs login/CAPTCHA (Bridge stays primary)
+      try {
+        await fetch('/api/novnc/start', { method: 'POST', credentials: 'same-origin' });
+      } catch (_) {}
+      await new Promise((r) => setTimeout(r, 800));
       const response = await fetch('/api/novnc/status', { credentials: 'same-origin', cache: 'no-store' });
       const data = await response.json();
-      if (!data || !data.enabled || !data.url) {
-        try { if (desktopWindow) desktopWindow.close(); } catch (_) {}
-        alert(vi ? 'Desktop Chromium chưa sẵn sàng. Đợi vài giây rồi thử lại, hoặc khởi động lại app. (noVNC bật mặc định, không cần mật khẩu VNC.)' : 'Chromium desktop is not ready yet. Wait a few seconds and retry, or restart the app. (noVNC is on by default; no VNC password required.)');
+      if (!data || !data.enabled) {
+        const reason = data && data.reason;
+        if (reason === 'packages_missing') {
+          alert(vi
+            ? 'Desktop đăng nhập chưa có trong image (build CI). Duyệt web vẫn dùng Bridge. Build WITH_NOVNC=1 nếu cần đăng nhập tay.'
+            : 'Login desktop is not in this image (CI build). Browsing still uses Bridge. Rebuild WITH_NOVNC=1 for manual login.');
+        } else {
+          alert(vi
+            ? 'Desktop đăng nhập chưa bật. Duyệt thường vẫn qua Bridge.'
+            : 'Login desktop is off. Normal browsing still uses Bridge.');
+        }
         return;
       }
-      if (desktopWindow) desktopWindow.location.href = data.url;
-      else window.location.href = data.url;
-    } catch (_) {
-      try { if (desktopWindow) desktopWindow.close(); } catch (_) {}
-      alert(vi ? 'Không thể kết nối noVNC. Hãy kiểm tra cấu hình và nhật ký máy chủ.' : 'Cannot connect to noVNC. Check configuration and server logs.');
+      const url = data.url || '/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify';
+      window.open(url, 'solohost-novnc', 'noopener,noreferrer');
+    } catch (e) {
+      alert(vi ? 'Không mở được desktop đăng nhập. Tiếp tục dùng Bridge hoặc Open ↗.' : 'Cannot open login desktop. Continue with Bridge or Open ↗.');
     }
   });
 

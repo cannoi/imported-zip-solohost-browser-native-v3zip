@@ -10,7 +10,7 @@ services:
       SOLOHOST_NOVNC_ENABLED: "1"
       SOLOHOST_NOVNC_PORT: "6080"
       NOVNC_VNC_PASSWORD: ""
-      SOLOHOST_BROWSER_HEADFUL: "1"
+      SOLOHOST_BROWSER_HEADFUL: "0"
       HOME: "/tmp/solohost-browser"
       SOLOHOST_PLAYWRIGHT: "1"
       SOLOHOST_BROWSER_ENGINE: "chromium"
