@@ -1348,7 +1348,7 @@
       const data = await response.json();
       if (!data || !data.enabled || !data.url) {
         try { if (desktopWindow) desktopWindow.close(); } catch (_) {}
-        alert(vi ? 'Desktop Chromium chưa bật. Hãy bật noVNC và đặt mật khẩu trong cấu hình SoloHost, sau đó khởi động lại app.' : 'Interactive Chromium desktop is disabled. Enable noVNC and set its password in SoloHost configuration, then restart the app.');
+        alert(vi ? 'Desktop Chromium chưa sẵn sàng. Đợi vài giây rồi thử lại, hoặc khởi động lại app. (noVNC bật mặc định, không cần mật khẩu VNC.)' : 'Chromium desktop is not ready yet. Wait a few seconds and retry, or restart the app. (noVNC is on by default; no VNC password required.)');
         return;
       }
       if (desktopWindow) desktopWindow.location.href = data.url;

@@ -387,13 +387,70 @@ app.delete('/api/engine/session/:id', requireEngineEnabled, async (req, res) => 
 
 app.get('/api/novnc/status', (req, res) => {
   const enabled = String(process.env.SOLOHOST_NOVNC_ENABLED || '0') === '1';
-  const passwordConfigured = String(process.env.NOVNC_VNC_PASSWORD || '').length >= 8;
-  // Do not expose connection details to unauthenticated remote clients.
-  if (!enabled || !passwordConfigured) return res.json({ ok: true, enabled: false, reason: enabled ? 'vnc_password_not_configured' : 'disabled' });
-  const host = String(req.get('host') || '').split(':')[0].replace(/[^a-zA-Z0-9.\-\[\]:]/g, '');
-  const port = Number(process.env.SOLOHOST_NOVNC_PORT || 6080);
-  res.json({ ok: true, enabled: true, url: `http://${host}:${port}/vnc.html?autoconnect=true&resize=scale`, browserMode: String(process.env.SOLOHOST_BROWSER_HEADFUL || '0') === '1' ? 'shared-headed-chromium' : 'desktop-ready-browser-must-be-restarted-in-headed-mode' });
+  if (!enabled) {
+    return res.json({ ok: true, enabled: false, reason: 'disabled' });
+  }
+  // Same-origin URL — works when SoloHost only publishes port 8080
+  res.json({
+    ok: true,
+    enabled: true,
+    url: '/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify',
+    passwordRequired: false,
+    browserMode: String(process.env.SOLOHOST_BROWSER_HEADFUL || '1') === '1' ? 'shared-headed-chromium' : 'desktop-ready'
+  });
 });
+
+// Reverse-proxy noVNC on the main HTTP port (no public :6080 required)
+(function mountNovncProxy() {
+  const http = require('http');
+  const NOVNC_UPSTREAM = Number(process.env.SOLOHOST_NOVNC_PORT || 6080);
+  function proxyHttp(req, res) {
+    let path = req.url || '/';
+    if (!path.startsWith('/')) path = '/' + path;
+    const headers = Object.assign({}, req.headers, { host: '127.0.0.1:' + NOVNC_UPSTREAM });
+    const preq = http.request(
+      { hostname: '127.0.0.1', port: NOVNC_UPSTREAM, path: path, method: req.method, headers: headers },
+      function (pres) {
+        res.writeHead(pres.statusCode || 502, pres.headers);
+        pres.pipe(res);
+      }
+    );
+    preq.on('error', function () {
+      if (!res.headersSent) {
+        res.status(503).type('html').send('<p>noVNC backend starting — retry in a few seconds.</p>');
+      }
+    });
+    req.pipe(preq);
+  }
+  app.use('/novnc', function (req, res) {
+    proxyHttp(req, res);
+  });
+  if (server && typeof server.on === 'function') {
+    server.on('upgrade', function (req, socket, head) {
+      const u = String(req.url || '');
+      if (u.indexOf('websockify') < 0 && u.indexOf('/novnc') < 0) return;
+      const net = require('net');
+      const upstream = net.connect(NOVNC_UPSTREAM, '127.0.0.1', function () {
+        let path = u.replace(/^\/novnc/, '') || u;
+        if (path.indexOf('/') !== 0) path = '/' + path;
+        let hdr = req.method + ' ' + path + ' HTTP/' + req.httpVersion + '\r\n';
+        for (let i = 0; i < req.rawHeaders.length; i += 2) {
+          const k = req.rawHeaders[i];
+          const v = req.rawHeaders[i + 1];
+          if (/^host$/i.test(k)) hdr += 'Host: 127.0.0.1:' + NOVNC_UPSTREAM + '\r\n';
+          else hdr += k + ': ' + v + '\r\n';
+        }
+        hdr += '\r\n';
+        upstream.write(hdr);
+        if (head && head.length) upstream.write(head);
+        upstream.pipe(socket);
+        socket.pipe(upstream);
+      });
+      upstream.on('error', function () { try { socket.destroy(); } catch (_) {} });
+      socket.on('error', function () { try { upstream.destroy(); } catch (_) {} });
+    });
+  }
+})();
 
 app.get('/api/health', (_req, res) => res.status(200).json(healthPayload()));
 app.get('/health', (_req, res) => res.status(200).json(healthPayload()));
