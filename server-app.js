@@ -679,14 +679,22 @@ app.post('/api/browser/sessions', async (req, res) => {
     const privateMode = !!(req.body && req.body.privateMode);
     const profileId = String((req.body && req.body.profileId) || '').toLowerCase();
     const hasStableProfile = /^[a-f0-9]{32}$/.test(profileId);
-    // Never bind persisted credentials to a client IP, and never share a global
-    // fallback profile between clients that omitted their profile ID.
-    const stableClientKey = hasStableProfile ? 'profile:' + profileId : 'ephemeral:' + require('crypto').randomBytes(16).toString('hex');
+    // SoloHost is typically single-user: one durable Chromium profile keeps logins across restarts.
+    // Private tabs stay ephemeral. Optional profileId from client still namespaces the profile.
+    const stableClientKey = privateMode
+      ? ('ephemeral:' + require('crypto').randomBytes(16).toString('hex'))
+      : (hasStableProfile ? ('profile:' + profileId) : 'solohost-default-profile');
     const locale = String((req.body && req.body.locale) || '').slice(0, 40);
     let timezoneId = String((req.body && req.body.timezoneId) || '').slice(0, 80);
     try { new Intl.DateTimeFormat('en-US', { timeZone: timezoneId }); } catch (_) { timezoneId = ''; }
     const privateSuffix = privateMode ? ':private:' + require('crypto').randomBytes(12).toString('hex') : '';
-    const out = await domBridge.createSession({ clientKey: stableClientKey + privateSuffix, privateMode, persist: hasStableProfile && !privateMode, locale, timezoneId });
+    const out = await domBridge.createSession({
+      clientKey: stableClientKey + (privateMode ? privateSuffix : ''),
+      privateMode,
+      persist: !privateMode,
+      locale,
+      timezoneId
+    });
     res.json({ ok: true, ...out });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
