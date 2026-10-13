@@ -91,11 +91,17 @@
 
   function classifyUrl(url) {
     const h = hostOf(url);
+    // Let Chromium's native viewer handle direct media, images and PDFs instead of
+    // trying to snapshot its internal browser UI through the DOM Bridge.
     if (isNativeMediaOrDocumentUrl(url)) return MODE.DIRECT;
     if (!h) return MODE.PROXY;
+    // Keep Bing's human verification page visible when embeddable; never solve it automatically.
     try { const bu = new URL(url); if (/(^|\.)bing\.com$/.test(bu.hostname) && /captcha|challenge|verify|pow/i.test(bu.pathname + bu.search)) return MODE.DIRECT; } catch (_) {}
+    // Site-owned authentication must use a normal system browser, not an embedded/automated view.
     if (isExternalAuthPath(url)) return MODE.EXTERNAL;
-    // YouTube → official player shell (PROXY) — unchanged from pre-noVNC
+    // YouTube watch/Shorts/live URLs must reach the server's official-player shell.
+    // The Bridge snapshot intentionally strips scripts/unsafe frames, so rendering these
+    // URLs in the automated DOM view leaves a visible page with a non-working player.
     if (isYouTubeVideoUrl(url)) return MODE.PROXY;
     try {
       const yu = new URL(url);
@@ -107,8 +113,11 @@
         return MODE.PROXY;
       }
     } catch (_) {}
+    // DRM/subscription streaming sites need their own full browser profile/DRM stack.
     if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
+    // Official embeddable players remain direct when on their official embed endpoint.
     if (isDirectEmbed(url)) return MODE.DIRECT;
+    // Dynamic sites use the JS-capable engine; do not rewrite them to proxy HTML pre-emptively.
     if (/google\./.test(h)) return MODE.ENGINE;
     if (/youtube\.com|youtu\.be/.test(h)) return MODE.PROXY;
     if (/(^|\.)(facebook|fb|instagram|whatsapp|messenger|tiktok|x|twitter|reddit)\.com$/.test(h)) return MODE.ENGINE;
@@ -284,31 +293,25 @@
       if (j.externalRequired && j.externalReason !== 'bing_verification_required') return loadViaExternal(googleExternalTarget(j.url || url), j.externalReason || 'site_auth_policy');
       const activeNav = ensureTabNav(tab);
       if (activeNav) activeNav.bridgeAudit = j.audit || {};
-      // Prefer showing whatever the Bridge has; only fail hard when empty AND explicit error
-      if (!j.hasContent && j.error && !j.title) return { ok: false, reason: j.error, detail: j };
-      if (!j.hasContent && j.backend === 'proxy' && j.error === 'empty_content') {
+      if (!j.hasContent && j.error) return { ok: false, reason: j.error, detail: j };
+      // If backend fell back to proxy inside server, treat as proxy success without bridge view
+      if (j.backend === 'proxy' && j.hasContent === false) {
         return { ok: false, reason: 'bridge_empty', detail: j };
       }
       const view = bridgeViewUrl(b);
       if (!frame || !view) return { ok: false, reason: 'no_viewport' };
       try {
         frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
-        // Always reload the Bridge viewport after navigate — same session URL path would
-        // otherwise keep showing the previous page (data-sh-view equal → no load).
-        const bust = view + (view.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
-        frame.src = bust;
-        frame.setAttribute('data-sh-view', view);
+        frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
       } catch (_) {
         return { ok: false, reason: 'frame_error' };
       }
-      const be = String(j.backend || b.backend || '');
       return {
         ok: true,
-        mode: (be === 'webkit' || be === 'playwright') ? MODE.ENGINE : MODE.PROXY,
-        backend: be,
+        mode: (j.backend === 'webkit' || b.backend === 'webkit') ? MODE.ENGINE : MODE.PROXY,
+        backend: j.backend || b.backend,
         url: j.url || url,
-        title: j.title || '',
-        hasContent: !!j.hasContent
+        title: j.title || ''
       };
     } catch (e) {
       const reason = (e && e.name === 'AbortError') ? 'bridge_client_timeout' : String((e && e.message) || e);
@@ -398,26 +401,10 @@
   }
 
   async function softRefreshActiveBridge() {
-    // UI-only: repair missing images in the viewport. Never re-goto the backend page.
-    try {
-      const doc = frame && frame.contentDocument;
-      if (!doc) return false;
-      doc.querySelectorAll('img').forEach((img) => {
-        try {
-          if (!img.getAttribute('src') && img.dataset && img.dataset.src) img.src = img.dataset.src;
-          if (img.complete && img.naturalWidth === 0 && img.src) {
-            const u = img.src;
-            img.src = '';
-            img.src = u;
-          }
-        } catch (_) {}
-      });
-      return true;
-    } catch (_) {
-      return false;
-    }
+    // Disabled: rewriting the viewport caused flicker and scroll jumps.
+    // Kept as no-op for API compatibility (SoloBrowser.softRefreshActiveBridge).
+    return false;
   }
-
 
   async function bridgeEvent(ev) {
     const tab = getActiveTab();
@@ -1081,25 +1068,14 @@
     const tab = state.tabs.find(t => t.id === id); if (!tab) return;
     state.activeTabId = id; state.url = tab.url || ''; renderTabs();
     if (input) input.value = state.url; if (btnOpen) btnOpen.href = state.url || '#';
-    // Restore cached Bridge view only — never re-navigate Chromium for a tab switch.
+    // Restore the existing tab's Bridge view instead of reloading the website.
     const nav = ensureTabNav(tab);
     const view = nav && nav.bridge && bridgeViewUrl(nav.bridge);
     if (state.url && view) {
-      if (frame) {
-        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
-        if (frame.getAttribute('data-sh-view') !== view) {
-          frame.src = view;
-          frame.setAttribute('data-sh-view', view);
-        }
-      }
+      if (frame) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); frame.src = view + '&t=' + Date.now(); }
       hideStart();
-    } else if (state.url) {
-      // Session missing: one deliberate load, not a continuous loop
-      navigate(state.url, { force: true, skipHistory: true });
-    } else {
-      if (frame) { frame.src = 'about:blank'; frame.removeAttribute('data-sh-view'); }
-      showStart();
-    }
+    } else if (state.url) navigate(state.url, { force: true, skipHistory: true });
+    else { if (frame) frame.src = 'about:blank'; showStart(); }
   }
   function destroyTabSession(tab) {
     const b = tab && tab.nav && tab.nav.bridge;
@@ -1171,7 +1147,7 @@
     url = toPlayableUrl(url);
 
     const now = Date.now();
-    if (!opts.force && state.url === url && now - (state.lastNavAt || 0) < 4000) {
+    if (!opts.force && state.url === url && now - (state.lastNavAt || 0) < 1200) {
       clientLog('warn', 'navigate_deduped', { url: url });
       return;
     }
@@ -2217,10 +2193,10 @@
       if (!view) return false;
       try {
         frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
-        if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); }
+        frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
         return true;
       } catch (_) { return false; }
-    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); } } } } };
+    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); frame.src = view + '&t=' + Date.now(); } } } };
 })();
 
   try {

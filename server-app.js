@@ -395,7 +395,7 @@ app.get('/api/novnc/status', async (req, res) => {
     ok: true,
     enabled: true,
     ready: !!st.ready,
-    url: '/novnc/vnc.html?autoconnect=1&resize=scale&quality=6&compression=2&path=websockify',
+    url: '/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify',
     passwordRequired: false,
     primary: 'bridge',
     role: 'login_secondary',
@@ -414,7 +414,7 @@ app.post('/api/novnc/start', async (req, res) => {
       ok: !!out.ok,
       ready: !!out.ready,
       error: out.error || null,
-      url: out.ok ? '/novnc/vnc.html?autoconnect=1&resize=scale&quality=6&compression=2&path=websockify' : null,
+      url: out.ok ? '/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify' : null,
       primary: 'bridge',
       role: 'login_secondary'
     });
@@ -1027,10 +1027,3 @@ try {
 }
 
 }; // mount
-
-try {
-  const pe = require('./lib/engine/playwright-engine');
-  if (pe && pe.status) pe.status().then((st) => {
-    try { require('./lib/app-log').log('info', 'bridge.engine_warm', { ready: !!(st && st.ready) }); } catch (_) {}
-  }).catch(() => {});
-} catch (_) {}

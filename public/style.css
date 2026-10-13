@@ -175,7 +175,7 @@ html[data-theme="rainbow"] .chrome::after {
   width: 100%;
   max-width: 100%;
   background: var(--page-bg);
-  overflow: auto;
+  overflow: hidden;
 }
 
 #main-webview {
@@ -187,10 +187,8 @@ html[data-theme="rainbow"] .chrome::after {
   display: block;
   background: var(--page-bg);
   z-index: 1;
+  /* prevent mobile overscroll chaining */
   overscroll-behavior: contain;
-  /* Bridge content scrolls inside the frame; avoid clipping like fixed proxy shells */
-  overflow: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
 .start-screen {
