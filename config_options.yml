@@ -11,17 +11,3 @@ fields:
     required: true
     preserve_if_blank: false
     help: "Password required after splash to open the app."
-
-  - name: SOLOHOST_NOVNC_ENABLED
-    label: Enable interactive Chromium desktop (noVNC)
-    type: boolean
-    required: false
-    default: false
-    help: "Enable only when you need to log in or solve CAPTCHA on the real Chromium desktop."
-
-  - name: NOVNC_VNC_PASSWORD
-    label: noVNC desktop password (min 8 characters)
-    type: password
-    required: false
-    preserve_if_blank: true
-    help: "Required when noVNC is enabled."
