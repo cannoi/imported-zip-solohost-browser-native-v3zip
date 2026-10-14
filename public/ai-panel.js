@@ -1,6 +1,63 @@
+
+function ensureAgentTimeSetting() {
+  try {
+    // Must bind to settings body pane — NEVER the tab button [data-tab="settings"]
+    const host =
+      document.querySelector('#pane-settings .settings-body') ||
+      document.getElementById('pane-settings') ||
+      document.getElementById('ai-settings') ||
+      document.getElementById('settings-pane');
+    if (!host) return;
+    document.querySelectorAll('.panel-tabs #agent-time-limit, .tab #agent-time-limit, .panel-tabs .agent-time-field').forEach((el) => {
+      try {
+        const row = el.closest('.agent-time-field') || el.closest('label') || el;
+        if (row && !host.contains(row)) row.remove();
+      } catch (_) {}
+    });
+    const existing = host.querySelector('#agent-time-limit');
+    if (existing) {
+      if (!existing.dataset.bound) {
+        existing.dataset.bound = '1';
+        existing.value = localStorage.getItem('solo_agent_time_min') || existing.value || '60';
+        existing.addEventListener('change', (e) => {
+          const v = Math.max(5, Math.min(180, Number(e.target.value) || 60));
+          localStorage.setItem('solo_agent_time_min', String(v));
+          e.target.value = String(v);
+        });
+      }
+      return;
+    }
+    const row = document.createElement('div');
+    row.className = 'settings-field agent-time-field';
+    row.style.cssText = 'display:block;margin:12px 0 4px;clear:both;position:relative;z-index:0';
+    const vi = (typeof isVi === 'function' && isVi());
+    const label = vi ? 'Giới hạn thời gian Agent (phút)' : 'Agent time limit (minutes)';
+    const hint = vi
+      ? 'Mỗi nhiệm vụ Agent tối đa số phút này (mặc định 60). Có thể bấm Tiếp tục để resume.'
+      : 'Each Agent task runs up to this many minutes (default 60). Use Continue to resume.';
+    row.innerHTML =
+      '<label for="agent-time-limit" style="display:block;font-size:12px;opacity:.75;margin:0 0 4px">' + label + '</label>' +
+      '<input type="number" id="agent-time-limit" min="5" max="180" step="5" value="' +
+        (localStorage.getItem('solo_agent_time_min') || '60') +
+      '" style="width:100%;box-sizing:border-box;min-height:40px;padding:8px 10px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445">' +
+      '<p style="font-size:11px;opacity:.6;margin:6px 0 0;line-height:1.35">' + hint + '</p>';
+    const anchor = host.querySelector('#setSave, #btnSaveSettings, .settings-actions, #setTest');
+    if (anchor && anchor.parentNode === host) host.insertBefore(row, anchor);
+    else host.appendChild(row);
+    const input = row.querySelector('#agent-time-limit');
+    if (input) {
+      input.dataset.bound = '1';
+      input.addEventListener('change', (e) => {
+        const v = Math.max(5, Math.min(180, Number(e.target.value) || 60));
+        localStorage.setItem('solo_agent_time_min', String(v));
+        e.target.value = String(v);
+      });
+    }
+  } catch (_) {}
+}
 'use strict';
 /**
- * Reference AI panel controller (from Snake Arcade).
+ * SoloHost Browser AI panel controller.
  * Host app may copy to public/ai-panel.js and adapt browserContext() / executeActions().
  * Depends on: UniversalAI, UniversalFeedback, markup in example/ui/ai-panel.html, styles in ai-panel.css.
  */
@@ -67,15 +124,43 @@ function browserContext() {
     lang: st.lang || (document.documentElement.lang || 'en'),
     theme: st.theme || document.documentElement.getAttribute('data-theme') || 'rainbow',
     app: 'SoloHost Browser',
-    version: '10.20.0'
+    version: '10.25.20'
   };
 }
 const aiChat = document.getElementById('chatLog') || document.getElementById('aiChat');
 const aiInput = document.getElementById('chatInput') || document.getElementById('aiInput');
+function formatAgentHtml(raw) {
+  let s = String(raw || '');
+  // Already HTML from caller — light enhance only when plain-ish
+  if (/<[a-z][\s\S]*>/i.test(s)) return s;
+  s = escapeHtml(s);
+  // Markdown-ish tables kept as pre
+  if (/\|.+\|/.test(s) && /\|[-: ]+\|/.test(s)) {
+    return '<div class="agent-md-table"><pre>' + s + '</pre></div>';
+  }
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  s = s.replace(/\n/g, '<br>');
+  // Auto-link images/videos
+  s = s.replace(/(https?:\/\/[^\s<]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s<]*)?)/gi, '<a href="$1" target="_blank" rel="noopener"><img class="agent-embed-img" src="$1" alt="" loading="lazy"></a>');
+  s = s.replace(/(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,}))/gi, '<div class="agent-embed-yt">▶ <a href="$1" target="_blank" rel="noopener">YouTube</a></div>');
+  return s;
+}
 function appendMsg(role, html) {
   const div = document.createElement('div');
   div.className = 'msg ' + role;
-  div.innerHTML = html;
+  const isAgent = /\bagent-step\b/.test(role);
+  const isUser = /\buser\b/.test(role);
+  let icon = '';
+  if (isUser) icon = '<span class="msg-icon" aria-hidden="true">👤</span>';
+  else if (isAgent) icon = '<span class="msg-icon" aria-hidden="true">⚙️</span>';
+  else if (/\blimit\b/.test(role)) icon = '<span class="msg-icon" aria-hidden="true">⏱</span>';
+  else icon = '<span class="msg-icon" aria-hidden="true">✦</span>';
+  const body = document.createElement('div');
+  body.className = 'msg-body';
+  body.innerHTML = formatAgentHtml(html);
+  div.appendChild(document.createRange().createContextualFragment(icon));
+  div.appendChild(body);
   if (aiChat) { aiChat.appendChild(div); aiChat.scrollTop = aiChat.scrollHeight; }
   return div;
 }
@@ -107,6 +192,8 @@ function memoryProfileId() {
   } catch (_) { return '00000000000000000000000000000001'; }
 }
 async function loadAIMemory() {
+  try { ensureAgentTimeSetting(); } catch(_){}
+
   if (aiMemoryReady) return aiMemory;
   aiMemory.profileId = memoryProfileId();
   try {
@@ -563,7 +650,7 @@ refreshStatus();
 loadSettings();
 fb.sync().catch(e => {
   const st = document.getElementById('fbStatus');
-  if (st) st.textContent = 'Hub: ' + e.message;
+  if (st) st.textContent = 'AI: ' + e.message;
 });
 setUnread(0);
 setFabVisible(true);
@@ -595,6 +682,20 @@ document.getElementById('fbSend')?.addEventListener('click', async () => {
 let agentCtx = null;
 try { agentCtx = JSON.parse(localStorage.getItem('solo_agent_context') || 'null'); } catch (_) { agentCtx = null; }
 function agentLang() { return ((window.SoloBrowser && window.SoloBrowser.state && window.SoloBrowser.state.lang) || 'en') === 'vi' ? 'vi' : 'en'; }
+
+function loadWorkMemory() {
+  try { return JSON.parse(localStorage.getItem('solo_agent_work_memory') || 'null') || { notes: [], findings: [], lastUrl: '', progress: '', task: '', history: [] }; }
+  catch (_) { return { notes: [], findings: [], lastUrl: '', progress: '', task: '', history: [] }; }
+}
+function saveWorkMemory(wm) {
+  try { localStorage.setItem('solo_agent_work_memory', JSON.stringify(wm || {})); } catch (_) {}
+}
+function agentTimeLimitMs() {
+  try {
+    const min = Number(localStorage.getItem('solo_agent_time_min') || 60);
+    return Math.max(60000, Math.min(3600000, (min || 60) * 60000));
+  } catch (_) { return 3600000; }
+}
 function isAgentBrief(text) {
   const t = String(text || '');
   if (t.length > 500) return true;
@@ -696,9 +797,24 @@ async function runAgentTask(text) {
   if (window.SoloAgent.isRunning()) { appendMsg('ai', escapeHtml(vi ? 'Agent đang chạy.' : 'Agent is already running.')); return; }
   let task = text;
   let history = [];
-  if (/^\/new\s+/i.test(text)) { agentCtx = null; try { localStorage.removeItem('solo_agent_context'); } catch (_) {} task = text.replace(/^\/new\s+/i, ''); }
-  else if (agentCtx) { task = agentCtx.task + '\nUser follow-up/answer: ' + text; history = agentCtx.history; }
-  agentCtx = null; try { localStorage.removeItem('solo_agent_context'); } catch (_) {}
+  if (/^\/new\s+/i.test(text)) {
+    agentCtx = null;
+    try { localStorage.removeItem('solo_agent_context'); } catch (_) {}
+    saveWorkMemory({ notes: [], findings: [], lastUrl: '', progress: '', task: '', history: [] });
+    task = text.replace(/^\/new\s+/i, '');
+  } else if (agentCtx) {
+    task = agentCtx.task + '\nUser follow-up/answer: ' + text;
+    history = agentCtx.history || [];
+  }
+  const workMemory = loadWorkMemory();
+  const sameTask = workMemory.task && String(workMemory.task).slice(0, 100) === String(task).slice(0, 100);
+  if (sameTask && (!history || !history.length)) history = workMemory.history || [];
+  if (!sameTask) {
+    workMemory.task = task;
+    workMemory.history = history || [];
+    workMemory.findings = [];
+    workMemory.progress = '';
+  }
 
   const statusEl = document.getElementById('agentStatus');
   const confirmBox = document.getElementById('agentConfirm');
@@ -711,34 +827,103 @@ async function runAgentTask(text) {
   yes?.addEventListener('click', onYes);
   no?.addEventListener('click', onNo);
   agentUi(true);
-  if (statusEl) statusEl.textContent = vi ? 'Bắt đầu…' : 'Starting…';
+  if (statusEl) statusEl.textContent = vi
+    ? ('Bắt đầu · tối đa ' + Math.round(agentTimeLimitMs() / 60000) + ' phút' + (history.length ? ' · resume' : ''))
+    : ('Starting · max ' + Math.round(agentTimeLimitMs() / 60000) + ' min' + (history.length ? ' · resume' : ''));
 
-  const maxSteps = isAgentBrief(task) ? 40 : 18;
   const out = await window.SoloAgent.run(task, {
     onStatus(t) { if (statusEl) statusEl.textContent = t; },
     onStep(s) {
-      appendMsg('agent-step ai', '<b>' + s.n + '.</b> ' + escapeHtml(s.text) + (s.thought ? '<small>' + escapeHtml(s.thought) + '</small>' : ''));
+      const icon = (s.action && s.action.type === 'navigate') ? '🌐' : (s.action && s.action.type === 'click') ? '👆' : (s.action && s.action.type === 'type') ? '⌨️' : (s.action && s.action.type === 'read') ? '📄' : '⚙️';
+      appendMsg('agent-step ai', icon + ' <b>' + (s.n || '') + '.</b> ' + escapeHtml(s.text || '') + (s.thought ? '<small>' + escapeHtml(s.thought) + '</small>' : ''));
     },
     onConfirm(t, answer) {
       answerFn = (v) => { answerFn = null; if (confirmBox) confirmBox.hidden = true; answer(v); };
       if (confirmText) confirmText.textContent = (vi ? 'AI muốn: ' : 'AI wants to: ') + t + (vi ? '. Cho phép?' : '. Allow?');
       if (confirmBox) confirmBox.hidden = false;
+    },
+    onLoginForm(ev) {
+      appendMsg('ai', '🔐 ' + escapeHtml((ev && ev.message) || (vi ? 'Điền form trên khung trình duyệt' : 'Fill form in browser frame')));
     }
-  }, { history, maxSteps });
+  }, { history, maxSteps: 200, maxMs: agentTimeLimitMs(), workMemory });
 
   yes?.removeEventListener('click', onYes);
   no?.removeEventListener('click', onNo);
   if (confirmBox) confirmBox.hidden = true;
   agentUi(false);
 
-  const msg = out.message ? escapeHtml(out.message).replace(/\n/g, '<br>') : '';
-  if (out.status === 'done') appendMsg('ai', '✅ ' + (msg || (vi ? 'Xong.' : 'Done.')));
-  else if (out.status === 'ask') { agentCtx = { task, history: out.history }; try { localStorage.setItem('solo_agent_context', JSON.stringify(agentCtx)); } catch (_) {} appendMsg('ai', '❓ ' + msg); }
-  else if (out.status === 'stopped') appendMsg('ai', '⏹ ' + escapeHtml(vi ? 'Đã dừng theo yêu cầu.' : 'Stopped.'));
-  else if (out.status === 'limit') appendMsg('ai', '⏱ ' + msg);
-  else if (out.status === 'fail') appendMsg('ai', '⚠️ ' + msg);
-  else appendMsg('ai', '⚠️ ' + (msg || escapeHtml(vi ? 'Agent lỗi.' : 'Agent error.')));
+  // Save work memory for Continue
+  saveWorkMemory({
+    task,
+    history: out.history || history,
+    findings: (workMemory.findings || []).slice(-20),
+    notes: (workMemory.notes || []).concat([String(out.message || out.status || '').slice(0, 400)]).slice(-20),
+    lastUrl: (out.workMemory && out.workMemory.lastUrl) || workMemory.lastUrl || '',
+    progress: out.status || '',
+    updatedAt: new Date().toISOString()
+  });
+
+  const msg = out.message ? formatAgentHtml(out.message) : '';
+  if (out.status === 'done') {
+    agentCtx = null;
+    appendMsg('ai', '✅ ' + (msg || (vi ? 'Xong.' : 'Done.')));
+    showContinueBar(false);
+  } else if (out.status === 'ask') {
+    agentCtx = { task, history: out.history };
+    try { localStorage.setItem('solo_agent_context', JSON.stringify(agentCtx)); } catch (_) {}
+    appendMsg('ai', '❓ ' + msg);
+    showContinueBar(true);
+  } else if (out.status === 'stopped') {
+    agentCtx = { task, history: out.history };
+    appendMsg('ai', '⏹ ' + escapeHtml(vi ? 'Đã dừng theo yêu cầu.' : 'Stopped.'));
+    showContinueBar(true);
+  } else if (out.status === 'limit') {
+    agentCtx = { task, history: out.history };
+    try { localStorage.setItem('solo_agent_context', JSON.stringify(agentCtx)); } catch (_) {}
+    appendMsg('ai limit', '⏱ ' + msg);
+    showContinueBar(true);
+  } else if (out.status === 'fail') {
+    appendMsg('ai', '⚠️ ' + msg);
+    showContinueBar(true);
+  } else {
+    appendMsg('ai', '⚠️ ' + (msg || escapeHtml(vi ? 'Agent lỗi.' : 'Agent error.')));
+  }
   const summary = (out.message || (out.status === 'done' ? (vi ? 'Đã hoàn tất tác vụ.' : 'Task completed.') : out.status)).slice(0, 3000);
   await persistTurn(text, summary);
 }
+
+function showContinueBar(show) {
+  let bar = document.getElementById('agent-continue-bar');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'agent-continue-bar';
+    bar.className = 'agent-continue-bar';
+    bar.innerHTML = '<button type="button" id="btn-agent-continue" class="agent-continue-btn">▶ Continue</button>' +
+      '<button type="button" id="btn-agent-clear-mem" class="agent-continue-btn ghost">Clear</button>';
+    const host = document.getElementById('agentBar') || document.getElementById('ai-chat') || (typeof aiChat !== 'undefined' ? aiChat : null);
+    if (host && host.parentNode) host.parentNode.insertBefore(bar, host.nextSibling);
+    else document.body.appendChild(bar);
+    document.getElementById('btn-agent-continue')?.addEventListener('click', async () => {
+      const mem = loadWorkMemory();
+      const t = (agentCtx && agentCtx.task) || mem.task || '';
+      if (!t) return;
+      showContinueBar(false);
+      await runAgentTask(t);
+    });
+    document.getElementById('btn-agent-clear-mem')?.addEventListener('click', () => {
+      saveWorkMemory({ notes: [], findings: [], lastUrl: '', progress: '', task: '', history: [] });
+      agentCtx = null;
+      try { localStorage.removeItem('solo_agent_context'); } catch (_) {}
+      showContinueBar(false);
+      appendMsg('ai', (agentLang() === 'vi') ? 'Đã xóa bộ nhớ công việc Agent.' : 'Agent work memory cleared.');
+    });
+  }
+  const btn = document.getElementById('btn-agent-continue');
+  if (btn) btn.textContent = agentLang() === 'vi' ? '▶ Tiếp tục' : '▶ Continue';
+  const clr = document.getElementById('btn-agent-clear-mem');
+  if (clr) clr.textContent = agentLang() === 'vi' ? 'Xóa bộ nhớ' : 'Clear memory';
+  bar.hidden = !show;
+  bar.style.display = show ? 'flex' : 'none';
+}
+
 loadAIMemory().catch(() => {});

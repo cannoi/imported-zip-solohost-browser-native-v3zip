@@ -7,7 +7,7 @@ const html = fs.readFileSync('public/index.html','utf8');
 const app = fs.readFileSync('public/app.js','utf8');
 const server = fs.readFileSync('server-app.js','utf8');
 const bridge = fs.readFileSync('lib/engine/dom-bridge.js','utf8');
-assert.strictEqual(pkg.version, '10.20.0');
+assert.strictEqual(pkg.version, '10.25.20');
 assert.strictEqual(caps.version, pkg.version);
 assert(html.includes('id="btn-search-settings"'), 'search engine settings entry exists');
 for (const id of ['search-engine-select','search-engine-custom','search-settings-save']) assert(html.includes('id="'+id+'"'), 'search setting control ' + id);
