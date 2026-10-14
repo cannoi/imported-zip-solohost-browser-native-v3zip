@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.25.31",
-  "description": "SoloHost Browser \u2014 resource-efficient snapshots + stealth Google login assist",
+  "version": "10.25.32",
+  "description": "SoloHost Browser \u2014 full JS/cookies/storage in Chromium engine + safe ad filter",
   "main": "server.js",
   "engines": {
     "node": ">=18"
