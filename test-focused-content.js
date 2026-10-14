@@ -8,11 +8,11 @@ const bridgeSource = fs.readFileSync(path.join(root, 'lib/engine/dom-bridge.js')
 const pkg = require('./package.json');
 const bridge = require('./lib/engine/dom-bridge');
 const engine = require('./lib/engine/playwright-engine');
-assert.strictEqual(pkg.version, '10.25.16');
+assert.strictEqual(pkg.version, '10.22.0');
 assert.ok(engineSource.includes('mode, initialPageType'), 'render mode and detected page type are passed into snapshot evaluation');
 assert.ok(engineSource.includes('solohost-adaptive-layout'), 'snapshot receives conservative adaptive styling');
-assert.ok(engineSource.includes("reducedMotion: 'reduce'"), 'Chromium requests reduced-motion preference; CSS animation suppression is not claimed');
-assert.ok(engineSource.includes('classifyPageType') && fs.readFileSync(path.join(root, 'lib/engine/layout-templates.js'), 'utf8').includes("case 'search':") && fs.readFileSync(path.join(root, 'lib/engine/layout-templates.js'), 'utf8').includes("case 'commerce':") && fs.readFileSync(path.join(root, 'lib/engine/layout-templates.js'), 'utf8').includes("case 'video':"), 'search, commerce, and video page families are recognized by the router/template pipeline');
+assert.ok(engineSource.includes('animation:none!important') && engineSource.includes('transition:none!important'), 'snapshot suppresses animations and transitions');
+assert.ok(engineSource.includes('classifyPageType') && engineSource.includes("pageType === 'search'") && engineSource.includes("pageType === 'commerce'") && engineSource.includes("pageType === 'video'"), 'search, commerce, and video page families are recognized');
 assert.ok(engineSource.includes('Keep genuine media embeds') && engineSource.includes("mode === 'focused'"), 'adaptive default keeps real media; destructive focused mode is opt-in');
 assert.ok(engineSource.includes('[data-ad]') && engineSource.includes('sponsored-content'), 'known ad markers are removed conservatively');
 assert.ok(engineSource.includes("setAttribute('loading', 'lazy')"), 'snapshot images are lazy-loaded');

@@ -80,22 +80,19 @@
     } catch (_) { return false; }
   }
 
-  // Direct audio files can play in the user's own browser without capturing backend audio.
-  function isDirectAudioUrl(raw) {
-    try {
-      const u = new URL(String(raw || '').trim());
-      if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password) return false;
-      return /\.(?:mp3|m4a|aac|wav|flac|opus|oga|ogg)(?:$)/i.test(u.pathname || '');
-    } catch (_) { return false; }
-  }
-
   function classifyUrl(url) {
     const h = hostOf(url);
+    // Let Chromium's native viewer handle direct media, images and PDFs instead of
+    // trying to snapshot its internal browser UI through the DOM Bridge.
     if (isNativeMediaOrDocumentUrl(url)) return MODE.DIRECT;
     if (!h) return MODE.PROXY;
+    // Keep Bing's human verification page visible when embeddable; never solve it automatically.
     try { const bu = new URL(url); if (/(^|\.)bing\.com$/.test(bu.hostname) && /captcha|challenge|verify|pow/i.test(bu.pathname + bu.search)) return MODE.DIRECT; } catch (_) {}
+    // Site-owned authentication must use a normal system browser, not an embedded/automated view.
     if (isExternalAuthPath(url)) return MODE.EXTERNAL;
-    // YouTube → official player shell (PROXY) — unchanged from pre-noVNC
+    // YouTube watch/Shorts/live URLs must reach the server's official-player shell.
+    // The Bridge snapshot intentionally strips scripts/unsafe frames, so rendering these
+    // URLs in the automated DOM view leaves a visible page with a non-working player.
     if (isYouTubeVideoUrl(url)) return MODE.PROXY;
     try {
       const yu = new URL(url);
@@ -107,8 +104,11 @@
         return MODE.PROXY;
       }
     } catch (_) {}
+    // DRM/subscription streaming sites need their own full browser profile/DRM stack.
     if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
+    // Official embeddable players remain direct when on their official embed endpoint.
     if (isDirectEmbed(url)) return MODE.DIRECT;
+    // Dynamic sites use the JS-capable engine; do not rewrite them to proxy HTML pre-emptively.
     if (/google\./.test(h)) return MODE.ENGINE;
     if (/youtube\.com|youtu\.be/.test(h)) return MODE.PROXY;
     if (/(^|\.)(facebook|fb|instagram|whatsapp|messenger|tiktok|x|twitter|reddit)\.com$/.test(h)) return MODE.ENGINE;
@@ -284,31 +284,25 @@
       if (j.externalRequired && j.externalReason !== 'bing_verification_required') return loadViaExternal(googleExternalTarget(j.url || url), j.externalReason || 'site_auth_policy');
       const activeNav = ensureTabNav(tab);
       if (activeNav) activeNav.bridgeAudit = j.audit || {};
-      // Prefer showing whatever the Bridge has; only fail hard when empty AND explicit error
-      if (!j.hasContent && j.error && !j.title) return { ok: false, reason: j.error, detail: j };
-      if (!j.hasContent && j.backend === 'proxy' && j.error === 'empty_content') {
+      if (!j.hasContent && j.error) return { ok: false, reason: j.error, detail: j };
+      // If backend fell back to proxy inside server, treat as proxy success without bridge view
+      if (j.backend === 'proxy' && j.hasContent === false) {
         return { ok: false, reason: 'bridge_empty', detail: j };
       }
       const view = bridgeViewUrl(b);
       if (!frame || !view) return { ok: false, reason: 'no_viewport' };
       try {
         frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
-        // Always reload the Bridge viewport after navigate — same session URL path would
-        // otherwise keep showing the previous page (data-sh-view equal → no load).
-        const bust = view + (view.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
-        frame.src = bust;
-        frame.setAttribute('data-sh-view', view);
+        frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
       } catch (_) {
         return { ok: false, reason: 'frame_error' };
       }
-      const be = String(j.backend || b.backend || '');
       return {
         ok: true,
-        mode: (be === 'webkit' || be === 'playwright') ? MODE.ENGINE : MODE.PROXY,
-        backend: be,
+        mode: (j.backend === 'webkit' || b.backend === 'webkit') ? MODE.ENGINE : MODE.PROXY,
+        backend: j.backend || b.backend,
         url: j.url || url,
-        title: j.title || '',
-        hasContent: !!j.hasContent
+        title: j.title || ''
       };
     } catch (e) {
       const reason = (e && e.name === 'AbortError') ? 'bridge_client_timeout' : String((e && e.message) || e);
@@ -398,26 +392,10 @@
   }
 
   async function softRefreshActiveBridge() {
-    // UI-only: repair missing images in the viewport. Never re-goto the backend page.
-    try {
-      const doc = frame && frame.contentDocument;
-      if (!doc) return false;
-      doc.querySelectorAll('img').forEach((img) => {
-        try {
-          if (!img.getAttribute('src') && img.dataset && img.dataset.src) img.src = img.dataset.src;
-          if (img.complete && img.naturalWidth === 0 && img.src) {
-            const u = img.src;
-            img.src = '';
-            img.src = u;
-          }
-        } catch (_) {}
-      });
-      return true;
-    } catch (_) {
-      return false;
-    }
+    // Disabled: rewriting the viewport caused flicker and scroll jumps.
+    // Kept as no-op for API compatibility (SoloBrowser.softRefreshActiveBridge).
+    return false;
   }
-
 
   async function bridgeEvent(ev) {
     const tab = getActiveTab();
@@ -740,7 +718,7 @@
         : '◎ Starter tasks · ✦ New requests use the unified assistant';
       if ($('sc-name-input')) $('sc-name-input').placeholder = vi ? 'Tên nhiệm vụ' : 'Task name';
       if ($('sc-url-input')) $('sc-url-input').placeholder = vi ? 'URL điều hướng…' : 'Navigate URL…';
-      if ($('pl-url-input')) $('pl-url-input').placeholder = vi ? 'Dán URL audio / video…' : 'Paste audio / video URL…';
+      if ($('pl-url-input')) $('pl-url-input').placeholder = vi ? 'Dán URL video…' : 'Paste video URL…';
       if ($('app-url-input')) $('app-url-input').placeholder = 'http://127.0.0.1:8090';
     } catch (_) {}
 
@@ -937,12 +915,10 @@
       const r = await fetch('/api/access/status', { cache: 'no-store', credentials: 'same-origin' });
       const j = await r.json();
       if (!j || !j.required) {
-        try { sessionStorage.removeItem('solo_access_required'); } catch (_) {}
         gate.hidden = true;
         gate.setAttribute('hidden', '');
         return true;
       }
-      try { sessionStorage.setItem('solo_access_required', '1'); } catch (_) {}
       gate.hidden = false;
       gate.removeAttribute('hidden');
       const title = $('access-gate-title');
@@ -956,14 +932,7 @@
       if (input) setTimeout(() => input.focus(), 50);
       return false;
     } catch (_) {
-      // Network/status failure: keep gate visible if a password field was previously required
-      try {
-        if (sessionStorage.getItem('solo_access_required') === '1') {
-          gate.hidden = false;
-          gate.removeAttribute('hidden');
-          return false;
-        }
-      } catch (__) {}
+      // If status fails on local, allow in
       gate.hidden = true;
       return true;
     }
@@ -1027,7 +996,6 @@
       // Hard timeout 5s — always dismiss
       setTimeout(function () { hideSplash(); checkAccessGate(); }, 5000);
       setTimeout(function () { hideSplash(); checkAccessGate(); }, 6500);
-      setTimeout(function () { checkAccessGate(); }, 8000);
     } catch (_) {
       try { hideSplash(); } catch (__) {}
     }
@@ -1081,25 +1049,14 @@
     const tab = state.tabs.find(t => t.id === id); if (!tab) return;
     state.activeTabId = id; state.url = tab.url || ''; renderTabs();
     if (input) input.value = state.url; if (btnOpen) btnOpen.href = state.url || '#';
-    // Restore cached Bridge view only — never re-navigate Chromium for a tab switch.
+    // Restore the existing tab's Bridge view instead of reloading the website.
     const nav = ensureTabNav(tab);
     const view = nav && nav.bridge && bridgeViewUrl(nav.bridge);
     if (state.url && view) {
-      if (frame) {
-        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
-        if (frame.getAttribute('data-sh-view') !== view) {
-          frame.src = view;
-          frame.setAttribute('data-sh-view', view);
-        }
-      }
+      if (frame) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); frame.src = view + '&t=' + Date.now(); }
       hideStart();
-    } else if (state.url) {
-      // Session missing: one deliberate load, not a continuous loop
-      navigate(state.url, { force: true, skipHistory: true });
-    } else {
-      if (frame) { frame.src = 'about:blank'; frame.removeAttribute('data-sh-view'); }
-      showStart();
-    }
+    } else if (state.url) navigate(state.url, { force: true, skipHistory: true });
+    else { if (frame) frame.src = 'about:blank'; showStart(); }
   }
   function destroyTabSession(tab) {
     const b = tab && tab.nav && tab.nav.bridge;
@@ -1171,7 +1128,7 @@
     url = toPlayableUrl(url);
 
     const now = Date.now();
-    if (!opts.force && state.url === url && now - (state.lastNavAt || 0) < 4000) {
+    if (!opts.force && state.url === url && now - (state.lastNavAt || 0) < 1200) {
       clientLog('warn', 'navigate_deduped', { url: url });
       return;
     }
@@ -1363,36 +1320,6 @@
     });
   }
 
-  if ($('btn-novnc')) $('btn-novnc').addEventListener('click', async () => {
-    const vi = state.lang === 'vi';
-    try {
-      // Lazy-start desktop only when user needs login/CAPTCHA (Bridge stays primary)
-      try {
-        await fetch('/api/novnc/start', { method: 'POST', credentials: 'same-origin' });
-      } catch (_) {}
-      await new Promise((r) => setTimeout(r, 800));
-      const response = await fetch('/api/novnc/status', { credentials: 'same-origin', cache: 'no-store' });
-      const data = await response.json();
-      if (!data || !data.enabled) {
-        const reason = data && data.reason;
-        if (reason === 'packages_missing') {
-          alert(vi
-            ? 'Desktop đăng nhập chưa có trong image (build CI). Duyệt web vẫn dùng Bridge. Build WITH_NOVNC=1 nếu cần đăng nhập tay.'
-            : 'Login desktop is not in this image (CI build). Browsing still uses Bridge. Rebuild WITH_NOVNC=1 for manual login.');
-        } else {
-          alert(vi
-            ? 'Desktop đăng nhập chưa bật. Duyệt thường vẫn qua Bridge.'
-            : 'Login desktop is off. Normal browsing still uses Bridge.');
-        }
-        return;
-      }
-      const url = data.url || '/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify';
-      window.open(url, 'solohost-novnc', 'noopener,noreferrer');
-    } catch (e) {
-      alert(vi ? 'Không mở được desktop đăng nhập. Tiếp tục dùng Bridge hoặc Open ↗.' : 'Cannot open login desktop. Continue with Bridge or Open ↗.');
-    }
-  });
-
   if ($('btn-new-tab')) $('btn-new-tab').addEventListener('click', () => newTab());
   if ($('btn-bookmark')) $('btn-bookmark').addEventListener('click', addCurrentBookmark);
   if ($('btn-library')) $('btn-library').addEventListener('click', () => openLibrary('bookmarks'));
@@ -1400,52 +1327,21 @@
   if ($('library-close')) $('library-close').addEventListener('click', () => { $('library-overlay').hidden = true; });
   document.querySelectorAll('[data-library]').forEach(b => b.addEventListener('click', () => openLibrary(b.dataset.library)));
   if ($('history-clear')) $('history-clear').addEventListener('click', async () => {
+  if ($('btn-private-tab')) $('btn-private-tab').addEventListener('click', () => {
+    const id = 't' + Date.now().toString(36);
+    const tab = { id, title: state.lang === 'vi' ? 'Tab ẩn danh mới' : 'New private tab', url: '', private: true };
+    state.tabs.push(tab);
+    state.activeTabId = id;
+    renderTabs();
+    showStart();
+    state.url = '';
+    if (input) input.value = '';
+    if (frame) { try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {} }
+    clientLog('info', 'tab.private_new', { id });
+  });
     if (state.libraryMode !== 'history') return;
     try { await fetch('/api/browser/history', { method: 'DELETE' }); openLibrary('history'); } catch (_) {}
   });
-    function openPrivateTab(startUrl) {
-    try {
-      const tab = newTab(startUrl || '', { private: true });
-      if (!tab) {
-        clientLog('warn', 'tab.private_new_failed', { reason: 'newTab_null' });
-        return null;
-      }
-      state.activeTabId = tab.id;
-      state.url = startUrl || '';
-      if (input) input.value = startUrl || '';
-      if (frame) {
-        try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {}
-      }
-      renderTabs();
-      if (startUrl) navigate(startUrl, { force: true });
-      else showStart();
-      clientLog('info', 'tab.private_new', { id: tab.id });
-      return tab;
-    } catch (e) {
-      clientLog('error', 'tab.private_new_error', { error: String(e && e.message || e).slice(0, 160) });
-      return null;
-    }
-  }
-  const privBtn = $('btn-private-tab') || document.getElementById('btn-private-tab');
-  if (privBtn && !privBtn.dataset.privateBound) {
-    privBtn.dataset.privateBound = '1';
-    privBtn.addEventListener('click', function (ev) {
-      try { ev.preventDefault(); ev.stopPropagation(); } catch (_) {}
-      openPrivateTab('');
-    }, true);
-  }
-  // Re-bind after short delay (mobile WebView late paint)
-  setTimeout(function () {
-    const b = document.getElementById('btn-private-tab');
-    if (b && !b.dataset.privateBound) {
-      b.dataset.privateBound = '1';
-      b.addEventListener('click', function (ev) {
-        try { ev.preventDefault(); ev.stopPropagation(); } catch (_) {}
-        openPrivateTab('');
-      }, true);
-    }
-  }, 400);
-
   if ($('library-overlay')) $('library-overlay').addEventListener('click', e => { if (e.target === $('library-overlay')) $('library-overlay').hidden = true; });
 
   const form = $('nav-form');
@@ -1550,13 +1446,12 @@
     if (m) m.hidden = false; if (b) b.hidden = false;
     const btn = $('btn-menu'); if (btn) btn.setAttribute('aria-expanded', 'true');
   }
-  if ($('btn-static-capture')) $('btn-static-capture').addEventListener('click', () => { window.location.href = '/static-capture.html'; });
   if ($('btn-menu')) $('btn-menu').addEventListener('click', () => {
     const m = $('settings-menu');
     if (m && m.hidden) openSettings(); else closeSettings();
   });
   if ($('settings-backdrop')) $('settings-backdrop').addEventListener('click', closeSettings);
-  ['btn-theme','btn-library','btn-reader','btn-summary','btn-static-capture','btn-translate','btn-lang'].forEach(id => {
+  ['btn-theme','btn-library','btn-reader','btn-summary','btn-translate','btn-lang'].forEach(id => {
     const el = $(id);
     if (el) el.addEventListener('click', () => setTimeout(closeSettings, 0));
   });
@@ -1747,8 +1642,6 @@
       dock.setAttribute('hidden', '');
       const bg = $('bg-music-frame');
       if (bg) bg.src = 'about:blank';
-      const audio = $('bg-music-audio');
-      if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.hidden = true; }
     }
   }
 
@@ -1768,27 +1661,8 @@
     const it = pl.items[homeLib.playIndex];
     if (!it) return;
     const embed = getVideoEmbedUrl(it.url);
-    const audio = $('bg-music-audio');
     if (title) { title.textContent = it.title || it.url; title.dataset.userTitle = '1'; }
-    if (isDirectAudioUrl(it.url) && audio) {
-      if (player) player.src = 'about:blank';
-      if (panelPlayer && panelPlayer !== player) panelPlayer.src = 'about:blank';
-      audio.hidden = false;
-      audio.src = new URL(it.url).toString();
-      audio.load();
-      homeLib.isPlaying = true; updateMusicControls();
-      showMusicDock(true, it.title || it.url);
-      if (hint) hint.textContent = state.lang === 'vi'
-        ? 'Âm thanh trực tiếp đang phát trên thiết bị của bạn; nguồn phải là tệp audio HTTP(S) công khai và được trình duyệt hỗ trợ.'
-        : 'Direct audio plays in your device browser; the source must be a public HTTP(S) audio file supported by the browser.';
-      const playAttempt = audio.play();
-      if (playAttempt && typeof playAttempt.catch === 'function') playAttempt.catch(() => {
-        homeLib.isPlaying = false; updateMusicControls();
-        if (hint) hint.textContent = state.lang === 'vi' ? 'Nhấn Phát trên trình phát âm thanh để bắt đầu; trình duyệt có thể chặn tự phát.' : 'Press Play on the audio control to start; browser autoplay may be blocked.';
-      });
-      clientLog('info', 'playlist.direct_audio_play', { source: it.source || 'direct_audio', playback: 'client_native' });
-    } else if (embed && player) {
-      if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.hidden = true; }
+    if (embed && player) {
       const src = withPlayerApi(embed);
       player.src = src;
       // Keep panel preview in sync if open
@@ -1800,7 +1674,6 @@
         : 'Background play — keeps playing if the app window stays open.';
       clientLog('info', 'playlist.embed_play', { source: it.source || 'video', background: true });
     } else {
-      if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.hidden = true; }
       if (player) player.src = 'about:blank';
       homeLib.isPlaying = false; updateMusicControls(); showMusicDock(false);
       if (hint) hint.textContent = state.lang === 'vi' ? 'Nguồn này chưa có trình nhúng chính thức được hỗ trợ. Hãy thêm liên kết YouTube, Vimeo hoặc TikTok.' : 'This source has no supported official embed. Add a YouTube, Vimeo, or TikTok link.';
@@ -1813,7 +1686,6 @@
   function updateMusicControls() {
     const play = $('btn-pl-play'), shuffle = $('btn-pl-shuffle'), repeat = $('btn-pl-repeat');
     if (play) { play.textContent = homeLib.isPlaying ? 'Ⅱ' : '▶'; play.title = state.lang === 'vi' ? (homeLib.isPlaying ? 'Tạm dừng' : 'Phát') : (homeLib.isPlaying ? 'Pause' : 'Play'); play.setAttribute('aria-label', play.title); }
-    const dockPlay = $('bg-music-play'); if (dockPlay) { dockPlay.textContent = homeLib.isPlaying ? 'Ⅱ' : '▶'; dockPlay.title = state.lang === 'vi' ? (homeLib.isPlaying ? 'Tạm dừng' : 'Phát') : (homeLib.isPlaying ? 'Pause' : 'Play'); }
     if (shuffle) { shuffle.classList.toggle('active', homeLib.shuffle); shuffle.setAttribute('aria-pressed', homeLib.shuffle ? 'true' : 'false'); shuffle.title = (state.lang === 'vi' ? 'Trộn bài: ' : 'Shuffle: ') + (homeLib.shuffle ? (state.lang === 'vi' ? 'Bật' : 'On') : (state.lang === 'vi' ? 'Tắt' : 'Off')); }
     if (repeat) { const labels = { off: state.lang === 'vi' ? 'Tắt lặp' : 'Repeat off', all: state.lang === 'vi' ? 'Lặp tất cả' : 'Repeat all', one: state.lang === 'vi' ? 'Lặp một bài' : 'Repeat one' }; repeat.classList.toggle('active', homeLib.repeatMode !== 'off'); repeat.textContent = homeLib.repeatMode === 'one' ? '🔂' : '🔁'; repeat.title = labels[homeLib.repeatMode] || labels.off; repeat.setAttribute('aria-pressed', homeLib.repeatMode !== 'off' ? 'true' : 'false'); }
   }
@@ -1830,29 +1702,6 @@
     else { let next = homeLib.playIndex + direction; if (next >= pl.items.length) { if (automatic && homeLib.repeatMode !== 'all') { homeLib.isPlaying = false; updateMusicControls(); return; } next = 0; } if (next < 0) next = pl.items.length - 1; homeLib.playIndex = next; }
     playPlaylistItem(); renderPlaylists();
   }
-  const directAudio = $('bg-music-audio');
-  if (directAudio) {
-    directAudio.addEventListener('play', () => { homeLib.isPlaying = true; updateMusicControls(); });
-    directAudio.addEventListener('pause', () => { if (!directAudio.ended) homeLib.isPlaying = false; updateMusicControls(); });
-    directAudio.addEventListener('ended', () => advancePlaylist(1, true));
-    directAudio.addEventListener('error', () => {
-      homeLib.isPlaying = false; updateMusicControls();
-      const hint = $('playlist-player-hint');
-      if (hint) hint.textContent = state.lang === 'vi' ? 'Không phát được tệp audio. Kiểm tra liên kết, định dạng, quyền truy cập hoặc CORS/chính sách máy chủ nguồn.' : 'Audio could not be played. Check the URL, format, access permissions, and source-server policy.';
-      clientLog('warn', 'playlist.direct_audio_error', { code: directAudio.error ? directAudio.error.code : 0 });
-    });
-  }
-  if ($('bg-music-play')) $('bg-music-play').addEventListener('click', () => {
-    const audio = $('bg-music-audio');
-    if (audio && !audio.hidden && audio.src) {
-      if (audio.paused) audio.play().catch(() => {}); else audio.pause();
-    } else if (homeLib.isPlaying) { if (!sendPlayerCommand('pauseVideo')) { const f = musicPlayerFrame(); if (f) f.src = 'about:blank'; homeLib.isPlaying = false; } }
-    else playPlaylistItem();
-    updateMusicControls();
-  });
-  if ($('bg-music-next')) $('bg-music-next').addEventListener('click', () => advancePlaylist(1, false));
-  if ($('bg-music-prev')) $('bg-music-prev').addEventListener('click', () => advancePlaylist(-1, false));
-  if ($('bg-music-close')) $('bg-music-close').addEventListener('click', () => { const audio = $('bg-music-audio'); if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.hidden = true; } showMusicDock(false); homeLib.isPlaying = false; updateMusicControls(); });
   const musicFrame = $('playlist-player-frame');
   if (musicFrame) musicFrame.addEventListener('load', () => {
     try { const u = new URL(musicFrame.src); if (/youtube-nocookie\.com$/.test(u.hostname)) musicFrame.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'addEventListener', args: ['onStateChange'] }), 'https://www.youtube-nocookie.com'); } catch (_) {}
@@ -2124,11 +1973,6 @@
     });
     if ($('btn-pl-play')) $('btn-pl-play').addEventListener('click', () => {
       const pl = activePlaylist(); if (!pl || !pl.items || !pl.items.length) return;
-      const audio = $('bg-music-audio');
-      if (audio && !audio.hidden && audio.src) {
-        if (audio.paused) audio.play().catch(() => {}); else audio.pause();
-        updateMusicControls(); return;
-      }
       if (!homeLib.isPlaying) { if (!$('playlist-player-frame')?.src || $('playlist-player-frame').src.endsWith('about:blank')) playPlaylistItem(); else if (!sendPlayerCommand('playVideo')) playPlaylistItem(); homeLib.isPlaying = true; }
       else { if (!sendPlayerCommand('pauseVideo')) { const f = $('playlist-player-frame'); if (f) f.src = 'about:blank'; homeLib.isPlaying = false; } else homeLib.isPlaying = false; }
       updateMusicControls();
@@ -2218,18 +2062,8 @@
       if (!view) return false;
       try {
         frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
-        if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); }
+        frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
         return true;
       } catch (_) { return false; }
-    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); } } } } };
+    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); frame.src = view + '&t=' + Date.now(); } } } };
 })();
-
-  try {
-    window.addEventListener('message', function (ev) {
-      try {
-        if (!ev || !ev.data || ev.data.type !== 'solohost-open-novnc') return;
-        var btn = document.getElementById('btn-novnc');
-        if (btn) btn.click();
-      } catch (_) {}
-    });
-  } catch (_) {}

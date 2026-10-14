@@ -2,12 +2,14 @@
 function ensureAgentTimeSetting() {
   try {
     // Must bind to settings body pane — NEVER the tab button [data-tab="settings"]
+    // (that selector was attaching the control to the tab bar and covering other tabs).
     const host =
       document.querySelector('#pane-settings .settings-body') ||
       document.getElementById('pane-settings') ||
       document.getElementById('ai-settings') ||
       document.getElementById('settings-pane');
     if (!host) return;
+    // Remove any stray control previously injected into the tab bar
     document.querySelectorAll('.panel-tabs #agent-time-limit, .tab #agent-time-limit, .panel-tabs .agent-time-field').forEach((el) => {
       try {
         const row = el.closest('.agent-time-field') || el.closest('label') || el;
@@ -41,12 +43,12 @@ function ensureAgentTimeSetting() {
         (localStorage.getItem('solo_agent_time_min') || '60') +
       '" style="width:100%;box-sizing:border-box;min-height:40px;padding:8px 10px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445">' +
       '<p style="font-size:11px;opacity:.6;margin:6px 0 0;line-height:1.35">' + hint + '</p>';
+    // Place after Mode / before action buttons if present
     const anchor = host.querySelector('#setSave, #btnSaveSettings, .settings-actions, #setTest');
     if (anchor && anchor.parentNode === host) host.insertBefore(row, anchor);
     else host.appendChild(row);
     const input = row.querySelector('#agent-time-limit');
     if (input) {
-      input.dataset.bound = '1';
       input.addEventListener('change', (e) => {
         const v = Math.max(5, Math.min(180, Number(e.target.value) || 60));
         localStorage.setItem('solo_agent_time_min', String(v));
@@ -57,7 +59,7 @@ function ensureAgentTimeSetting() {
 }
 'use strict';
 /**
- * SoloHost Browser AI panel controller.
+ * Reference AI panel controller (from Snake Arcade).
  * Host app may copy to public/ai-panel.js and adapt browserContext() / executeActions().
  * Depends on: UniversalAI, UniversalFeedback, markup in example/ui/ai-panel.html, styles in ai-panel.css.
  */
@@ -124,7 +126,7 @@ function browserContext() {
     lang: st.lang || (document.documentElement.lang || 'en'),
     theme: st.theme || document.documentElement.getAttribute('data-theme') || 'rainbow',
     app: 'SoloHost Browser',
-    version: '10.25.16'
+    version: '10.22.0'
   };
 }
 const aiChat = document.getElementById('chatLog') || document.getElementById('aiChat');
@@ -650,7 +652,7 @@ refreshStatus();
 loadSettings();
 fb.sync().catch(e => {
   const st = document.getElementById('fbStatus');
-  if (st) st.textContent = 'AI: ' + e.message;
+  if (st) st.textContent = 'Hub: ' + e.message;
 });
 setUnread(0);
 setFabVisible(true);
