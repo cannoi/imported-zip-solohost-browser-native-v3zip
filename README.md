@@ -1,8 +1,18 @@
-# SoloHost Browser v10.25.23
+# SoloHost Browser v10.25.24
 
 Version 10.16.0 routes YouTube watch/Shorts/live clicks through the official player shell and improves policy-compliant diagnostics. Version 10.15.0 adds a configurable default search engine (Bing, Google, DuckDuckGo, Brave Search, or a custom HTTP(S) URL template), native browser viewing for direct media/images/PDF links, and a wider but explicit CSP allowlist for official media embeds (YouTube, TikTok, Vimeo, Spotify, Twitch, Dailymotion). The AI Panel knowledge is generated at runtime from the installed package version and engine capabilities, and documents current architecture, search settings, media support and limitations.
 
 Existing UI, Bridge, tabs, context menu, AI/Feedback/Settings/Logs, security checks and adaptive rendering are retained. See `docs/V10.15.0_MEDIA_SEARCH_AI_REPORT.md`. The Chromium DOM Bridge is the in-app website rendering path. It snapshots the live Chromium DOM using the legacy v10.20.0-reference `markInteractive(page)` method; the live page continues running in Chromium while a sanitized DOM copy is displayed. There is no separate Static Capture feature.
+
+## v10.25.24 — Backend efficiency and Google sign-in handoff
+
+- Reuses the live Chromium page for same-URL navigation; no `page.goto()` reload for duplicate navigation unless explicitly forced.
+- Coalesces overlapping DOM snapshots and uses a short 160 ms cache, invalidated by navigation and interactive actions.
+- Avoids full DOM cloning for every input/change/scroll event; structural actions still refresh the snapshot.
+- Activates lazy images only in/near the viewport instead of eagerly loading every image on long pages.
+- Uses Chromium's native User-Agent rather than a stale hard-coded Chrome 131 string. This improves version consistency but does not bypass Google's automation restrictions.
+- Google sign-in handoff now points to the actual external target and explains that regular-browser cookies are isolated from SoloHost's backend Chromium profile.
+- Test report: `docs/V10.25.24_BACKEND_EFFICIENCY_GOOGLE_HANDOFF_REPORT.md`.
 
 
 ## v10.25.23 — Restore v10.20.0 website acquisition/presentation behavior
@@ -38,7 +48,7 @@ Existing UI, Bridge, tabs, context menu, AI/Feedback/Settings/Logs, security che
 
 
 ## v10.21.0 — Adaptive Bridge templates
-Historical release note. The v10.25.23 release above further reverts post-baseline website pipeline changes while preserving independent browser features.
+Historical release note. The v10.25.24 release above further reverts post-baseline website pipeline changes while preserving independent browser features.
 
 
 ## v10.23.0 — Browser AI identity, private-tab and access-gate fixes
