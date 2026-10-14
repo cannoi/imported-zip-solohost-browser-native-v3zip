@@ -19,8 +19,8 @@
       <button type="button" class="icon-btn" id="btn-new-tab" title="New tab" aria-label="New tab">＋</button>
       <button type="button" class="icon-btn" id="btn-bookmark" title="Bookmark" aria-label="Bookmark">☆</button>
       <button type="button" class="icon-btn" id="btn-menu" title="Settings" aria-label="Settings" aria-expanded="false" aria-controls="settings-menu">☰</button>
-      <button type="button" class="icon-btn" id="btn-private-tab" title="Private tab" aria-label="Private tab">🕶️</button>
-      <button type="button" class="icon-btn" id="btn-novnc" title="Login desktop (noVNC)" aria-label="Login desktop">🖥️</button>
+      <button type="button" class="icon-btn" id="btn-private-tab" title="New private tab" aria-label="New private tab">🕶️</button>
+      <button type="button" class="icon-btn" id="btn-novnc" title="Interactive Chromium desktop" aria-label="Interactive Chromium desktop">🖥️</button>
     </div>
   </header>
 
@@ -96,7 +96,7 @@
           </div>
           <div class="home-card-body" id="pl-list" aria-label="Music library items"></div>
           <form class="home-row" id="pl-add-form">
-            <input type="url" id="pl-url-input" placeholder="Paste a YouTube / video link…" autocomplete="off" required>
+            <input type="url" id="pl-url-input" placeholder="Paste an audio / YouTube / video link…" autocomplete="off" required>
             <button type="submit" class="icon-btn tiny" id="pl-url-add" title="Add">＋</button>
           </form>
           <div class="home-row home-actions">
@@ -142,7 +142,7 @@
     <button type="button" id="btn-add-pl" role="menuitem">▶ Add to playlist</button>
     <button type="button" id="btn-reader" role="menuitem">📖 Reader</button>
     <button type="button" id="btn-summary" role="menuitem">⚡ Summarize</button>
-    <button type="button" id="btn-translate" role="menuitem">🌐 Translate</button>
+<button type="button" id="btn-translate" role="menuitem">🌐 Translate</button>
     <button type="button" id="btn-lang" role="menuitem">EN</button>
   </div>
 
@@ -237,13 +237,12 @@
               <option value="cloud_enabled">Cloud enabled</option>
               <option value="local_only">Local only</option>
             </select>
-            
-            <div id="agent-time-field" style="margin:12px 0 8px;padding:10px;border-radius:10px;border:1px solid #334;background:#0d0b18">
+            <div class="settings-field agent-time-field" style="display:block;margin:12px 0 8px;clear:both">
               <label for="agent-time-limit" style="display:block;font-size:12px;opacity:.75;margin:0 0 4px">Agent time limit (minutes)</label>
               <input type="number" id="agent-time-limit" min="5" max="180" step="5" value="60" style="width:100%;box-sizing:border-box;min-height:40px;padding:8px 10px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445">
-              <p style="font-size:11px;opacity:.6;margin:6px 0 0;line-height:1.35">Each Agent task runs up to this many minutes (default 60). Giới hạn thời gian mỗi nhiệm vụ Agent (mặc định 60 phút).</p>
+              <p style="font-size:11px;opacity:.6;margin:6px 0 0;line-height:1.35">Each Agent task runs up to this many minutes (default 60).</p>
             </div>
-            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
+            <div class="settings-actions" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
               <button type="button" id="setSave" style="min-height:40px;padding:0 14px;border-radius:10px;border:0;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer">Save</button>
               <button type="button" id="setTest" style="min-height:40px;padding:0 14px;border-radius:10px;border:1px solid #445;background:#1a1a24;color:#fff;cursor:pointer">Test</button>
               <button type="button" id="setModels" style="min-height:40px;padding:0 14px;border-radius:10px;border:1px solid #445;background:#1a1a24;color:#fff;cursor:pointer">Models</button>
@@ -299,6 +298,7 @@
       <button type="button" class="chip" id="bg-music-next" title="Next">⏭</button>
       <button type="button" class="chip" id="bg-music-close" title="Stop">×</button>
     </div>
+    <audio id="bg-music-audio" class="bg-music-audio" controls preload="metadata" hidden aria-label="Direct audio player"></audio>
     <iframe id="bg-music-frame" title="Background music" src="about:blank" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
   </div>
 </body>

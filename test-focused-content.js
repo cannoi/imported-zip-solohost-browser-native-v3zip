@@ -8,11 +8,11 @@ const bridgeSource = fs.readFileSync(path.join(root, 'lib/engine/dom-bridge.js')
 const pkg = require('./package.json');
 const bridge = require('./lib/engine/dom-bridge');
 const engine = require('./lib/engine/playwright-engine');
-assert.strictEqual(pkg.version, '10.20.0');
-assert.ok(engineSource.includes('mode, pageType'), 'render mode and detected page type are passed into snapshot evaluation');
+assert.strictEqual(pkg.version, '10.25.21');
+assert.ok(engineSource.includes('mode, pageType'), 'legacy render mode and URL-derived page type are passed into snapshot evaluation');
 assert.ok(engineSource.includes('solohost-adaptive-layout'), 'snapshot receives conservative adaptive styling');
-assert.ok(engineSource.includes('animation:none!important') && engineSource.includes('transition:none!important'), 'snapshot suppresses animations and transitions');
-assert.ok(engineSource.includes('classifyPageType') && engineSource.includes("pageType === 'search'") && engineSource.includes("pageType === 'commerce'") && engineSource.includes("pageType === 'video'"), 'search, commerce, and video page families are recognized');
+assert.ok(engineSource.includes("reducedMotion: 'reduce'"), 'Chromium requests reduced-motion preference; CSS animation suppression is not claimed');
+assert.ok(engineSource.includes('classifyPageType') && engineSource.includes("return 'search'") && engineSource.includes("return 'commerce'") && engineSource.includes("return 'video'"), 'v10.20.x URL classifier recognizes search, commerce, and video pages');
 assert.ok(engineSource.includes('Keep genuine media embeds') && engineSource.includes("mode === 'focused'"), 'adaptive default keeps real media; destructive focused mode is opt-in');
 assert.ok(engineSource.includes('[data-ad]') && engineSource.includes('sponsored-content'), 'known ad markers are removed conservatively');
 assert.ok(engineSource.includes("setAttribute('loading', 'lazy')"), 'snapshot images are lazy-loaded');

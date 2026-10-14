@@ -41,7 +41,7 @@ const { createAIService } = require('./lib/ai-module/ai-service');
   // --- sanitizers cap hostile input ---
   const big = agent.sanitizeObservation({ text: 'a'.repeat(100000), elements: Array.from({ length: 500 }, (_, i) => ({ id: i + 1, tag: 'a', label: 'L'.repeat(1000) })) });
   assert.ok(big.text.length <= 3501 && big.elements.length === 80 && big.elements[0].label.length <= 91);
-  assert.strictEqual(agent.sanitizeHistory(new Array(100).fill({ n: 1, action: 'x', result: 'y' })).length, 14);
+  assert.strictEqual(agent.sanitizeHistory(new Array(100).fill({ n: 1, action: 'x', result: 'y' })).length, 40, 'extended agent context retains the configured recent history window');
   console.log('  sanitize PASS');
 
   // --- offline heuristic ---
@@ -51,7 +51,7 @@ const { createAIService } = require('./lib/ai-module/ai-service');
   assert.deepStrictEqual([h.type, h.engine, h.query], ['search', 'youtube', 'phim hay']);
   const h2 = agent.heuristicPlan('search on youtube cats');
   assert.deepStrictEqual([h2.engine, h2.query], ['youtube', 'cats']);
-  assert.strictEqual(agent.heuristicPlan('tìm giá vàng').engine, 'bing');
+  assert.strictEqual(agent.heuristicPlan('tìm giá vàng').engine, 'ddg', 'generic agent search uses DDG fallback to reduce Google verification loops');
   assert.strictEqual(agent.heuristicPlan('hãy mua cho tôi một cái áo'), null);
   console.log('  heuristicPlan PASS');
 

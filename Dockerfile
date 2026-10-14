@@ -1,5 +1,5 @@
-# SoloHost Browser v10.25.30 novnc-restore — Chromium Bridge with shared-profile tab synchronization
-FROM mcr.microsoft.com/playwright:v1.49.1-jammy
+# SoloHost Browser v10.25.21 — Chromium Bridge with shared-profile tab synchronization
+FROM mcr.microsoft.com/playwright:v1.51.1-jammy
 
 WORKDIR /app
 
@@ -44,7 +44,7 @@ ENV NODE_ENV=production \
 
 COPY package.json ./
 RUN npm install --omit=dev --no-audit --no-fund --registry=https://registry.npmjs.org/ --fetch-timeout=120000 --fetch-retries=2 \
- && node -e "require('express'); require('cors'); require('dotenv'); require('playwright'); require('sanitize-html'); require('./lib/engine/content-pipeline'); console.log('deps-ok')" \
+ && node -e "require('express'); require('cors'); require('dotenv'); require('playwright'); require('sanitize-html'); require('./lib/engine/playwright-engine'); console.log('deps-ok')" \
  && npm cache clean --force \
  && rm -rf /tmp/* /root/.npm/_logs 2>/dev/null || true
 

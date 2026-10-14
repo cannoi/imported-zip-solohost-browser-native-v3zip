@@ -1,0 +1,16 @@
+'use strict';
+const fs = require('fs');
+const assert = require('assert');
+const engine = fs.readFileSync(require('path').join(__dirname, 'lib/engine/playwright-engine.js'), 'utf8');
+const bridge = fs.readFileSync(require('path').join(__dirname, 'lib/engine/dom-bridge.js'), 'utf8');
+const app = fs.readFileSync(require('path').join(__dirname, 'public/app.js'), 'utf8');
+const html = fs.readFileSync(require('path').join(__dirname, 'public/index.html'), 'utf8');
+assert(!engine.includes("require('./content-pipeline')"), 'new capture pipeline must not override legacy page snapshot');
+assert(!engine.includes("require('./layout-templates')"), 'new family template layer must not override legacy renderer');
+assert(engine.includes('const data = await markInteractive(s.page)'), 'legacy live DOM extraction must be active');
+assert(bridge.includes('sh-bridge-css'), 'legacy responsive snapshot CSS must be active');
+assert(!bridge.includes('layoutTemplates.bridgeStyleTag'), 'family template renderer must be inactive');
+assert(app.includes('SoloReader.extractCurrentPageDOM'), 'reader extraction feature must remain wired');
+assert(app.includes('SoloReader.toggleReaderView'), 'reader mode toggle must remain wired');
+assert(html.includes('id="btn-reader"') && html.includes('/reader-injector.js'), 'reader UI and injector must remain available');
+console.log('v10.20.x website extraction/presentation restoration: PASS');
