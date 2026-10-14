@@ -2020,20 +2020,34 @@
   setTimeout(function () { try { bindHomeLibrary(); refreshHomeLibrary(); } catch (_) {} }, 300);
   document.documentElement.setAttribute('data-solo-home-utils-ready', '1');
 
-  // noVNC login desktop (secondary) — does not change Bridge page rendering
+
+  // noVNC login desktop — same flow as v10.25.2x (start stack + open same-origin viewer)
   if ($('btn-novnc')) $('btn-novnc').addEventListener('click', async () => {
     const vi = state.lang === 'vi';
     try {
-      try { await fetch('/api/novnc/start', { method: 'POST', credentials: 'same-origin' }); } catch (_) {}
-      const response = await fetch('/api/novnc/status', { credentials: 'same-origin', cache: 'no-store' });
-      const data = await response.json().catch(() => ({}));
+      let data = null;
+      try {
+        const startRes = await fetch('/api/novnc/start', { method: 'POST', credentials: 'same-origin' });
+        data = await startRes.json().catch(() => null);
+      } catch (_) {}
+      // Poll status briefly while Xvfb/x11vnc/websockify + Chromium headful come up
+      for (let i = 0; i < 12; i++) {
+        try {
+          const response = await fetch('/api/novnc/status', { credentials: 'same-origin', cache: 'no-store' });
+          data = await response.json().catch(() => data);
+          if (data && data.ready) break;
+          if (data && data.enabled === false && data.reason === 'packages_missing') break;
+        } catch (_) {}
+        await new Promise((r) => setTimeout(r, 500));
+      }
       if (!data || data.enabled === false) {
+        const reason = (data && data.reason) || (data && data.error) || 'unavailable';
         alert(vi
-          ? 'Desktop đăng nhập chưa sẵn sàng. Rebuild image với noVNC hoặc dùng Bridge / Open ↗.'
-          : 'Login desktop unavailable. Rebuild with noVNC packages or use Bridge / Open ↗.');
+          ? ('Desktop đăng nhập chưa sẵn sàng (' + reason + '). Cần image build với noVNC (Xvfb/x11vnc). Vẫn dùng Bridge bình thường.')
+          : ('Login desktop unavailable (' + reason + '). Rebuild image with noVNC packages. Bridge browsing still works.'));
         return;
       }
-      const url = data.url || '/novnc/vnc.html?autoconnect=1&resize=scale&path=websockify';
+      const url = (data && data.url) || '/novnc/vnc.html?autoconnect=1&resize=scale&quality=6&compression=2&path=websockify';
       window.open(url, 'solohost-novnc', 'noopener,noreferrer');
     } catch (e) {
       alert(vi ? 'Không mở được desktop đăng nhập.' : 'Cannot open login desktop.');

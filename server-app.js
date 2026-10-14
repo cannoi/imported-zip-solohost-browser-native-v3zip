@@ -889,7 +889,7 @@ try {
       try {
         const out = await novnc.ensureStarted();
         res.json({ ok: !!out.ok, ready: !!out.ready, error: out.error || null,
-          url: out.ok ? '/novnc/vnc.html?autoconnect=1&resize=scale&quality=6&compression=2&path=websockify' : null,
+          url: '/novnc/vnc.html?autoconnect=1&resize=scale&quality=6&compression=2&path=websockify',
           primary: 'bridge', role: 'login_secondary' });
       } catch (e) {
         res.status(500).json({ ok: false, error: String(e.message || e) });
@@ -904,34 +904,43 @@ try {
         const headers = Object.assign({}, req.headers, { host: '127.0.0.1:' + NOVNC_UPSTREAM });
         const preq = http.request(
           { hostname: '127.0.0.1', port: NOVNC_UPSTREAM, path: path, method: req.method, headers: headers },
-          function (pres) { res.writeHead(pres.statusCode || 502, pres.headers); pres.pipe(res); }
+          function (pres) {
+            res.writeHead(pres.statusCode || 502, pres.headers);
+            pres.pipe(res);
+          }
         );
         preq.on('error', function () {
-          if (!res.headersSent) res.status(503).type('html').send('<p>Login desktop starting…</p>');
+          if (!res.headersSent) {
+            res.status(503).type('html').send('<p>Starting login desktop… Retry in a few seconds.</p>');
+          }
         });
         req.pipe(preq);
       }
       app.use('/novnc', function (req, res) { proxyHttp(req, res); });
       app.use('/websockify', function (req, res) { proxyHttp(req, res); });
-      if (typeof server !== 'undefined' && server && server.on) {
+      if (server && typeof server.on === 'function') {
         server.on('upgrade', function (req, socket, head) {
-          const u = req.url || '';
+          const u = String(req.url || '');
           if (u.indexOf('websockify') < 0 && u.indexOf('/novnc') < 0) return;
-          let path = u.replace(/^\/novnc/, '') || u;
-          const upstream = require('net').connect(NOVNC_UPSTREAM, '127.0.0.1', function () {
-            let hdr = 'GET ' + path + ' HTTP/1.1\r\n';
-            for (const k of Object.keys(req.headers || {})) {
-              const v = req.headers[k];
-              if (v == null) continue;
-              if (k.toLowerCase() === 'host') hdr += 'Host: 127.0.0.1:' + NOVNC_UPSTREAM + '\r\n';
+          const net = require('net');
+          const upstream = net.connect(NOVNC_UPSTREAM, '127.0.0.1', function () {
+            let path = u.replace(/^\/novnc/, '') || u;
+            if (path.indexOf('/') !== 0) path = '/' + path;
+            let hdr = req.method + ' ' + path + ' HTTP/' + req.httpVersion + '\r\n';
+            for (let i = 0; i < req.rawHeaders.length; i += 2) {
+              const k = req.rawHeaders[i];
+              const v = req.rawHeaders[i + 1];
+              if (/^host$/i.test(k)) hdr += 'Host: 127.0.0.1:' + NOVNC_UPSTREAM + '\r\n';
               else hdr += k + ': ' + v + '\r\n';
             }
             hdr += '\r\n';
             upstream.write(hdr);
             if (head && head.length) upstream.write(head);
-            upstream.pipe(socket); socket.pipe(upstream);
+            upstream.pipe(socket);
+            socket.pipe(upstream);
           });
           upstream.on('error', function () { try { socket.destroy(); } catch (_) {} });
+          socket.on('error', function () { try { upstream.destroy(); } catch (_) {} });
         });
       }
     })();
