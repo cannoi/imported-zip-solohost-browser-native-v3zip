@@ -1,8 +1,18 @@
-# SoloHost Browser v10.25.22
+# SoloHost Browser v10.25.23
 
 Version 10.16.0 routes YouTube watch/Shorts/live clicks through the official player shell and improves policy-compliant diagnostics. Version 10.15.0 adds a configurable default search engine (Bing, Google, DuckDuckGo, Brave Search, or a custom HTTP(S) URL template), native browser viewing for direct media/images/PDF links, and a wider but explicit CSP allowlist for official media embeds (YouTube, TikTok, Vimeo, Spotify, Twitch, Dailymotion). The AI Panel knowledge is generated at runtime from the installed package version and engine capabilities, and documents current architecture, search settings, media support and limitations.
 
 Existing UI, Bridge, tabs, context menu, AI/Feedback/Settings/Logs, security checks and adaptive rendering are retained. See `docs/V10.15.0_MEDIA_SEARCH_AI_REPORT.md`. The Chromium DOM Bridge is the in-app website rendering path. It snapshots the live Chromium DOM using the legacy v10.20.0-reference `markInteractive(page)` method; the live page continues running in Chromium while a sanitized DOM copy is displayed. There is no separate Static Capture feature.
+
+
+## v10.25.23 — Restore v10.20.0 website acquisition/presentation behavior
+
+- Reverted the post-v10.20.0 changes in the DOM Bridge HTML sanitizer that stripped supplied `<base>` tags, forced all anchors to `_self`, added `data-sh-nav`, and changed base-URL validation. The legacy sanitizer implementation is restored.
+- Restored the v10.20.0 `frame-proxy.js` so newer injected layout fixes, rewritten anchor routing, and Bing redirect unwrapping no longer change the displayed website or its links.
+- Removed post-baseline stealth fingerprinting and spoofed desktop User-Agent/client-hint behavior from the Chromium engine. The v10.20.0 Android/Linux User-Agent defaults and mobile default are restored.
+- Removed the custom verification handoff page that replaced the website snapshot. Existing baseline verification handling remains.
+- Preserved unrelated features including tab-to-session mapping, popup ownership, unowned-page recovery, persistent browser profiles, noVNC login browser, AI/memory/music/audio, agent tools, and tab sync.
+- Validation details and unavoidable limitations: `docs/V10.25.23_WEBSITE_PIPELINE_REVERT_REPORT.md`.
 
 
 ## v10.19.0 — AI Tasks, Music Library and Site Verification
@@ -28,7 +38,7 @@ Existing UI, Bridge, tabs, context menu, AI/Feedback/Settings/Logs, security che
 
 
 ## v10.21.0 — Adaptive Bridge templates
-Historical release note. The v10.25.22 release below restores the available v10.20.0-reference live-page extraction and presentation behavior.
+Historical release note. The v10.25.23 release above further reverts post-baseline website pipeline changes while preserving independent browser features.
 
 
 ## v10.23.0 — Browser AI identity, private-tab and access-gate fixes

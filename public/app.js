@@ -63,44 +63,6 @@
   }
 
   
-  function resolveSoloHref(hrefRaw, base) {
-    let abs = String(hrefRaw || '').trim();
-    if (!abs) return '';
-    try {
-      const u = new URL(abs, base || (typeof location !== 'undefined' ? location.href : 'https://example.com'));
-      if (u.pathname === '/api/proxy' && u.searchParams.get('url')) abs = u.searchParams.get('url');
-      else abs = u.href;
-    } catch (_) {}
-    // Bing tracking /ck/a?u=a1+base64
-    try {
-      const u = new URL(abs);
-      const host = u.hostname.replace(/^www\./, '').toLowerCase();
-      if ((host === 'bing.com' || host.endsWith('.bing.com')) && (u.pathname === '/ck/a' || u.pathname.indexOf('/ck/') === 0)) {
-        let packed = u.searchParams.get('u') || u.searchParams.get('url') || '';
-        if (/^a1/i.test(packed)) packed = packed.slice(2);
-        if (packed) {
-          try {
-            const b64 = packed.replace(/-/g, '+').replace(/_/g, '/');
-            const pad = b64.length % 4 === 0 ? b64 : b64 + '='.repeat(4 - (b64.length % 4));
-            const bin = atob(pad);
-            if (/^https?:\/\//i.test(bin)) abs = bin;
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
-    // DuckDuckGo /l/?uddg=
-    try {
-      const u = new URL(abs);
-      if (/duckduckgo\.com$/i.test(u.hostname) && (u.pathname === '/l/' || u.pathname === '/l')) {
-        const uddg = u.searchParams.get('uddg') || u.searchParams.get('u');
-        if (uddg && /^https?:/i.test(uddg)) abs = uddg;
-      }
-    } catch (_) {}
-    if (!/^https?:/i.test(abs) && !/^http:\/\/127\.0\.0\.1/i.test(abs)) {
-      try { abs = new URL(hrefRaw, base || 'https://example.com').href; } catch (_) { return ''; }
-    }
-    return abs;
-  }
 
   function isYouTubeVideoUrl(url) {
     try {
@@ -339,7 +301,7 @@
           backend: j.backend || b.backend, url: j.url || url, title: j.title || '', hasContent: !!j.hasContent, backgroundTab: true };
       }
       try {
-        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts');
+        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
         frame.setAttribute('data-sh-tab-id', String(tab.id || ''));
         // Reload only the viewport document, not the Chromium page/session.
         const bust = view + (view.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
@@ -449,26 +411,9 @@
   }
 
   async function softRefreshActiveBridge() {
-    // UI-only: repair missing images in the viewport. Never re-goto the backend page.
-    try {
-      const doc = frame && frame.contentDocument;
-      if (!doc) return false;
-      doc.querySelectorAll('img').forEach((img) => {
-        try {
-          if (!img.getAttribute('src') && img.dataset && img.dataset.src) img.src = img.dataset.src;
-          if (img.complete && img.naturalWidth === 0 && img.src) {
-            const u = img.src;
-            img.src = '';
-            img.src = u;
-          }
-        } catch (_) {}
-      });
-      return true;
-    } catch (_) {
-      return false;
-    }
+    // Disabled in the baseline: refreshing the viewport caused flicker and scroll jumps.
+    return false;
   }
-
 
   async function bridgeEvent(ev) {
     const tab = getActiveTab();
@@ -684,45 +629,34 @@
         }
         doc.addEventListener('click', (e) => {
           if (frame && frame.getAttribute('data-sh-tab-id') !== String(state.activeTabId || '')) return;
-          // Universal link handler: keep navigation inside SoloHost only (never host Opera/Chrome tab).
-          const aEl = e.target && e.target.closest && e.target.closest('a[href]');
-          if (aEl) {
-            const hrefRaw = aEl.getAttribute('href') || '';
-            if (hrefRaw && hrefRaw.charAt(0) !== '#' && !/^(javascript|data|blob):/i.test(hrefRaw)) {
-              e.preventDefault();
-              e.stopPropagation();
-              try { e.stopImmediatePropagation(); } catch (_) {}
-              try {
-                if (/^(mailto|tel):/i.test(hrefRaw)) {
-                  window.parent.postMessage({ type: 'solohost-open-external', url: hrefRaw }, '*');
-                  return;
-                }
-                const eventTab = state.tabs.find(t => t.id === frame.getAttribute('data-sh-tab-id'));
-                let abs = resolveSoloHref(hrefRaw, (eventTab && eventTab.url) || state.url);
-                if (!abs || !/^https?:/i.test(abs)) return;
-                if (isYouTubeVideoUrl(abs)) {
-                  clientLog('info', 'youtube.video_handoff', { url: abs });
-                  navigate(abs, { force: true, mode: MODE.PROXY });
-                  return;
-                }
-                if (isNativeMediaOrDocumentUrl(abs)) {
-                  navigate(abs, { force: true });
-                  return;
-                }
-                // Ctrl/Meta → new SoloHost tab (not host browser)
-                if (e.ctrlKey || e.metaKey || String(aEl.getAttribute('target') || '').toLowerCase() === '_blank') newTab(abs);
-                else navigate(abs, { force: true });
-              } catch (err) {
-                clientLog('warn', 'link.navigate_fail', { detail: String(err && err.message || err) });
-              }
-              return;
-            }
-          }
           const el = e.target && e.target.closest && e.target.closest('[data-sh-id]');
           if (!el) return;
           const tag = (el.tagName || '').toLowerCase();
+          if (tag === 'a' && (e.ctrlKey || e.metaKey || el.target === '_blank')) {
+            e.preventDefault();
+            const href = el.getAttribute('href');
+            try {
+              const abs = new URL(href, state.url || 'https://example.com').href;
+              newTab(abs);
+            } catch (_) {}
+            return;
+          }
+          if (tag === 'a') {
+            try {
+              const abs = new URL(el.getAttribute('href') || '', state.url || 'https://example.com').href;
+              if (isNativeMediaOrDocumentUrl(abs)) {
+                e.preventDefault(); e.stopPropagation(); navigate(abs, { force: true }); return;
+              }
+              if (isYouTubeVideoUrl(abs)) {
+                e.preventDefault(); e.stopPropagation();
+                clientLog('info', 'youtube.video_handoff', { url: abs, detail: 'official_embed_player_route' });
+                navigate(abs, { force: true, mode: MODE.PROXY });
+                return;
+              }
+            } catch (_) {}
+          }
           const inputType = (el.getAttribute('type') || '').toLowerCase();
-          if (tag === 'button' || tag === 'label' || ['button','link','tab','checkbox','switch','option','menuitem'].includes(el.getAttribute('role')) ||
+          if (tag === 'a' || tag === 'button' || tag === 'label' || ['button','link','tab','checkbox','switch','option','menuitem'].includes(el.getAttribute('role')) ||
               (tag === 'input' && ['checkbox','radio','submit','button','reset'].includes(inputType)) ) {
             e.preventDefault();
             e.stopPropagation();
@@ -1142,7 +1076,7 @@
     const view = nav && nav.bridge && bridgeViewUrl(nav.bridge);
     if (state.url && view) {
       if (frame) {
-        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts');
+        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
         frame.setAttribute('data-sh-tab-id', String(tab.id || ''));
         if (frame.getAttribute('data-sh-view') !== view) {
           frame.src = view;
@@ -1316,21 +1250,12 @@
     navigate(raw, { mode: MODE.PROXY });
   }
 
-  // Proxy/Bridge frames postMessage so clicks never open the host browser (Opera/Chrome).
+  // Legacy proxy/Bridge navigation message contract.
   window.addEventListener('message', (ev) => {
     try {
       const d = ev && ev.data;
-      if (!d || !d.url || !frame || ev.source !== frame.contentWindow) return;
-      if (d.type === 'solohost-open-external') {
-        if (/^(mailto|tel):/i.test(String(d.url))) window.location.href = String(d.url);
-        return;
-      }
-      if (d.type !== 'solohost-navigate' && d.type !== 'solohost-nav') return;
-      const abs = typeof resolveSoloHref === 'function' ? resolveSoloHref(d.url, state.url) : d.url;
-      if (!abs || !/^https?:/i.test(abs)) return;
-      clientLog('info', 'nav.postmessage', { url: abs, newTab: !!d.newTab });
-      if (d.newTab) newTab(abs);
-      else navigate(abs, { force: true });
+      if (!d || d.type !== 'solohost-navigate' || !d.url || !frame || ev.source !== frame.contentWindow) return;
+      navigate(d.url);
     } catch (_) {}
   });
 
@@ -2289,12 +2214,12 @@
       const view = bridgeViewUrl(nav.bridge);
       if (!view) return false;
       try {
-        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts');
+        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
         frame.setAttribute('data-sh-tab-id', String(tab.id || ''));
         if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); }
         return true;
       } catch (_) { return false; }
-    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts'); if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); } } } } };
+    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); } } } } };
 })();
 
   try {

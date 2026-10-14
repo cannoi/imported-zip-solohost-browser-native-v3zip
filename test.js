@@ -70,12 +70,12 @@ const srcsetHtml = proxy.rewriteHtml('<html><head></head><body><img srcset="/a.w
 assert.ok(srcsetHtml.includes('srcset="https://example.org/a.webp 1x, https://example.org/b.webp 2x"'), 'srcset image URLs must stay direct to origin');
 assert.ok(!/srcset="[^"]*api\/proxy/i.test(srcsetHtml), 'srcset must not route image variants through proxy');
 const rewritten = proxy.rewriteHtml('<html><head><link rel="stylesheet" href="/site.css"></head><body><img src="/hero.png"><script src="/app.js"></script><a href="https://example.com/path">Next</a></body></html>', 'https://example.org/page');
-// Navigation links are normalized to absolute URLs and routed by the injected SoloHost click bridge; static assets stay on origin.
-assert.ok(rewritten.includes('data-sh-nav="1"'), 'anchors should be routed through the SoloHost navigation bridge');
+// Baseline navigation links stay on the proxy; static assets use absolute origin URLs.
+assert.ok(rewritten.includes('/api/proxy?url='), 'anchors should be routed through the proxy');
 assert.ok(rewritten.includes('https://example.org/site.css'), 'stylesheets should be absolute origin, not nested proxy');
 assert.ok(rewritten.includes('https://example.org/hero.png'), 'images should be absolute origin');
 assert.ok(rewritten.includes('name="viewport"'), 'mobile viewport should be present');
-assert.ok(rewritten.includes('href="https://example.com/path"'), 'external anchors should normalize to their absolute destination');
+assert.ok(!rewritten.includes('href="https://example.com/path"'), 'external anchors should be routed through the proxy');
 const css = proxy.rewriteCss('.hero{background:url("../img/a.png")} @import "./theme.css";', 'https://example.org/css/site.css');
 assert.ok(css.includes('https://example.org/img/a.png'), 'CSS url() should absolutize to origin');
 assert.ok(css.includes('https://example.org/css/theme.css'), 'CSS @import should absolutize to origin');
@@ -109,6 +109,5 @@ const ytView = domBridge.buildHybridView({ url: 'https://www.youtube.com/watch?v
 });
 assert.ok(ytView.includes('youtube.com/embed/AAAAAAAAAAA') && ytView.includes('allowfullscreen'), 'YouTube hybrid view must contain a playable embed');
 assert.ok(fullServer.includes('frame-src https://www.youtube.com'), 'viewport CSP must allow official YouTube player frames');
-assert.ok(fs.readFileSync(path.join(root, 'public/app.js'), 'utf8').includes('allow-same-origin allow-forms allow-scripts'), 'Bridge viewport keeps the controlled interaction sandbox');
-assert.ok(!fs.readFileSync(path.join(root, 'public/app.js'), 'utf8').includes('allow-popups allow-scripts'), 'site links must be routed through SoloHost tabs, not uncontrolled popups');
+assert.ok(fs.readFileSync(path.join(root, 'public/app.js'), 'utf8').includes('allow-same-origin allow-forms allow-popups allow-scripts'), 'Bridge viewport restores the v10.20.0 sandbox permissions');
 console.log('✓ login DOM, YouTube embed and agent regressions');
