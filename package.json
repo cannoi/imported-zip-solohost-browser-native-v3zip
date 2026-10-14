@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.25.23",
+  "version": "10.25.24",
   "description": "SoloHost Browser \u2014 v10.20.2 presentation baseline + optional noVNC login desktop",
   "main": "server.js",
   "engines": {
