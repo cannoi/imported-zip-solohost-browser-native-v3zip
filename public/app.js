@@ -370,8 +370,7 @@
       (state.lang === 'vi'
         ? 'Trang này cần mở ngoài. Lý do: '
         : 'This page needs an external browser. Reason: ') + (reason || 'policy') +
-      (state.lang === 'vi' ? ' — bấm nút mở trình duyệt bên cạnh.' : ' — use the regular-browser link beside this message.'),
-      url
+      (state.lang === 'vi' ? ' — bấm ↗ Open.' : ' — tap ↗ Open.')
     );
     // Do not auto-window.open unless user clicks ↗
     return { ok: true, mode: MODE.EXTERNAL, url, reason: reason || 'policy' };
@@ -422,7 +421,6 @@
     const nav = ensureTabNav(tab);
     const b = nav && nav.bridge;
     if (!b) return null;
-    const urlBeforeEvent = (tab && tab.url) || state.url;
     try {
       const r = await fetch('/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '/events', {
         method: 'POST', headers: bridgeHeaders(b), body: JSON.stringify(Object.assign({ token: b.token }, ev))
@@ -435,12 +433,9 @@
         return j;
       }
       if (j && j.ok && frame && state.activeTabId === tabId && frame.getAttribute('data-sh-tab-id') === String(tabId || '')) {
-        // Typing must not reload the viewport snapshot (focus would be lost).
-        // If a select/input handler actually navigated the live engine, refresh the
-        // snapshot; otherwise wait for the next click/submit to avoid needless reloads.
-        let urlChanged = false;
-        try { urlChanged = !!(j.url && normalizeNavUrl(j.url) !== normalizeNavUrl(urlBeforeEvent)); } catch (_) {}
-        if (!['input', 'change'].includes(ev.type) || urlChanged) {
+        // Typing must not reload the snapshot: doing so loses focus and breaks login forms.
+        // The real page receives every input event in WebKit; refresh only after actions that may navigate/update UI.
+        if (ev.type !== 'input' && ev.type !== 'change') {
           const view = bridgeViewUrl(b);
           if (view) { frame.setAttribute('data-sh-tab-id', String(tabId || '')); frame.src = view + '&t=' + Date.now(); }
         }
@@ -859,7 +854,7 @@
     if (startScreen) startScreen.classList.add('hidden');
   }
 
-  function showProxyHint(msg, openUrl) {
+  function showProxyHint(msg) {
     let el = document.getElementById('proxy-hint');
     if (!el) {
       el = document.createElement('div');
@@ -872,10 +867,10 @@
     const span = document.createElement('span');
     span.textContent = msg;
     const a = document.createElement('a');
-    a.href = openUrl || state.url || '#';
+    a.href = state.url || '#';
     a.target = '_blank';
     a.rel = 'noopener noreferrer';
-    a.textContent = state.lang === 'vi' ? 'Mở bằng trình duyệt thường ↗' : 'Open in regular browser ↗';
+    a.textContent = state.lang === 'vi' ? 'Mở tab ↗' : 'Open tab ↗';
     const x = document.createElement('button');
     x.type = 'button';
     x.textContent = '×';
