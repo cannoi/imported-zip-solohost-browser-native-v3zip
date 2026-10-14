@@ -1550,12 +1550,13 @@
     if (m) m.hidden = false; if (b) b.hidden = false;
     const btn = $('btn-menu'); if (btn) btn.setAttribute('aria-expanded', 'true');
   }
+  if ($('btn-static-capture')) $('btn-static-capture').addEventListener('click', () => { window.location.href = '/static-capture.html'; });
   if ($('btn-menu')) $('btn-menu').addEventListener('click', () => {
     const m = $('settings-menu');
     if (m && m.hidden) openSettings(); else closeSettings();
   });
   if ($('settings-backdrop')) $('settings-backdrop').addEventListener('click', closeSettings);
-  ['btn-theme','btn-library','btn-reader','btn-summary','btn-translate','btn-lang'].forEach(id => {
+  ['btn-theme','btn-library','btn-reader','btn-summary','btn-static-capture','btn-translate','btn-lang'].forEach(id => {
     const el = $(id);
     if (el) el.addEventListener('click', () => setTimeout(closeSettings, 0));
   });

@@ -1,8 +1,8 @@
-# SoloHost Browser v10.20.0
+# SoloHost Browser v10.25.16
 
 Version 10.16.0 routes YouTube watch/Shorts/live clicks through the official player shell and improves policy-compliant diagnostics. Version 10.15.0 adds a configurable default search engine (Bing, Google, DuckDuckGo, Brave Search, or a custom HTTP(S) URL template), native browser viewing for direct media/images/PDF links, and a wider but explicit CSP allowlist for official media embeds (YouTube, TikTok, Vimeo, Spotify, Twitch, Dailymotion). The AI Panel knowledge is generated at runtime from the installed package version and engine capabilities, and documents current architecture, search settings, media support and limitations.
 
-Existing UI, Bridge, tabs, context menu, AI/Feedback/Settings/Logs, security checks and adaptive rendering are retained. See `docs/V10.15.0_MEDIA_SEARCH_AI_REPORT.md`.
+Existing UI, Bridge, tabs, context menu, AI/Feedback/Settings/Logs, security checks and adaptive rendering are retained. See `docs/V10.15.0_MEDIA_SEARCH_AI_REPORT.md`. Static Capture is available from the browser settings menu or `/static-capture.html`; it crawls rendered Chromium pages into a sanitized responsive reading site and ZIP. See `docs/V10.25.16_STATIC_CAPTURE_REPORT.md` for security boundaries and limits.
 
 
 ## v10.19.0 — AI Tasks, Music Library and Site Verification

@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SoloHost Static Capture</title>
+<style>
+:root{color-scheme:dark}*{box-sizing:border-box}body{margin:0;background:#0d1117;color:#e6edf3;font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+main{max-width:820px;margin:0 auto;padding:24px 16px 60px}.top{display:flex;align-items:center;gap:12px;justify-content:space-between;flex-wrap:wrap}.top a{color:#9ec5ff;text-decoration:none}
+.panel{background:#161b22;border:1px solid #30363d;border-radius:14px;padding:18px;margin:16px 0}
+label{display:block;font-size:.9rem;color:#b8c2ce;margin:12px 0 6px}input,select{width:100%;min-height:44px;border-radius:8px;border:1px solid #444c56;background:#0d1117;color:inherit;padding:10px;font:inherit}
+.row{display:grid;grid-template-columns:1fr 140px;gap:12px}@media(max-width:540px){.row{grid-template-columns:1fr}}
+button{border:0;border-radius:9px;background:#2f81f7;color:white;padding:12px 16px;font:inherit;font-weight:600;cursor:pointer;width:100%;margin-top:16px}button:disabled{opacity:.55;cursor:wait}
+.muted{color:#9da7b3;font-size:.9rem}.status{white-space:pre-wrap;overflow-wrap:anywhere}.progress{height:8px;background:#30363d;border-radius:99px;overflow:hidden;margin:12px 0}.progress span{display:block;height:100%;width:0;background:#3fb950;transition:width .2s}
+a.action{display:inline-block;margin:8px 8px 0 0;color:#9ec5ff}.warn{color:#f0b66d}.error{color:#ff8e8e}code{overflow-wrap:anywhere}
+</style></head>
+<body><main>
+<div class="top"><div><h1 style="margin:0">Static Capture</h1><div class="muted">Cào bằng Chromium → dựng website tĩnh an toàn, tối ưu điện thoại.</div></div><a href="/">← Quay lại trình duyệt</a></div>
+<section class="panel">
+<form id="capture-form">
+<label for="url">URL bắt đầu</label><input id="url" name="url" type="url" placeholder="https://example.com/article" required autocomplete="url">
+<div class="row"><div><label for="scope">Phạm vi thu thập</label><select id="scope" name="scope"><option value="single">Một trang</option><option value="domain">Các trang cùng hostname</option><option value="sitemap">Sitemap + cùng hostname</option></select></div><div><label for="maxPages">Số trang tối đa</label><select id="maxPages" name="maxPages"><option>1</option><option>5</option><option selected>12</option><option>20</option><option>30</option></select></div></div>
+<p class="muted">Giới hạn tối đa 30 trang mỗi tác vụ. Chỉ thu thập URL HTTP(S) công khai; không truy cập localhost, mạng riêng hoặc dịch vụ nội bộ.</p>
+<button id="start" type="submit">Bắt đầu cào dữ liệu</button>
+</form></section>
+<section class="panel" aria-live="polite"><h2 style="margin-top:0">Tiến trình</h2><div id="status" class="status muted">Chưa có tác vụ nào.</div><div class="progress"><span id="bar"></span></div><div id="result"></div></section>
+<section class="panel"><h2 style="margin-top:0">Đầu ra bao gồm</h2><ul><li>Trang index và các trang HTML tĩnh có giao diện đáp ứng.</li><li>Nội dung bài viết được trích xuất bằng Mozilla Readability và làm sạch HTML.</li><li>Liên kết giữa các trang đã thu thập được chuyển thành liên kết nội bộ.</li><li>Manifest JSON và file ZIP để tải về, giải nén, lưu trữ hoặc triển khai trên máy chủ tĩnh.</li></ul><p class="muted">Đây là bản sao đọc tĩnh, không phải bản sao 1:1 của website gốc. JavaScript, form đăng nhập, feed trực tiếp và chức năng tương tác bị loại bỏ; ảnh/media có thể tiếp tục tải từ website gốc.</p></section>
+</main>
+<script>
+(function(){
+const form=document.getElementById('capture-form'), start=document.getElementById('start'), status=document.getElementById('status'), bar=document.getElementById('bar'), result=document.getElementById('result');
+let timer=null;
+function browserProfileId(){try{let id=localStorage.getItem('solo_browser_profile_id');if(/^[a-f0-9]{32}$/i.test(id||''))return id.toLowerCase();const b=new Uint8Array(16);if(window.crypto&&crypto.getRandomValues)crypto.getRandomValues(b);else for(let i=0;i<b.length;i++)b[i]=Math.floor(Math.random()*256);id=Array.from(b,x=>x.toString(16).padStart(2,'0')).join('');localStorage.setItem('solo_browser_profile_id',id);return id;}catch(_){return '';}}
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function render(job){
+ const p=job.progress||{}, total=Number(p.total)||Number(job.options&&job.options.maxPages)||1, done=Number(p.completed)||0;
+ bar.style.width=Math.min(100,Math.round(done/Math.max(1,total)*100))+'%';
+ status.className='status'+(job.status==='failed'?' error':'');
+ status.textContent='Trạng thái: '+job.status+'\nĐã xử lý: '+done+' / '+total+'\n'+(p.currentUrl?'Đang xử lý: '+p.currentUrl:'')+(job.error?'\nLỗi: '+job.error:'')+(job.errors&&job.errors.length?'\nMột số URL bỏ qua/lỗi: '+job.errors.length:'');
+ if(job.status==='completed'){
+  result.innerHTML='<a class="action" href="'+esc(job.downloadUrl)+'">⬇ Tải ZIP website tĩnh</a><a class="action" target="_blank" rel="noopener" href="'+esc(job.previewUrl)+'">Mở bản xem trước</a><p class="muted">Đã tạo '+job.pages+' trang HTML.</p>';
+  start.disabled=false;return true;
+ }
+ if(job.status==='failed'){result.innerHTML='<p class="error">Tác vụ chưa tạo được website tĩnh. Kiểm tra URL và kết nối mạng.</p>';start.disabled=false;return true;}
+ return false;
+}
+async function poll(id){
+ try{const r=await fetch('/api/browser/static-captures/'+encodeURIComponent(id),{cache:'no-store'});const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||'Không đọc được trạng thái');if(render(j.job))return;}
+ catch(e){status.textContent='Không đọc được trạng thái: '+e.message;start.disabled=false;return;}
+ timer=setTimeout(()=>poll(id),1200);
+}
+form.addEventListener('submit',async e=>{
+ e.preventDefault();if(timer)clearTimeout(timer);start.disabled=true;result.innerHTML='';bar.style.width='0%';status.className='status muted';status.textContent='Đang tạo tác vụ Chromium…';
+ try{
+  const payload={url:form.url.value.trim(),scope:form.scope.value,maxPages:Number(form.maxPages.value),profileId:browserProfileId()};
+  const r=await fetch('/api/browser/static-captures',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  const j=await r.json();if(!r.ok||!j.ok)throw new Error(j.error||'Không tạo được tác vụ');
+  render(j.job);poll(j.job.id);
+ }catch(e){status.className='status error';status.textContent=e.message;start.disabled=false;}
+});
+})();
+</script></body></html>
