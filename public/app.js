@@ -62,6 +62,46 @@
     } catch { return false; }
   }
 
+  
+  function resolveSoloHref(hrefRaw, base) {
+    let abs = String(hrefRaw || '').trim();
+    if (!abs) return '';
+    try {
+      const u = new URL(abs, base || (typeof location !== 'undefined' ? location.href : 'https://example.com'));
+      if (u.pathname === '/api/proxy' && u.searchParams.get('url')) abs = u.searchParams.get('url');
+      else abs = u.href;
+    } catch (_) {}
+    // Bing tracking /ck/a?u=a1+base64
+    try {
+      const u = new URL(abs);
+      const host = u.hostname.replace(/^www\./, '').toLowerCase();
+      if ((host === 'bing.com' || host.endsWith('.bing.com')) && (u.pathname === '/ck/a' || u.pathname.indexOf('/ck/') === 0)) {
+        let packed = u.searchParams.get('u') || u.searchParams.get('url') || '';
+        if (/^a1/i.test(packed)) packed = packed.slice(2);
+        if (packed) {
+          try {
+            const b64 = packed.replace(/-/g, '+').replace(/_/g, '/');
+            const pad = b64.length % 4 === 0 ? b64 : b64 + '='.repeat(4 - (b64.length % 4));
+            const bin = atob(pad);
+            if (/^https?:\/\//i.test(bin)) abs = bin;
+          } catch (_) {}
+        }
+      }
+    } catch (_) {}
+    // DuckDuckGo /l/?uddg=
+    try {
+      const u = new URL(abs);
+      if (/duckduckgo\.com$/i.test(u.hostname) && (u.pathname === '/l/' || u.pathname === '/l')) {
+        const uddg = u.searchParams.get('uddg') || u.searchParams.get('u');
+        if (uddg && /^https?:/i.test(uddg)) abs = uddg;
+      }
+    } catch (_) {}
+    if (!/^https?:/i.test(abs) && !/^http:\/\/127\.0\.0\.1/i.test(abs)) {
+      try { abs = new URL(hrefRaw, base || 'https://example.com').href; } catch (_) { return ''; }
+    }
+    return abs;
+  }
+
   function isYouTubeVideoUrl(url) {
     try {
       const u = new URL(url);
@@ -292,7 +332,7 @@
       const view = bridgeViewUrl(b);
       if (!frame || !view) return { ok: false, reason: 'no_viewport' };
       try {
-        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
+        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts');
         // Always reload the Bridge viewport after navigate — same session URL path would
         // otherwise keep showing the previous page (data-sh-view equal → no load).
         const bust = view + (view.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
@@ -629,23 +669,17 @@
           }
         }
         doc.addEventListener('click', (e) => {
-          // Universal link handler (depth 1..n): any <a href> navigates inside SoloHost
+          // Universal link handler: keep navigation inside SoloHost only (never host Opera/Chrome tab).
           const aEl = e.target && e.target.closest && e.target.closest('a[href]');
           if (aEl) {
             const hrefRaw = aEl.getAttribute('href') || '';
             if (hrefRaw && hrefRaw.charAt(0) !== '#' && !/^(javascript|mailto|tel):/i.test(hrefRaw)) {
               e.preventDefault();
               e.stopPropagation();
+              try { e.stopImmediatePropagation(); } catch (_) {}
               try {
-                let abs = hrefRaw;
-                try {
-                  const u = new URL(hrefRaw, state.url || (typeof location !== 'undefined' ? location.href : 'https://example.com'));
-                  if (u.pathname === '/api/proxy' && u.searchParams.get('url')) abs = u.searchParams.get('url');
-                  else abs = u.href;
-                } catch (_) {}
-                if (!/^https?:/i.test(abs) && !/^http:\/\/127\.0\.0\.1/i.test(abs)) {
-                  try { abs = new URL(hrefRaw, state.url || 'https://example.com').href; } catch (_) {}
-                }
+                let abs = resolveSoloHref(hrefRaw, state.url);
+                if (!abs) return;
                 if (isYouTubeVideoUrl(abs)) {
                   clientLog('info', 'youtube.video_handoff', { url: abs });
                   navigate(abs, { force: true, mode: MODE.PROXY });
@@ -655,11 +689,9 @@
                   navigate(abs, { force: true });
                   return;
                 }
-                if (aEl.target === '_blank' || e.ctrlKey || e.metaKey) {
-                  newTab(abs);
-                } else {
-                  navigate(abs, { force: true });
-                }
+                // Ctrl/Meta → new SoloHost tab (not host browser)
+                if (e.ctrlKey || e.metaKey) newTab(abs);
+                else navigate(abs, { force: true });
               } catch (err) {
                 clientLog('warn', 'link.navigate_fail', { detail: String(err && err.message || err) });
               }
@@ -1086,7 +1118,7 @@
     const view = nav && nav.bridge && bridgeViewUrl(nav.bridge);
     if (state.url && view) {
       if (frame) {
-        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
+        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts');
         if (frame.getAttribute('data-sh-view') !== view) {
           frame.src = view;
           frame.setAttribute('data-sh-view', view);
@@ -1253,11 +1285,17 @@
     navigate(raw, { mode: MODE.PROXY });
   }
 
-  // Links inside proxied pages postMessage to navigate without leaving the shell
+  // Proxy/Bridge frames postMessage so clicks never open the host browser (Opera/Chrome).
   window.addEventListener('message', (ev) => {
     try {
-      const d = ev.data;
-      if (d && d.type === 'solohost-navigate' && d.url) navigate(d.url);
+      const d = ev && ev.data;
+      if (!d || !d.url) return;
+      if (d.type !== 'solohost-navigate' && d.type !== 'solohost-nav') return;
+      const abs = typeof resolveSoloHref === 'function' ? resolveSoloHref(d.url, state.url) : d.url;
+      if (!abs || !/^https?:/i.test(abs)) return;
+      clientLog('info', 'nav.postmessage', { url: abs, newTab: !!d.newTab });
+      if (d.newTab) newTab(abs);
+      else navigate(abs, { force: true });
     } catch (_) {}
   });
 
@@ -2217,11 +2255,11 @@
       const view = bridgeViewUrl(nav.bridge);
       if (!view) return false;
       try {
-        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
+        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts');
         if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); }
         return true;
       } catch (_) { return false; }
-    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); } } } } };
+    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts'); if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); } } } } };
 })();
 
   try {

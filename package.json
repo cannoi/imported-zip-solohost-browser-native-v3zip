@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.25.17",
+  "version": "10.25.18",
   "description": "SoloHost Browser \u2014 shared-profile Chromium DOM Bridge with unified content extraction",
   "main": "server.js",
   "engines": {
