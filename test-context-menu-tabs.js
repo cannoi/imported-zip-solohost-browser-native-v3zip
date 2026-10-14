@@ -13,7 +13,7 @@ assert(app.includes("addEventListener('pointerdown'"), 'long press supported');
 assert(app.includes('520'), 'long press threshold defined');
 assert(app.includes('state.tabs.length >= 12'), 'tab limit enforced');
 assert(app.includes('tab.private'));
-assert(app.includes('Restore cached Bridge view only — never re-navigate Chromium for a tab switch'), 'tab switching restores existing session view');
+assert(app.includes('Restore the existing tab\'s Bridge view instead of reloading the website'), 'tab switching restores existing session view');
 assert(app.includes('private tabs do not write browsing history'), 'private history suppressed');
 assert(app.includes('never Bridge session IDs or authentication tokens'), 'tab restore does not persist bridge credentials');
 assert(server.includes('privateMode') && server.includes('randomBytes(12)'), 'private sessions receive unique identity');
