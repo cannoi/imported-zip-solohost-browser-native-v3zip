@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.25.25",
-  "description": "SoloHost Browser \u2014 v10.25.22 engine/features + v10.20.2-style page presentation",
+  "version": "10.25.26",
+  "description": "SoloHost Browser \u2014 v10.20.2 presentation + non-display upgrades (noVNC, persist, tabKey, agent)",
   "main": "server.js",
   "engines": {
     "node": ">=18"
