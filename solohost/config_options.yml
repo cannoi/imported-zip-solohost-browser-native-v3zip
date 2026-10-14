@@ -1,12 +1,13 @@
 title: "SoloHost Browser"
 eyebrow: SoloHost App
-description: "Simple private lightweight browser with AI tasks and music library."
-footer_hint: Leave access password empty to disable app login.
+description: "Simple · Private · Lightweight browser with AI."
+footer_hint: Set the access password, save, then start the app.
 output_file: .env
-after_save: Saved. Restart the app from SoloHost.
+after_save: Saved. Start or restart the app from SoloHost.
 fields:
   - name: BROWSER_ACCESS_PASSWORD
-    label: Browser access password (optional)
+    label: Access password
     type: password
-    required: false
-    default: ""
+    required: true
+    preserve_if_blank: false
+    help: "Password required after splash to open the app."

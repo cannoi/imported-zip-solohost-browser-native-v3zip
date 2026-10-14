@@ -10,4 +10,4 @@ fields:
     type: password
     required: true
     preserve_if_blank: false
-    help: "Password required after splash to open the app. Must match exactly what you type on the login screen."
+    help: "Password required after splash to open the app."

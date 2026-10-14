@@ -1,20 +1,24 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.22.3",
-  "description": "SoloHost Browser \u2014 adaptive Chromium DOM Bridge with semantic site templates",
+  "version": "10.25.16",
+  "description": "SoloHost Browser \u2014 shared-profile Chromium DOM Bridge with unified content extraction",
   "main": "server.js",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node test-syntax.js && node test-content-templates.js && node test.js && node test-security.js && node test-bridge.js && node test-ai-compat.js && node test-agent.js && node test-backend-agent.js && node test-youtube.js && node test-youtube-click-routing.js && node test-mobile-resilience.js && node test-bing-default.js && node test-browser-standards.js && node test-focused-content.js && node test-adaptive-layout.js && node test-interaction-performance.js && node test-context-menu-tabs.js && node test-media-search-settings.js && node test-ai-tasks-playlist.js && node test-ai-memory-music-unified.js && node test-perf-ssrf.js && node --check lib/engine/playwright-engine.js",
+    "test": "node test-syntax.js && node test-content-templates.js && node test.js && node test-security.js && node test-bridge.js && node test-ai-compat.js && node test-agent.js && node test-backend-agent.js && node test-youtube.js && node test-youtube-click-routing.js && node test-mobile-resilience.js && node test-bing-default.js && node test-browser-standards.js && node test-focused-content.js && node test-adaptive-layout.js && node test-interaction-performance.js && node test-context-menu-tabs.js && node test-media-search-settings.js && node test-ai-tasks-playlist.js && node test-ai-memory-music-unified.js && node test-perf-ssrf.js && node --check lib/engine/playwright-engine.js && node test-v10.23.0-upgrade.js && node test-novnc-upgrade.js && node test-v10.25.0-audio.js && node test-static-crawler.js",
     "test:e2e": "node test-agent-e2e.js"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "express": "^4.19.2",
-    "playwright": "1.51.1"
+    "express": "^4.21.2",
+    "playwright": "1.51.1",
+    "@mozilla/readability": "^0.6.0",
+    "archiver": "^7.0.1",
+    "jsdom": "^26.1.0",
+    "sanitize-html": "^2.17.7"
   }
 }
