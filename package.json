@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.25.20",
-  "description": "SoloHost Browser \u2014 Chromium DOM Bridge (tab-aligned sessions)",
+  "version": "10.25.21",
+  "description": "SoloHost Browser \u2014 unified readable display (Bridge + Proxy)",
   "main": "server.js",
   "engines": {
     "node": ">=18"
