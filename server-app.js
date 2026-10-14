@@ -670,69 +670,6 @@ let browserStore = {
 try { browserStore = require('./lib/store'); } catch (e) { console.error('[warn] store:', e.message); }
 
 
-// Static Capture: bounded Chromium crawler + sanitized static reading-site exporter.
-let staticCrawler = null;
-try { staticCrawler = require('./lib/engine/static-crawler'); }
-catch (e) { console.error('[warn] static-crawler unavailable:', e && e.message); }
-const captureRateHits = new Map();
-function captureRateOk(key) {
-  const now = Date.now();
-  const old = (captureRateHits.get(key) || []).filter(t => now - t < 60000);
-  if (old.length >= 4) { captureRateHits.set(key, old); return false; }
-  old.push(now); captureRateHits.set(key, old);
-  if (captureRateHits.size > 500) captureRateHits.delete(captureRateHits.keys().next().value);
-  return true;
-}
-app.post('/api/browser/static-captures', async (req, res) => {
-  if (!staticCrawler) return res.status(503).json({ ok: false, error: 'static_capture_unavailable' });
-  if (!captureRateOk(req.ip || req.socket.remoteAddress || 'anon')) {
-    return res.status(429).json({ ok: false, error: 'capture_rate_limited' });
-  }
-  try {
-    const job = staticCrawler.start(req.body || {});
-    appLog.log('info', 'static_capture.started', { id: job.id, scope: job.options.scope, maxPages: job.options.maxPages });
-    return res.status(202).json({ ok: true, job });
-  } catch (e) {
-    return res.status(400).json({ ok: false, error: String(e.message || e).slice(0, 240) });
-  }
-});
-app.get('/api/browser/static-captures', (_req, res) => {
-  if (!staticCrawler) return res.status(503).json({ ok: false, error: 'static_capture_unavailable' });
-  res.json({ ok: true, jobs: staticCrawler.list() });
-});
-app.get('/api/browser/static-captures/:id', (req, res) => {
-  if (!staticCrawler) return res.status(503).json({ ok: false, error: 'static_capture_unavailable' });
-  const job = staticCrawler.get(req.params.id);
-  if (!job) return res.status(404).json({ ok: false, error: 'capture_job_not_found' });
-  res.json({ ok: true, job });
-});
-app.get('/api/browser/static-captures/:id/site.zip', (req, res) => {
-  if (!staticCrawler) return res.status(503).json({ ok: false, error: 'static_capture_unavailable' });
-  const job = staticCrawler.get(req.params.id);
-  const paths = staticCrawler.getPaths(req.params.id);
-  if (!job || job.status !== 'completed' || !paths || !require('fs').existsSync(paths.zip)) {
-    return res.status(404).json({ ok: false, error: 'capture_archive_not_ready' });
-  }
-  return res.download(paths.zip, 'solohost-static-capture-' + req.params.id + '.zip');
-});
-app.get('/api/browser/static-captures/:id/files/:file', (req, res) => {
-  if (!staticCrawler) return res.status(503).json({ ok: false, error: 'static_capture_unavailable' });
-  const job = staticCrawler.get(req.params.id);
-  const paths = staticCrawler.getPaths(req.params.id);
-  const file = String(req.params.file || '');
-  if (!job || job.status !== 'completed' || !paths || path.basename(file) !== file ||
-      !/^(?:index|[a-z0-9._-]{1,120})\\.html$/i.test(file)) {
-    return res.status(404).type('text').send('Static capture file not found.');
-  }
-  const full = path.join(paths.folder, file);
-  if (!require('fs').existsSync(full)) return res.status(404).type('text').send('Static capture file not found.');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https: http: data:; media-src https: http:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'");
-  res.setHeader('Referrer-Policy', 'no-referrer');
-  return res.sendFile(full);
-});
-
-// —— Interactive DOM Bridge (versioned browser sessions) ——
 app.post('/api/browser/sessions', async (req, res) => {
   try {
     const ip = req.ip || req.socket.remoteAddress || 'anon';
@@ -752,6 +689,7 @@ app.post('/api/browser/sessions', async (req, res) => {
     try { new Intl.DateTimeFormat('en-US', { timeZone: timezoneId }); } catch (_) { timezoneId = ''; }
     const privateSuffix = privateMode ? ':private:' + require('crypto').randomBytes(12).toString('hex') : '';
     const out = await domBridge.createSession({
+      tabKey: String((req.body && req.body.tabKey) || '').slice(0, 64),
       clientKey: stableClientKey + (privateMode ? privateSuffix : ''),
       privateMode,
       persist: !privateMode,

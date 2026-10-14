@@ -277,7 +277,7 @@
       const r = await fetch('/api/browser/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ privateMode: !!tab.private, profileId: browserProfileId(), locale: state.lang === 'vi' ? 'vi-VN' : 'en-US', timezoneId: state.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }),
+        body: JSON.stringify({ privateMode: !!tab.private, profileId: browserProfileId(), tabKey: String(tab.id || ''), locale: state.lang === 'vi' ? 'vi-VN' : 'en-US', timezoneId: state.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }),
         signal: ac ? ac.signal : undefined
       });
       const j = await r.json();
@@ -1244,6 +1244,7 @@
       if (!result.ok) {
         const reason = result.reason || 'engine_failed';
         clientLog('warn', 'navigate_engine_fallback', { url, reason });
+        // Keep bridge session so Chromium tab stays aligned; proxy is display-only fallback.
         if (isLoginPath(url)) {
           result = loadViaExternal(url, 'login_requires_full_browser_context:' + reason);
         } else {
@@ -1588,13 +1589,12 @@
     if (m) m.hidden = false; if (b) b.hidden = false;
     const btn = $('btn-menu'); if (btn) btn.setAttribute('aria-expanded', 'true');
   }
-  if ($('btn-static-capture')) $('btn-static-capture').addEventListener('click', () => { window.location.href = '/static-capture.html'; });
   if ($('btn-menu')) $('btn-menu').addEventListener('click', () => {
     const m = $('settings-menu');
     if (m && m.hidden) openSettings(); else closeSettings();
   });
   if ($('settings-backdrop')) $('settings-backdrop').addEventListener('click', closeSettings);
-  ['btn-theme','btn-library','btn-reader','btn-summary','btn-static-capture','btn-translate','btn-lang'].forEach(id => {
+  ['btn-theme','btn-library','btn-reader','btn-summary','btn-translate','btn-lang'].forEach(id => {
     const el = $(id);
     if (el) el.addEventListener('click', () => setTimeout(closeSettings, 0));
   });
