@@ -23,6 +23,5 @@ services:
       pi.ui.primary: "true"
     volumes:
       - solohost-browser-data:/app/data
-
 volumes:
   solohost-browser-data:

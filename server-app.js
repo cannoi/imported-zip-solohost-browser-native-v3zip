@@ -870,7 +870,6 @@ try {
 }
 
 
-  // noVNC — login secondary only (does not change Bridge presentation)
   try {
     app.get('/api/novnc/status', async (req, res) => {
       let novnc = { status: () => ({ featureEnabled: false, packagesPresent: false, ready: false }) };

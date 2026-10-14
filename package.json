@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.25.28",
-  "description": "SoloHost Browser \u2014 v10.20.2 display + wired stealth/agent-tools/noVNC/SoloHost config",
+  "version": "10.25.29",
+  "description": "SoloHost Browser \u2014 v10.20.2 display + visible noVNC button + Agent time limit 60m",
   "main": "server.js",
   "engines": {
     "node": ">=18"

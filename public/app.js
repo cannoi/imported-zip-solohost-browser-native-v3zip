@@ -2019,6 +2019,27 @@
   // Extra bind after paint (mobile WebView)
   setTimeout(function () { try { bindHomeLibrary(); refreshHomeLibrary(); } catch (_) {} }, 300);
   document.documentElement.setAttribute('data-solo-home-utils-ready', '1');
+
+  // noVNC login desktop (secondary) — does not change Bridge page rendering
+  if ($('btn-novnc')) $('btn-novnc').addEventListener('click', async () => {
+    const vi = state.lang === 'vi';
+    try {
+      try { await fetch('/api/novnc/start', { method: 'POST', credentials: 'same-origin' }); } catch (_) {}
+      const response = await fetch('/api/novnc/status', { credentials: 'same-origin', cache: 'no-store' });
+      const data = await response.json().catch(() => ({}));
+      if (!data || data.enabled === false) {
+        alert(vi
+          ? 'Desktop đăng nhập chưa sẵn sàng. Rebuild image với noVNC hoặc dùng Bridge / Open ↗.'
+          : 'Login desktop unavailable. Rebuild with noVNC packages or use Bridge / Open ↗.');
+        return;
+      }
+      const url = data.url || '/novnc/vnc.html?autoconnect=1&resize=scale&path=websockify';
+      window.open(url, 'solohost-novnc', 'noopener,noreferrer');
+    } catch (e) {
+      alert(vi ? 'Không mở được desktop đăng nhập.' : 'Cannot open login desktop.');
+    }
+  });
+
   window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary, addCurrentUrlToPlaylist, refreshHomeLibrary, runScript, stopScript, showTasksPanel() { showStart(); openHomePanel('panel-scripts'); refreshHomeLibrary(); }, openHomePanel, getActiveBridge() { const tab = getActiveTab(); const nav = ensureTabNav(tab); return nav && nav.bridge ? { sessionId: nav.bridge.sessionId, token: nav.bridge.token, backend: nav.bridge.backend, url: state.url || '' } : null; },
     softRefreshActiveBridge: softRefreshActiveBridge, refreshBridgeView() {
       const tab = getActiveTab();

@@ -1,4 +1,4 @@
-# SoloHost Browser v10.25.27 presentation=v10.20.2 — Chromium Bridge with shared-profile tab synchronization
+# SoloHost Browser v10.25.29 UI:novnc+agent-time — Chromium Bridge with shared-profile tab synchronization
 FROM mcr.microsoft.com/playwright:v1.49.1-jammy
 
 WORKDIR /app

@@ -4,6 +4,27 @@
  * Host app may copy to public/ai-panel.js and adapt browserContext() / executeActions().
  * Depends on: UniversalAI, UniversalFeedback, markup in example/ui/ai-panel.html, styles in ai-panel.css.
  */
+
+function agentTimeLimitMs() {
+  try {
+    const min = Math.max(5, Math.min(180, Number(localStorage.getItem('solo_agent_time_min') || 60)));
+    return min * 60000;
+  } catch (_) { return 60 * 60000; }
+}
+function bindAgentTimeLimitInput() {
+  try {
+    const input = document.getElementById('agent-time-limit');
+    if (!input || input.dataset.bound === '1') return;
+    input.dataset.bound = '1';
+    input.value = localStorage.getItem('solo_agent_time_min') || input.value || '60';
+    input.addEventListener('change', (e) => {
+      const v = Math.max(5, Math.min(180, Number(e.target.value) || 60));
+      localStorage.setItem('solo_agent_time_min', String(v));
+      e.target.value = String(v);
+    });
+  } catch (_) {}
+}
+
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -422,6 +443,7 @@ async function loadSettings() {
   }
 }
 
+bindAgentTimeLimitInput();
 document.getElementById('setSave')?.addEventListener('click', async () => {
   const status = document.getElementById('setStatus');
   if (status) status.textContent = 'Saving…';
@@ -724,7 +746,7 @@ async function runAgentTask(text) {
       if (confirmText) confirmText.textContent = (vi ? 'AI muốn: ' : 'AI wants to: ') + t + (vi ? '. Cho phép?' : '. Allow?');
       if (confirmBox) confirmBox.hidden = false;
     }
-  }, { history, maxSteps });
+  }, { history, maxSteps, maxMs: agentTimeLimitMs() });
 
   yes?.removeEventListener('click', onYes);
   no?.removeEventListener('click', onNo);
@@ -742,3 +764,5 @@ async function runAgentTask(text) {
   await persistTurn(text, summary);
 }
 loadAIMemory().catch(() => {});
+
+try { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bindAgentTimeLimitInput); else bindAgentTimeLimitInput(); } catch (_) {}

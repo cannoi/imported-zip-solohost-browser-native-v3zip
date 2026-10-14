@@ -20,6 +20,7 @@
       <button type="button" class="icon-btn" id="btn-bookmark" title="Bookmark" aria-label="Bookmark">☆</button>
       <button type="button" class="icon-btn" id="btn-menu" title="Settings" aria-label="Settings" aria-expanded="false" aria-controls="settings-menu">☰</button>
       <button type="button" class="icon-btn" id="btn-private-tab" title="Private tab" aria-label="Private tab">🕶️</button>
+      <button type="button" class="icon-btn" id="btn-novnc" title="Login desktop (noVNC)" aria-label="Login desktop">🖥️</button>
     </div>
   </header>
 
@@ -236,6 +237,12 @@
               <option value="cloud_enabled">Cloud enabled</option>
               <option value="local_only">Local only</option>
             </select>
+            
+            <div id="agent-time-field" style="margin:12px 0 8px;padding:10px;border-radius:10px;border:1px solid #334;background:#0d0b18">
+              <label for="agent-time-limit" style="display:block;font-size:12px;opacity:.75;margin:0 0 4px">Agent time limit (minutes)</label>
+              <input type="number" id="agent-time-limit" min="5" max="180" step="5" value="60" style="width:100%;box-sizing:border-box;min-height:40px;padding:8px 10px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445">
+              <p style="font-size:11px;opacity:.6;margin:6px 0 0;line-height:1.35">Each Agent task runs up to this many minutes (default 60). Giới hạn thời gian mỗi nhiệm vụ Agent (mặc định 60 phút).</p>
+            </div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px">
               <button type="button" id="setSave" style="min-height:40px;padding:0 14px;border-radius:10px;border:0;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer">Save</button>
               <button type="button" id="setTest" style="min-height:40px;padding:0 14px;border-radius:10px;border:1px solid #445;background:#1a1a24;color:#fff;cursor:pointer">Test</button>
