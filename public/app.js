@@ -1379,6 +1379,10 @@
           alert(vi
             ? 'Desktop đăng nhập chưa có trong image (build CI). Duyệt web vẫn dùng Bridge. Build WITH_NOVNC=1 nếu cần đăng nhập tay.'
             : 'Login desktop is not in this image (CI build). Browsing still uses Bridge. Rebuild WITH_NOVNC=1 for manual login.');
+        } else if (reason === 'password_required') {
+          alert(vi
+            ? 'Desktop đăng nhập yêu cầu NOVNC_VNC_PASSWORD có ít nhất 8 ký tự; tính năng này hiện đã tắt.'
+            : 'Login desktop requires NOVNC_VNC_PASSWORD with at least 8 characters; it is currently disabled.');
         } else {
           alert(vi
             ? 'Desktop đăng nhập chưa bật. Duyệt thường vẫn qua Bridge.'

@@ -8,7 +8,7 @@ const bridgeSource = fs.readFileSync(path.join(root, 'lib/engine/dom-bridge.js')
 const pkg = require('./package.json');
 const bridge = require('./lib/engine/dom-bridge');
 const engine = require('./lib/engine/playwright-engine');
-assert.strictEqual(pkg.version, '10.25.0');
+assert.ok(/^\d+\.\d+\.\d+$/.test(pkg.version), 'package version uses semantic versioning');
 assert.ok(engineSource.includes('mode, initialPageType'), 'render mode and detected page type are passed into snapshot evaluation');
 assert.ok(engineSource.includes('solohost-adaptive-layout'), 'snapshot receives conservative adaptive styling');
 assert.ok(engineSource.includes('animation:none!important') && engineSource.includes('transition:none!important'), 'snapshot suppresses animations and transitions');

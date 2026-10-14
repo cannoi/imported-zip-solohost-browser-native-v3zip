@@ -5,9 +5,10 @@ const path = require('path');
 const router = require('./lib/engine/content-router');
 const bridge = require('./lib/engine/dom-bridge');
 const engine = require('./lib/engine/playwright-engine');
+const engineSource = fs.readFileSync(require.resolve('./lib/engine/playwright-engine'), 'utf8');
 const pkg = require('./package.json');
 const caps = require('./lib/engine/capabilities').detect();
-assert.strictEqual(pkg.version, '10.25.0');
+assert.ok(/^\d+\.\d+\.\d+$/.test(pkg.version), 'package version uses semantic versioning');
 assert.strictEqual(caps.version, pkg.version);
 
 assert.deepStrictEqual(router.classify('https://www.google.co.uk/search?q=bridge').pageType, 'search');
@@ -20,6 +21,9 @@ assert.strictEqual(router.classify('https://developer.mozilla.org/en-US/docs/Web
 assert.strictEqual(engine.classifyPageType('https://www.google.com/search?q=bridge'), 'search');
 assert.strictEqual(engine.classifyPageType('https://www.youtube.com/shorts/abcdefghijk'), 'video');
 assert.strictEqual(engine.classifyPageType('https://www.lazada.vn/products/item'), 'commerce');
+assert.strictEqual(engine.classifyPageType('https://unknown.example/'), 'generic');
+assert.ok(engineSource.includes('articleText.length > 700') && engineSource.includes('articleMetadata && articleText.length > 300'), 'generic URLs use semantic article content and metadata to classify long-form pages');
+assert.ok(engineSource.includes('@media(orientation:portrait)') && engineSource.includes('@media(orientation:landscape)'), 'article template adapts to portrait and landscape viewports');
 
 const raw = '<!doctype html><html><head><base href="https://evil.example/"><link rel="stylesheet" href="/site.css"></head><body><main><article><h1>Readable story</h1><p>Text</p></article></main></body></html>';
 const clean = bridge.sanitizeHtml(raw, 'https://news.example/story/1');
@@ -28,6 +32,10 @@ assert.ok(!clean.includes('https://evil.example/'), 'untrusted remote-supplied b
 assert.ok(clean.includes('href="/site.css"'), 'relative stylesheet remains and resolves against validated base');
 assert.ok(clean.includes('data-sh-page-type="article"'), 'article family marker applied to static bridge snapshot');
 assert.ok(clean.includes('[data-sh-page-type=article]'), 'article template CSS is present');
+assert.ok(clean.includes('[data-sh-page-type=article] .article-body'), 'article template targets common non-semantic content containers too');
+const genericTaggedArticle = bridge.sanitizeHtml('<html><head></head><body data-sh-page-type="generic"><article>' + '<p>' + 'Readable text '.repeat(60) + '</p><p>' + 'More readable text '.repeat(30) + '</p></article></body></html>', 'https://news.example/read');
+assert.ok(genericTaggedArticle.includes('data-sh-page-type="article"'), 'generic snapshot markers do not suppress an article template detected from the page content');
+assert.ok(genericTaggedArticle.includes('@media(orientation:portrait)') && genericTaggedArticle.includes('@media(orientation:landscape)'), 'static Bridge articles adapt in portrait and landscape');
 const server = fs.readFileSync(path.join(__dirname, 'server-app.js'), 'utf8');
 assert.ok(server.includes("base-uri http: https:"), 'Bridge CSP permits the validated remote base URL for relative assets');
 console.log('Adaptive bridge templates, routing hints, relative assets and CSP regression: PASS');

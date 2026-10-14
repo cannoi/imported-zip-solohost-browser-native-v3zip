@@ -11,8 +11,8 @@ assert.ok(pw.includes("'chromium', 'firefox', 'webkit'"), 'three Playwright engi
 assert.ok(pw.includes('recoverSession') && pw.includes('playwright.session_recovered'), 'closed sessions are recoverable');
 assert.ok(pw.includes('SOLOHOST_BROWSER_MOBILE') && pw.includes('options.isMobile = true'), 'mobile context is configurable and enabled by default');
 assert.ok(bridge.includes('bridge.google_search_fallback') && bridge.includes('DuckDuckGo'), 'Google verification has transparent alternate search');
-assert.ok(bridge.includes('viewport-fit=cover') && bridge.includes('@media(max-width:600px)'), 'Bridge output has mobile viewport and responsive CSS');
+assert.ok(bridge.includes('viewport-fit=cover') && bridge.includes('@media(orientation:portrait)'), 'Bridge output has a mobile viewport and portrait-specific responsive CSS');
 assert.ok(proxy.includes('Preserve m.youtube.com'), 'proxy preserves YouTube mobile host');
-assert.strictEqual(caps.version, '10.25.0');
+assert.strictEqual(caps.version, require('./package.json').version);
 assert.strictEqual(caps.features.sessionRecovery, true);
 console.log('✓ mobile-first bridge / engine fallback / Google verification regression tests');

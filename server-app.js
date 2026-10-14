@@ -88,7 +88,7 @@ let aiCompat = softRequire('ai-compat', './lib/ai-compat', {
 try { installShutdownHooks(); } catch (_) {}
 try { appLog.configure(DATA_DIR); } catch (_) {}
 const PKG = (() => {
-  try { return require('./package.json'); } catch { return { version: '10.25.0' }; }
+  try { return require('./package.json'); } catch { return { version: '10.25.14' }; }
 })();
 
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* ignore */ }
@@ -266,7 +266,7 @@ function healthPayload() {
     status: 'ok',
     ok: true,
     service: 'solohost-browser',
-    version: PKG.version || '10.25.0',
+    version: PKG.version || '10.25.14',
     mode: 'hybrid-proxy',
     engine: engineCaps.detect(),
     port: PORT,
@@ -389,14 +389,14 @@ app.get('/api/novnc/status', async (req, res) => {
   let novnc = { status: () => ({ featureEnabled: false, packagesPresent: false, ready: false }) };
   try { novnc = require('./lib/novnc-launcher'); } catch (_) {}
   const st = novnc.status();
-  if (!st.featureEnabled) return res.json({ ok: true, enabled: false, reason: 'disabled', primary: 'bridge' });
+  if (!st.featureEnabled) return res.json({ ok: true, enabled: false, reason: st.reason || 'disabled', primary: 'bridge' });
   if (!st.packagesPresent) return res.json({ ok: true, enabled: false, reason: 'packages_missing', primary: 'bridge', hint: 'Rebuild with --build-arg WITH_NOVNC=1 for login desktop' });
   res.json({
     ok: true,
     enabled: true,
     ready: !!st.ready,
     url: '/novnc/vnc.html?autoconnect=1&resize=scale&quality=6&compression=2&path=websockify',
-    passwordRequired: false,
+    passwordRequired: true,
     primary: 'bridge',
     role: 'login_secondary',
     browserMode: st.ready ? 'shared-headed-chromium' : 'start_required'
@@ -647,7 +647,7 @@ try {
   const fbOpts = {
     appId: process.env.SHFH_APP_ID || 'solohost-browser',
     appName: 'SoloHost Browser',
-    version: PKG.version || '10.25.0'
+    version: PKG.version || '10.25.14'
   };
   if (process.env.SHFH_HUB_ID) fbOpts.hubId = process.env.SHFH_HUB_ID;
   if (process.env.SHFH_HUB_URL) fbOpts.baseUrl = process.env.SHFH_HUB_URL;
