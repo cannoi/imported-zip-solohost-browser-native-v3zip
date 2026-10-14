@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.25.21",
+  "version": "10.25.22",
   "description": "SoloHost Browser \u2014 unified readable display (Bridge + Proxy)",
   "main": "server.js",
   "engines": {
