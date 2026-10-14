@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.25.10",
+  "version": "10.25.14",
   "description": "SoloHost Browser \u2014 adaptive Chromium DOM Bridge with client-native audio playback",
   "main": "server.js",
   "engines": {
