@@ -1,4 +1,4 @@
-# SoloHost Browser v10.25.16 — Chromium Bridge + optional Static Capture
+# SoloHost Browser v10.25.17 — Chromium Bridge + optional Static Capture
 FROM mcr.microsoft.com/playwright:v1.51.1-jammy
 
 WORKDIR /app
