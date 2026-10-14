@@ -1,8 +1,8 @@
-# SoloHost Browser v10.25.16
+# SoloHost Browser v10.25.20
 
 Version 10.16.0 routes YouTube watch/Shorts/live clicks through the official player shell and improves policy-compliant diagnostics. Version 10.15.0 adds a configurable default search engine (Bing, Google, DuckDuckGo, Brave Search, or a custom HTTP(S) URL template), native browser viewing for direct media/images/PDF links, and a wider but explicit CSP allowlist for official media embeds (YouTube, TikTok, Vimeo, Spotify, Twitch, Dailymotion). The AI Panel knowledge is generated at runtime from the installed package version and engine capabilities, and documents current architecture, search settings, media support and limitations.
 
-Existing UI, Bridge, tabs, context menu, AI/Feedback/Settings/Logs, security checks and adaptive rendering are retained. See `docs/V10.15.0_MEDIA_SEARCH_AI_REPORT.md`. Browser is available from the browser settings menu or `/static-capture.html`; it crawls rendered Chromium pages into a sanitized responsive reading site and ZIP. See `docs/V10.25.16_STATIC_CAPTURE_REPORT.md` for security boundaries and limits.
+Existing UI, Bridge, tabs, context menu, AI/Feedback/Settings/Logs, security checks and adaptive rendering are retained. See `docs/V10.15.0_MEDIA_SEARCH_AI_REPORT.md`. The Chromium DOM Bridge is the only in-app website rendering/capture path. It uses the persistent browser profile and shared content pipeline; there is no separate Static Capture feature.
 
 
 ## v10.19.0 — AI Tasks, Music Library and Site Verification
@@ -42,3 +42,12 @@ See `docs/V10.21.0_ADAPTIVE_BRIDGE_TEMPLATES_REPORT.md` for the bridge fidelity 
 - Persist browser state on page load and on a low-frequency interval, in addition to existing navigation/interaction/close saves.
 - Use a stable default profile identity when a profile ID is absent; do not key persistent sessions by the client IP.
 - See `docs/V10.22.0_SESSION_PERSISTENCE_REPORT.md` for scope, limitations and validation.
+
+
+## v10.25.20 — Bridge tab synchronization and Static Capture removal
+
+- Removed the unused Static Capture capability flags, auxiliary capture-page API, stale feature documentation, and its now-unused Readability/JSDOM dependencies. The shared content pipeline remains for Bridge live-page classification and DOM snapshots. Also corrected the Docker dependency smoke-check so it no longer requires the absent `archiver` package.
+- Fixed popup routing: popup handling is attached to the opener page, not the shared BrowserContext. This prevents one popup from navigating every SoloHost tab that shares the same Chromium profile.
+- Fixed session recovery to select an unowned page rather than blindly taking `context.pages()[0]`, preserving one Chromium page per SoloHost tab.
+- Added a hard per-profile page cap and explicit diagnostic instead of silently opening unbounded pages.
+- Hardened UI navigation against responses from a tab that is no longer active, preventing late requests from replacing another tab's content.

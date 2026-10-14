@@ -8,14 +8,15 @@ const bridge = fs.readFileSync(path.join(root, 'lib/engine/dom-bridge.js'), 'utf
 const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
 const pkg = require('./package.json');
 const caps = require('./lib/engine/capabilities').detect();
-assert.strictEqual(pkg.version, '10.25.16');
-assert.strictEqual(caps.version, '10.25.16');
+assert.strictEqual(pkg.version, '10.25.20');
+assert.strictEqual(caps.version, '10.25.20');
 assert.ok(engine.includes('SOLOHOST_BROWSER_PERSIST_SESSIONS'), 'persistent session storage can be disabled explicitly');
 assert.ok(engine.includes('storageState({ indexedDB: true })') && engine.includes('context.storageState()') && engine.includes('0o600') && engine.includes('0o700'), 'cookies/localStorage/IndexedDB session state is persisted with restricted file permissions');
 assert.ok(engine.includes('state.persistTimer = setInterval') && engine.includes('page.on(\'load\''), 'session state is saved periodically and after page loads');
 assert.strictEqual(require('./package.json').dependencies.playwright, '1.51.1', 'Playwright version supports IndexedDB storage snapshots');
 assert.ok(fs.readFileSync(path.join(root, 'Dockerfile'), 'utf8').includes('mcr.microsoft.com/playwright:v1.51.1-jammy'), 'Docker browser image matches Playwright package version');
-assert.ok(engine.includes('playwright.popup_attached'), 'new popup pages are attached to the active session');
+assert.ok(engine.includes("openerPage.on('popup'"), 'popup handling is attached only to its opener tab');
+assert.ok(!engine.includes("state.context.on('page'"), 'shared-context page events cannot navigate unrelated tabs');
 assert.ok(engine.includes('solohost-adaptive-layout'), 'adaptive mode adds only conservative responsive and reduced-motion styles');
 assert.ok(engine.includes("preserve the site's classes"), 'adaptive mode preserves original site styling and layout');
 assert.ok(engine.includes('SOLOHOST_BROWSER_CONTENT_MODE'), 'adaptive/focused display modes are configurable');

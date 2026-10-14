@@ -321,7 +321,7 @@
         return { ok: false, reason: 'bridge_session_stale', detail: j };
       }
       if (!j || !j.ok) return { ok: false, reason: (j && j.error) || 'bridge_navigate_failed', detail: j };
-      if (j.externalRequired && j.externalReason !== 'bing_verification_required') return loadViaExternal(googleExternalTarget(j.url || url), j.externalReason || 'site_auth_policy');
+      if (j.externalRequired && j.externalReason !== 'bing_verification_required') return loadViaExternal(googleExternalTarget(j.url || url), j.externalReason || 'site_auth_policy', tab);
       const activeNav = ensureTabNav(tab);
       if (activeNav) activeNav.bridgeAudit = j.audit || {};
       // Prefer showing whatever the Bridge has; only fail hard when empty AND explicit error
@@ -330,11 +330,18 @@
         return { ok: false, reason: 'bridge_empty', detail: j };
       }
       const view = bridgeViewUrl(b);
-      if (!frame || !view) return { ok: false, reason: 'no_viewport' };
+      if (!view) return { ok: false, reason: 'no_viewport' };
+      // A request may finish after the user switched tabs. Keep its Chromium
+      // session alive, but never let its late response replace the active tab UI.
+      if (!frame || state.activeTabId !== tab.id) {
+        if (tab) { tab.url = j.url || url; if (j.title) tab.title = j.title; }
+        return { ok: true, mode: (j.backend === 'webkit' || j.backend === 'playwright') ? MODE.ENGINE : MODE.PROXY,
+          backend: j.backend || b.backend, url: j.url || url, title: j.title || '', hasContent: !!j.hasContent, backgroundTab: true };
+      }
       try {
         frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts');
-        // Always reload the Bridge viewport after navigate — same session URL path would
-        // otherwise keep showing the previous page (data-sh-view equal → no load).
+        frame.setAttribute('data-sh-tab-id', String(tab.id || ''));
+        // Reload only the viewport document, not the Chromium page/session.
         const bust = view + (view.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
         frame.src = bust;
         frame.setAttribute('data-sh-view', view);
@@ -358,10 +365,12 @@
     }
   }
 
-  function loadViaProxy(url) {
+  function loadViaProxy(url, tabId) {
     if (!frame) return { ok: false, reason: 'no_frame' };
     const frameSrc = proxyFrameUrl(url);
     try {
+      if (tabId && state.activeTabId !== tabId) return { ok: true, mode: MODE.PROXY, url, backgroundTab: true };
+      frame.setAttribute('data-sh-tab-id', String(tabId || state.activeTabId || ''));
       frame.removeAttribute('sandbox');
       frame.removeAttribute('srcdoc');
       frame.src = frameSrc;
@@ -371,9 +380,11 @@
     }
   }
 
-  function loadViaDirect(url) {
+  function loadViaDirect(url, tabId) {
     if (!frame) return { ok: false, reason: 'no_frame' };
     try {
+      if (tabId && state.activeTabId !== tabId) return { ok: true, mode: MODE.DIRECT, url, backgroundTab: true };
+      frame.setAttribute('data-sh-tab-id', String(tabId || state.activeTabId || ''));
       frame.removeAttribute('sandbox');
       frame.src = url;
       return { ok: true, mode: MODE.DIRECT, url };
@@ -387,12 +398,12 @@
     return url;
   }
 
-  function loadViaExternal(url, reason) {
-    const tab = getActiveTab(); const nav = ensureTabNav(tab);
+  function loadViaExternal(url, reason, ownerTab) {
+    const tab = ownerTab || getActiveTab(); const nav = ensureTabNav(tab);
     if (nav) nav.bridge = null;
-    // Stop stale embedded pages from continuing to emit events after an auth/policy handoff.
-    if (frame) { try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {} }
-    if (btnOpen) btnOpen.href = url;
+    // Do not clear another tab's viewport when a background navigation completes.
+    if (tab && state.activeTabId === tab.id && frame) { try { frame.removeAttribute('srcdoc'); frame.setAttribute('data-sh-tab-id', String(tab.id)); frame.src = 'about:blank'; } catch (_) {} }
+    if (tab && state.activeTabId === tab.id && btnOpen) btnOpen.href = url;
     showProxyHint(
       (state.lang === 'vi'
         ? 'Trang này cần mở ngoài. Lý do: '
@@ -461,6 +472,7 @@
 
   async function bridgeEvent(ev) {
     const tab = getActiveTab();
+    const tabId = tab && tab.id;
     const nav = ensureTabNav(tab);
     const b = nav && nav.bridge;
     if (!b) return null;
@@ -470,18 +482,20 @@
       });
       const j = await r.json();
       if (j && j.ok && j.externalRequired) {
-        if (j.url) applyUrlToUi(j.url, j.title);
-        loadViaExternal(j.url || (tab && tab.url) || state.url, j.externalReason || 'site_auth_policy');
+        if (j.url && state.activeTabId === tabId) applyUrlToUi(j.url, j.title);
+        else if (tab && j.url) tab.url = j.url;
+        loadViaExternal(j.url || (tab && tab.url) || state.url, j.externalReason || 'site_auth_policy', tab);
         return j;
       }
-      if (j && j.ok && frame) {
+      if (j && j.ok && frame && state.activeTabId === tabId && frame.getAttribute('data-sh-tab-id') === String(tabId || '')) {
         // Typing must not reload the snapshot: doing so loses focus and breaks login forms.
         // The real page receives every input event in WebKit; refresh only after actions that may navigate/update UI.
         if (ev.type !== 'input' && ev.type !== 'change') {
           const view = bridgeViewUrl(b);
-          if (view) frame.src = view + '&t=' + Date.now();
+          if (view) { frame.setAttribute('data-sh-tab-id', String(tabId || '')); frame.src = view + '&t=' + Date.now(); }
         }
-        if (j.url) applyUrlToUi(j.url, j.title);
+        if (j.url && state.activeTabId === tabId) applyUrlToUi(j.url, j.title);
+        else if (tab && j.url) tab.url = j.url;
       }
       return j;
     } catch (_) { return null; }
@@ -669,17 +683,23 @@
           }
         }
         doc.addEventListener('click', (e) => {
+          if (frame && frame.getAttribute('data-sh-tab-id') !== String(state.activeTabId || '')) return;
           // Universal link handler: keep navigation inside SoloHost only (never host Opera/Chrome tab).
           const aEl = e.target && e.target.closest && e.target.closest('a[href]');
           if (aEl) {
             const hrefRaw = aEl.getAttribute('href') || '';
-            if (hrefRaw && hrefRaw.charAt(0) !== '#' && !/^(javascript|mailto|tel):/i.test(hrefRaw)) {
+            if (hrefRaw && hrefRaw.charAt(0) !== '#' && !/^(javascript|data|blob):/i.test(hrefRaw)) {
               e.preventDefault();
               e.stopPropagation();
               try { e.stopImmediatePropagation(); } catch (_) {}
               try {
-                let abs = resolveSoloHref(hrefRaw, state.url);
-                if (!abs) return;
+                if (/^(mailto|tel):/i.test(hrefRaw)) {
+                  window.parent.postMessage({ type: 'solohost-open-external', url: hrefRaw }, '*');
+                  return;
+                }
+                const eventTab = state.tabs.find(t => t.id === frame.getAttribute('data-sh-tab-id'));
+                let abs = resolveSoloHref(hrefRaw, (eventTab && eventTab.url) || state.url);
+                if (!abs || !/^https?:/i.test(abs)) return;
                 if (isYouTubeVideoUrl(abs)) {
                   clientLog('info', 'youtube.video_handoff', { url: abs });
                   navigate(abs, { force: true, mode: MODE.PROXY });
@@ -690,7 +710,7 @@
                   return;
                 }
                 // Ctrl/Meta → new SoloHost tab (not host browser)
-                if (e.ctrlKey || e.metaKey) newTab(abs);
+                if (e.ctrlKey || e.metaKey || String(aEl.getAttribute('target') || '').toLowerCase() === '_blank') newTab(abs);
                 else navigate(abs, { force: true });
               } catch (err) {
                 clientLog('warn', 'link.navigate_fail', { detail: String(err && err.message || err) });
@@ -711,6 +731,7 @@
         }, true);
         const inputTimers = new WeakMap();
         doc.addEventListener('input', (e) => {
+          if (frame && frame.getAttribute('data-sh-tab-id') !== String(state.activeTabId || '')) return;
           const el = e.target && e.target.closest && e.target.closest('[data-sh-id]');
           if (!el) return;
           const id = el.getAttribute('data-sh-id');
@@ -720,11 +741,13 @@
           }, 90));
         }, true);
         doc.addEventListener('change', (e) => {
+          if (frame && frame.getAttribute('data-sh-tab-id') !== String(state.activeTabId || '')) return;
           const el = e.target && e.target.closest && e.target.closest('[data-sh-id]');
           if (!el) return;
           bridgeEvent({ type: 'change', targetId: el.getAttribute('data-sh-id'), value: (el.isContentEditable || el.getAttribute('role') === 'textbox') ? el.innerText : el.value, checked: !!el.checked, selectedIndex: el.selectedIndex });
         }, true);
         doc.addEventListener('keydown', (e) => {
+          if (frame && frame.getAttribute('data-sh-tab-id') !== String(state.activeTabId || '')) return;
           if (e.key !== 'Enter') return;
           const el = e.target;
           if (!el || !/^(INPUT|TEXTAREA)$/.test(el.tagName)) return;
@@ -735,6 +758,7 @@
           if (id) bridgeEvent({ type: 'submit', targetId: id });
         }, true);
         doc.addEventListener('submit', (e) => {
+          if (frame && frame.getAttribute('data-sh-tab-id') !== String(state.activeTabId || '')) return;
           const form = e.target;
           if (!form || !form.getAttribute) return;
           const id = form.getAttribute('data-sh-id');
@@ -1106,7 +1130,7 @@
     }
     const tab = { id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), title: options.private ? (state.lang === 'vi' ? 'Tab riêng tư' : 'Private tab') : (state.lang === 'vi' ? 'Tab mới' : 'New tab'), url: '', private: !!options.private, nav: null };
     state.tabs.push(tab); state.activeTabId = tab.id; renderTabs();
-    if (url) navigate(url); else { state.url = ''; if (input) input.value = ''; if (btnOpen) btnOpen.href = '#'; if (frame) frame.src = 'about:blank'; showStart(); }
+    if (url) navigate(url); else { state.url = ''; if (input) input.value = ''; if (btnOpen) btnOpen.href = '#'; if (frame) { frame.setAttribute('data-sh-tab-id', String(tab.id || '')); frame.src = 'about:blank'; } showStart(); }
     return tab;
   }
   function switchTab(id) {
@@ -1119,6 +1143,7 @@
     if (state.url && view) {
       if (frame) {
         frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts');
+        frame.setAttribute('data-sh-tab-id', String(tab.id || ''));
         if (frame.getAttribute('data-sh-view') !== view) {
           frame.src = view;
           frame.setAttribute('data-sh-view', view);
@@ -1129,7 +1154,7 @@
       // Session missing: one deliberate load, not a continuous loop
       navigate(state.url, { force: true, skipHistory: true });
     } else {
-      if (frame) { frame.src = 'about:blank'; frame.removeAttribute('data-sh-view'); }
+      if (frame) { frame.setAttribute('data-sh-tab-id', String(tab.id || '')); frame.src = 'about:blank'; frame.removeAttribute('data-sh-view'); }
       showStart();
     }
   }
@@ -1210,6 +1235,7 @@
     state.lastNavAt = now;
 
     const tab = getActiveTab();
+    const navigationTabId = tab && tab.id;
     const nav = ensureTabNav(tab);
     const preferred = opts.mode || classifyUrl(url);
     hideProxyHint();
@@ -1234,10 +1260,10 @@
 
     if (preferred === MODE.EXTERNAL) {
       const externalTarget = googleExternalTarget(url);
-      result = loadViaExternal(externalTarget, /accounts\.google\.com/i.test(url) ? 'google_auth_policy_external_session' : 'site_policy_external');
+      result = loadViaExternal(externalTarget, /accounts\.google\.com/i.test(url) ? 'google_auth_policy_external_session' : 'site_policy_external', tab);
     } else if (preferred === MODE.DIRECT) {
-      result = loadViaDirect(url);
-      if (!result.ok) result = loadViaProxy(url);
+      result = loadViaDirect(url, navigationTabId);
+      if (!result.ok) result = loadViaProxy(url, navigationTabId);
     } else if (preferred === MODE.ENGINE) {
       // Fast fail: if WebKit known down, skip bridge entirely
       result = await tryEngine();
@@ -1246,9 +1272,9 @@
         clientLog('warn', 'navigate_engine_fallback', { url, reason });
         // Keep bridge session so Chromium tab stays aligned; proxy is display-only fallback.
         if (isLoginPath(url)) {
-          result = loadViaExternal(url, 'login_requires_full_browser_context:' + reason);
+          result = loadViaExternal(url, 'login_requires_full_browser_context:' + reason, tab);
         } else {
-          result = loadViaProxy(url);
+          result = loadViaProxy(url, navigationTabId);
           if (result.ok) {
             result.mode = MODE.PROXY;
             result.reason = 'fallback_from_engine:' + reason;
@@ -1256,21 +1282,25 @@
         }
       }
     } else if (preferred === MODE.PROXY) {
-      result = loadViaProxy(url);
+      result = loadViaProxy(url, navigationTabId);
     } else {
-      result = loadViaProxy(url);
+      result = loadViaProxy(url, navigationTabId);
     }
 
     if (!result.ok && preferred !== MODE.EXTERNAL) {
-      result = loadViaExternal(url, result.reason || 'all_modes_failed');
+      result = loadViaExternal(url, result.reason || 'all_modes_failed', tab);
     }
 
     if (nav) {
       nav.mode = result.mode || preferred;
       nav.reason = result.reason || '';
     }
-    if (result.url && result.url !== url) applyUrlToUi(result.url, result.title);
-    else if (result.title) applyUrlToUi(url, result.title);
+    if (result.url) { tab.url = result.url; if (result.title) tab.title = result.title; }
+    if (state.activeTabId === navigationTabId) {
+      if (result.url && result.url !== url) applyUrlToUi(result.url, result.title);
+      else if (result.title) applyUrlToUi(url, result.title);
+    }
+    renderTabs();
 
     syncNavButtons();
     clientLog('info', 'navigate_result', {
@@ -1290,7 +1320,11 @@
   window.addEventListener('message', (ev) => {
     try {
       const d = ev && ev.data;
-      if (!d || !d.url) return;
+      if (!d || !d.url || !frame || ev.source !== frame.contentWindow) return;
+      if (d.type === 'solohost-open-external') {
+        if (/^(mailto|tel):/i.test(String(d.url))) window.location.href = String(d.url);
+        return;
+      }
       if (d.type !== 'solohost-navigate' && d.type !== 'solohost-nav') return;
       const abs = typeof resolveSoloHref === 'function' ? resolveSoloHref(d.url, state.url) : d.url;
       if (!abs || !/^https?:/i.test(abs)) return;
@@ -2256,6 +2290,7 @@
       if (!view) return false;
       try {
         frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts');
+        frame.setAttribute('data-sh-tab-id', String(tab.id || ''));
         if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); }
         return true;
       } catch (_) { return false; }

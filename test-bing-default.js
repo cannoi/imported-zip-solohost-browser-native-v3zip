@@ -16,8 +16,8 @@ const templates = fs.readFileSync(path.join(root, 'lib/engine/layout-templates.j
 const pkg = require('./package.json');
 const caps = require('./lib/engine/capabilities').detect();
 const proxyApi = require('./lib/frame-proxy');
-assert.strictEqual(pkg.version, '10.25.16');
-assert.strictEqual(caps.version, '10.25.16');
+assert.strictEqual(pkg.version, '10.25.20');
+assert.strictEqual(caps.version, '10.25.20');
 assert.ok(app.includes("return 'https://www.bing.com/search?q=' + encoded") && app.includes("searchEngine: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_engine')) || 'bing'"), 'Bing remains the default while user-selected engines are supported');
 assert.ok(html.includes('placeholder="Search Bing or enter address"'), 'omnibox must communicate Bing default');
 assert.ok(serverApp.includes("req.query.engine || 'bing'") && serverApp.includes("engine === 'bing'"), 'server quick search defaults to Bing');
