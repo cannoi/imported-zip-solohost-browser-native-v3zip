@@ -124,7 +124,7 @@ function browserContext() {
     lang: st.lang || (document.documentElement.lang || 'en'),
     theme: st.theme || document.documentElement.getAttribute('data-theme') || 'rainbow',
     app: 'SoloHost Browser',
-    version: '10.25.24'
+    version: '10.25.25'
   };
 }
 const aiChat = document.getElementById('chatLog') || document.getElementById('aiChat');

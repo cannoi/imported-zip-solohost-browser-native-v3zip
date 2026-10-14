@@ -1,0 +1,18 @@
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const root = __dirname;
+const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+const pkg = require('./package.json');
+const engine = read('lib/engine/playwright-engine.js');
+const bridge = read('lib/engine/dom-bridge.js');
+assert.strictEqual(pkg.version, '10.25.25');
+assert(engine.includes('Hash fragments are meaningful routes in many SPAs'), 'hash routes must not be stripped from navigation comparison');
+assert(!/x\.hash\s*=\s*''/.test(engine), 'engine navigation comparison must preserve hashes');
+assert(bridge.includes('playwright_navigation_failed:'), 'Playwright navigation errors that leave the old page must enter fallback');
+assert(bridge.includes('const landedIsHttp = /^https?:\\/\\//i.test(landedUrl)'), 'browser internal error URLs must not be treated as a successful page load');
+assert(bridge.includes('playwright_stale_page_after_navigation'), 'stale snapshot race is detected');
+assert(bridge.includes("session.backend === 'proxy' && session.pwSessionId && process.env.SOLOHOST_PLAYWRIGHT !== '0'"), 'live Chromium session is retried after one-off proxy fallback');
+assert(bridge.includes('const previousUrl = session.url ||'), 'previous page URL is retained to detect stale responses');
+console.log('v10.25.25 navigation recovery / hash route regression: PASS');
