@@ -4,7 +4,7 @@ const fs = require('fs');
 const engineSource = fs.readFileSync(require.resolve('./lib/engine/playwright-engine'), 'utf8');
 const bridge = require('./lib/engine/dom-bridge');
 const pkg = require('./package.json');
-assert.strictEqual(pkg.version, '10.25.20');
+assert.strictEqual(pkg.version, '10.20.0');
 assert.ok(engineSource.includes("process.env.SOLOHOST_BROWSER_CONTENT_MODE || 'adaptive'"), 'adaptive mode is the default');
 assert.ok(engineSource.includes("clone.querySelectorAll('[style]')") && engineSource.includes("clone.querySelectorAll('[class]')"), 'classes/inline styles are only stripped inside explicit focused mode');
 assert.ok(engineSource.includes("clone.querySelectorAll('video, audio')") && engineSource.includes("mode === 'focused'"), 'video/audio placeholders are opt-in only');

@@ -88,7 +88,7 @@ let aiCompat = softRequire('ai-compat', './lib/ai-compat', {
 try { installShutdownHooks(); } catch (_) {}
 try { appLog.configure(DATA_DIR); } catch (_) {}
 const PKG = (() => {
-  try { return require('./package.json'); } catch { return { version: '10.25.20' }; }
+  try { return require('./package.json'); } catch { return { version: '10.20.0' }; }
 })();
 
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* ignore */ }
@@ -106,31 +106,6 @@ app.use((req, res, next) => {
 // Access password: always required for remote/public IP clients.
 // Local/loopback/private LAN can skip when BROWSER_ACCESS_PASSWORD is empty (SoloHost on-device).
 // Health checks stay public so SoloHost can monitor container readiness.
-function accessPassword() {
-  // SoloHost injects BROWSER_ACCESS_PASSWORD from config_options → .env → compose.
-  let v = String(process.env.BROWSER_ACCESS_PASSWORD || process.env.ACCESS_PASSWORD || '').trim();
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-    v = v.slice(1, -1).trim();
-  }
-  // Fallback: read /app/data/.access_password if env empty (manual/debug)
-  if (!v) {
-    try {
-      const p = path.join(DATA_DIR, '.access_password');
-      if (fs.existsSync(p)) v = String(fs.readFileSync(p, 'utf8') || '').trim();
-    } catch (_) {}
-  }
-  return v;
-}
-function passwordsMatch(supplied, expected) {
-  const a = Buffer.from(String(supplied || ''), 'utf8');
-  const b = Buffer.from(String(expected || ''), 'utf8');
-  if (a.length !== b.length || a.length === 0) return false;
-  try {
-    return require('crypto').timingSafeEqual(a, b);
-  } catch (_) {
-    return false;
-  }
-}
 function clientIp(req) {
   const xf = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
   const ip = xf || req.ip || (req.socket && req.socket.remoteAddress) || '';
@@ -172,13 +147,17 @@ app.use((req, res, next) => {
     req.path === '/reader-injector.js'
   )) return next();
 
-  const configured = accessPassword();
-  // Match the settings UI and SoloHost configuration: an empty password disables
-  // the gate completely instead of rejecting every protected API request.
-  if (!configured) return next();
+  const configured = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
   const ip = clientIp(req);
   const local = isLocalOrPrivateIp(ip);
-  // Password always required (local + remote) so splash → gate always shows
+  // Remote public access must always authenticate
+  if (!configured) {
+    if (local) return next();
+    res.setHeader('WWW-Authenticate', 'Basic realm="SoloHost Browser", charset="UTF-8"');
+    return res.status(401).type('text/plain').send(
+      'Remote access requires BROWSER_ACCESS_PASSWORD. Set it in SoloHost app settings, then restart.'
+    );
+  }
   const auth = String(req.headers.authorization || '');
   const m = auth.match(/^Basic\s+(.+)$/i);
   let supplied = '';
@@ -192,8 +171,11 @@ app.use((req, res, next) => {
   } catch (_) {}
   // Also accept cookie session after first success
   const cookie = String(req.headers.cookie || '');
-  const cookieOk = /(?:^|;\s*)solo_access=1(?:;|$)/.test(cookie);
-  const basicOk = !!(m && passwordsMatch(supplied, configured));
+  const cookieOk = cookie.includes('solo_access=1');
+  const crypto = require('crypto');
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(configured);
+  const basicOk = m && a.length === b.length && crypto.timingSafeEqual(a, b);
   if (basicOk || cookieOk) {
     if (basicOk && !cookieOk) {
       res.setHeader('Set-Cookie', 'solo_access=1; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400');
@@ -205,13 +187,10 @@ app.use((req, res, next) => {
 });
 
 
-app.use(express.json({ limit: '64kb' }));
-app.use(express.urlencoded({ extended: false, limit: '64kb' }));
-
 app.get('/api/access/status', (req, res) => {
-  const configured = accessPassword();
+  const configured = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
   const cookie = String(req.headers.cookie || '');
-  const authenticated = /(?:^|;\s*)solo_access=1(?:;|$)/.test(cookie);
+  const authenticated = cookie.includes('solo_access=1');
   const showGate = !!configured && !authenticated;
   res.json({
     ok: true,
@@ -224,22 +203,19 @@ app.get('/api/access/status', (req, res) => {
 });
 
 app.post('/api/access/login', (req, res) => {
-  const configured = accessPassword();
+  const configured = String(process.env.BROWSER_ACCESS_PASSWORD || '').trim();
   if (!configured) {
     res.setHeader('Set-Cookie', 'solo_access=1; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400');
     return res.json({ ok: true, authenticated: true, note: 'no_password_configured' });
   }
-  const body = req.body || {};
-  let supplied = String(body.password || body.pass || body.BROWSER_ACCESS_PASSWORD || '').trim();
-  if (!supplied && req.headers['x-access-password']) {
-    supplied = String(req.headers['x-access-password']).trim();
-  }
-  if (passwordsMatch(supplied, configured)) {
+  const supplied = String((req.body && req.body.password) || '');
+  const crypto = require('crypto');
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(configured);
+  if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
     res.setHeader('Set-Cookie', 'solo_access=1; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400');
-    try { require('./app-log').log('info', 'access.login_ok'); } catch (_) {}
     return res.json({ ok: true, authenticated: true });
   }
-  try { require('./app-log').log('warn', 'access.login_fail', { hasBody: !!req.body, len: supplied.length }); } catch (_) {}
   res.status(401).json({ ok: false, error: 'invalid_password' });
 });
 
@@ -266,7 +242,7 @@ function healthPayload() {
     status: 'ok',
     ok: true,
     service: 'solohost-browser',
-    version: PKG.version || '10.25.20',
+    version: PKG.version || '10.20.0',
     mode: 'hybrid-proxy',
     engine: engineCaps.detect(),
     port: PORT,
@@ -384,94 +360,6 @@ app.delete('/api/engine/session/:id', requireEngineEnabled, async (req, res) => 
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
 });
-
-app.get('/api/novnc/status', async (req, res) => {
-  let novnc = { status: () => ({ featureEnabled: false, packagesPresent: false, ready: false }) };
-  try { novnc = require('./lib/novnc-launcher'); } catch (_) {}
-  const st = novnc.status();
-  if (!st.featureEnabled) return res.json({ ok: true, enabled: false, reason: 'disabled', primary: 'bridge' });
-  if (!st.packagesPresent) return res.json({ ok: true, enabled: false, reason: 'packages_missing', primary: 'bridge', hint: 'Rebuild with --build-arg WITH_NOVNC=1 for login desktop' });
-  res.json({
-    ok: true,
-    enabled: true,
-    ready: !!st.ready,
-    url: '/novnc/vnc.html?autoconnect=1&resize=scale&quality=6&compression=2&path=websockify',
-    passwordRequired: false,
-    primary: 'bridge',
-    role: 'login_secondary',
-    browserMode: st.ready ? 'shared-headed-chromium' : 'start_required'
-  });
-});
-
-app.post('/api/novnc/start', async (req, res) => {
-  let novnc;
-  try { novnc = require('./lib/novnc-launcher'); } catch (e) {
-    return res.status(500).json({ ok: false, error: 'launcher_missing' });
-  }
-  try {
-    const out = await novnc.ensureStarted();
-    res.json({
-      ok: !!out.ok,
-      ready: !!out.ready,
-      error: out.error || null,
-      url: out.ok ? '/novnc/vnc.html?autoconnect=1&resize=scale&quality=6&compression=2&path=websockify' : null,
-      primary: 'bridge',
-      role: 'login_secondary'
-    });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e.message || e) });
-  }
-});
-
-// Reverse-proxy noVNC on main port when desktop is running
-(function mountNovncProxy() {
-  const http = require('http');
-  const NOVNC_UPSTREAM = Number(process.env.SOLOHOST_NOVNC_PORT || 6080);
-  function proxyHttp(req, res) {
-    let path = req.url || '/';
-    if (!path.startsWith('/')) path = '/' + path;
-    const headers = Object.assign({}, req.headers, { host: '127.0.0.1:' + NOVNC_UPSTREAM });
-    const preq = http.request(
-      { hostname: '127.0.0.1', port: NOVNC_UPSTREAM, path: path, method: req.method, headers: headers },
-      function (pres) {
-        res.writeHead(pres.statusCode || 502, pres.headers);
-        pres.pipe(res);
-      }
-    );
-    preq.on('error', function () {
-      if (!res.headersSent) {
-        res.status(503).type('html').send('<p>Starting login desktop… Retry in a few seconds, or use Bridge for normal browsing.</p>');
-      }
-    });
-    req.pipe(preq);
-  }
-  app.use('/novnc', function (req, res) { proxyHttp(req, res); });
-  if (server && typeof server.on === 'function') {
-    server.on('upgrade', function (req, socket, head) {
-      const u = String(req.url || '');
-      if (u.indexOf('websockify') < 0 && u.indexOf('/novnc') < 0) return;
-      const net = require('net');
-      const upstream = net.connect(NOVNC_UPSTREAM, '127.0.0.1', function () {
-        let path = u.replace(/^\/novnc/, '') || u;
-        if (path.indexOf('/') !== 0) path = '/' + path;
-        let hdr = req.method + ' ' + path + ' HTTP/' + req.httpVersion + '\r\n';
-        for (let i = 0; i < req.rawHeaders.length; i += 2) {
-          const k = req.rawHeaders[i];
-          const v = req.rawHeaders[i + 1];
-          if (/^host$/i.test(k)) hdr += 'Host: 127.0.0.1:' + NOVNC_UPSTREAM + '\r\n';
-          else hdr += k + ': ' + v + '\r\n';
-        }
-        hdr += '\r\n';
-        upstream.write(hdr);
-        if (head && head.length) upstream.write(head);
-        upstream.pipe(socket);
-        socket.pipe(upstream);
-      });
-      upstream.on('error', function () { try { socket.destroy(); } catch (_) {} });
-      socket.on('error', function () { try { upstream.destroy(); } catch (_) {} });
-    });
-  }
-})();
 
 app.get('/api/health', (_req, res) => res.status(200).json(healthPayload()));
 app.get('/health', (_req, res) => res.status(200).json(healthPayload()));
@@ -593,7 +481,7 @@ app.post('/api/browser/agent/tasks', async (req, res) => {
     const body = req.body || {};
     const session = domBridge.authSession(String(body.sessionId || ''), String(body.token || req.get('x-session-token') || ''));
     if (!session) return res.status(401).json({ ok: false, error: 'browser_session_unauthorized' });
-    const out = await backendAgent.start({ ai, session, task: body.task, lang: body.lang, history: body.history, maxSteps: body.maxSteps, maxMs: body.maxMs, workMemory: body.workMemory });
+    const out = await backendAgent.start({ ai, session, task: body.task, lang: body.lang, history: body.history, maxSteps: body.maxSteps });
     appLog.log('info', 'agent.task.started', { taskId: out.taskId, sessionId: session.id });
     res.status(202).json(out);
   } catch (e) {
@@ -647,7 +535,7 @@ try {
   const fbOpts = {
     appId: process.env.SHFH_APP_ID || 'solohost-browser',
     appName: 'SoloHost Browser',
-    version: PKG.version || '10.25.20'
+    version: PKG.version || '10.20.0'
   };
   if (process.env.SHFH_HUB_ID) fbOpts.hubId = process.env.SHFH_HUB_ID;
   if (process.env.SHFH_HUB_URL) fbOpts.baseUrl = process.env.SHFH_HUB_URL;
@@ -669,7 +557,7 @@ let browserStore = {
 };
 try { browserStore = require('./lib/store'); } catch (e) { console.error('[warn] store:', e.message); }
 
-
+// —— Interactive DOM Bridge (versioned browser sessions) ——
 app.post('/api/browser/sessions', async (req, res) => {
   try {
     const ip = req.ip || req.socket.remoteAddress || 'anon';
@@ -678,24 +566,12 @@ app.post('/api/browser/sessions', async (req, res) => {
     }
     const privateMode = !!(req.body && req.body.privateMode);
     const profileId = String((req.body && req.body.profileId) || '').toLowerCase();
-    const hasStableProfile = /^[a-f0-9]{32}$/.test(profileId);
-    // SoloHost is typically single-user: one durable Chromium profile keeps logins across restarts.
-    // Private tabs stay ephemeral. Optional profileId from client still namespaces the profile.
-    const stableClientKey = privateMode
-      ? ('ephemeral:' + require('crypto').randomBytes(16).toString('hex'))
-      : (hasStableProfile ? ('profile:' + profileId) : 'solohost-default-profile');
+    const stableClientKey = /^[a-f0-9]{32}$/.test(profileId) ? 'profile:' + profileId : 'ip:' + String(ip);
     const locale = String((req.body && req.body.locale) || '').slice(0, 40);
     let timezoneId = String((req.body && req.body.timezoneId) || '').slice(0, 80);
     try { new Intl.DateTimeFormat('en-US', { timeZone: timezoneId }); } catch (_) { timezoneId = ''; }
     const privateSuffix = privateMode ? ':private:' + require('crypto').randomBytes(12).toString('hex') : '';
-    const out = await domBridge.createSession({
-      tabKey: String((req.body && req.body.tabKey) || '').slice(0, 64),
-      clientKey: stableClientKey + (privateMode ? privateSuffix : ''),
-      privateMode,
-      persist: !privateMode,
-      locale,
-      timezoneId
-    });
+    const out = await domBridge.createSession({ clientKey: stableClientKey + privateSuffix, privateMode, locale, timezoneId });
     res.json({ ok: true, ...out });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
@@ -766,7 +642,7 @@ app.get('/api/browser/sessions/:id/view', (req, res) => {
   res.setHeader('X-SoloHost-Scroll-Y', String(Number(session.scrollY) || 0));
   // The bridge document itself cannot execute scripts. YouTube's nested player
   // needs its own scripts and frame origin, so allow only the official embed hosts.
-  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline' https: http:; font-src https: http: data:; media-src https: http:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://www.tiktok.com https://www.vimeo.com https://player.vimeo.com https://open.spotify.com https://player.twitch.tv https://www.twitch.tv https://www.dailymotion.com https://geo.dailymotion.com https://www.bing.com https://bing.com https://*.bing.com https://*.bing.net; script-src 'none'; base-uri http: https:; form-action https: http:");
+  res.setHeader('Content-Security-Policy', "default-src 'none'; img-src https: http: data:; style-src 'unsafe-inline' https: http:; font-src https: http: data:; media-src https: http:; frame-src https://www.youtube.com https://www.youtube-nocookie.com https://www.tiktok.com https://www.vimeo.com https://player.vimeo.com https://open.spotify.com https://player.twitch.tv https://www.twitch.tv https://www.dailymotion.com https://geo.dailymotion.com https://www.bing.com https://bing.com https://*.bing.com https://*.bing.net; script-src 'none'; base-uri 'self'; form-action https: http:");
   res.send(html);
 });
 
@@ -792,40 +668,6 @@ app.delete('/api/browser/sessions/:id', async (req, res) => {
   if (!session) return res.status(401).json({ ok: false, error: 'unauthorized' });
   await domBridge.destroySession(session.id);
   res.json({ ok: true, closed: true });
-});
-
-// Explicit session persistence (cookies/localStorage/IndexedDB) — no secrets in response
-app.post('/api/browser/sessions/:id/persist', async (req, res) => {
-  try {
-    const tok = req.get('x-session-token') || req.query.token || '';
-    const session = domBridge.authSession(req.params.id, tok);
-    if (!session) return res.status(401).json({ ok: false, error: 'unauthorized' });
-    if (!session.pwSessionId || !playwrightEngine.forcePersist) {
-      return res.status(400).json({ ok: false, error: 'no_playwright_session' });
-    }
-    const out = await playwrightEngine.forcePersist(session.pwSessionId);
-    res.json(out);
-  } catch (e) {
-    res.status(400).json({ ok: false, error: String(e.message || e).slice(0, 160) });
-  }
-});
-app.get('/api/browser/profiles', (req, res) => {
-  try {
-    const profiles = playwrightEngine.listPersistedProfiles ? playwrightEngine.listPersistedProfiles() : [];
-    res.json({ ok: true, profiles });
-  } catch (e) {
-    res.status(500).json({ ok: false, error: String(e.message || e).slice(0, 120) });
-  }
-});
-app.delete('/api/browser/profiles/:key', (req, res) => {
-  try {
-    const out = playwrightEngine.clearPersistedProfile
-      ? playwrightEngine.clearPersistedProfile(req.params.key)
-      : { ok: false, error: 'unavailable' };
-    res.json(out);
-  } catch (e) {
-    res.status(400).json({ ok: false, error: String(e.message || e).slice(0, 120) });
-  }
 });
 
 
@@ -1027,11 +869,74 @@ try {
   console.error('[error] static fallback:', e && e.message);
 }
 
-}; // mount
 
-try {
-  const pe = require('./lib/engine/playwright-engine');
-  if (pe && pe.status) pe.status().then((st) => {
-    try { require('./lib/app-log').log('info', 'bridge.engine_warm', { ready: !!(st && st.ready) }); } catch (_) {}
-  }).catch(() => {});
-} catch (_) {}
+  // noVNC — login secondary only (does not change Bridge presentation)
+  try {
+    app.get('/api/novnc/status', async (req, res) => {
+      let novnc = { status: () => ({ featureEnabled: false, packagesPresent: false, ready: false }) };
+      try { novnc = require('./lib/novnc-launcher'); } catch (_) {}
+      const stn = novnc.status();
+      if (!stn.featureEnabled) return res.json({ ok: true, enabled: false, reason: 'disabled', primary: 'bridge' });
+      if (!stn.packagesPresent) return res.json({ ok: true, enabled: false, reason: 'packages_missing', primary: 'bridge' });
+      res.json({ ok: true, enabled: true, ready: !!stn.ready,
+        url: '/novnc/vnc.html?autoconnect=1&resize=scale&quality=6&compression=2&path=websockify',
+        passwordRequired: false, primary: 'bridge', role: 'login_secondary' });
+    });
+    app.post('/api/novnc/start', async (req, res) => {
+      let novnc;
+      try { novnc = require('./lib/novnc-launcher'); } catch (e) {
+        return res.status(500).json({ ok: false, error: 'launcher_missing' });
+      }
+      try {
+        const out = await novnc.ensureStarted();
+        res.json({ ok: !!out.ok, ready: !!out.ready, error: out.error || null,
+          url: out.ok ? '/novnc/vnc.html?autoconnect=1&resize=scale&quality=6&compression=2&path=websockify' : null,
+          primary: 'bridge', role: 'login_secondary' });
+      } catch (e) {
+        res.status(500).json({ ok: false, error: String(e.message || e) });
+      }
+    });
+    (function mountNovncProxy() {
+      const http = require('http');
+      const NOVNC_UPSTREAM = Number(process.env.SOLOHOST_NOVNC_PORT || 6080);
+      function proxyHttp(req, res) {
+        let path = req.url || '/';
+        if (!path.startsWith('/')) path = '/' + path;
+        const headers = Object.assign({}, req.headers, { host: '127.0.0.1:' + NOVNC_UPSTREAM });
+        const preq = http.request(
+          { hostname: '127.0.0.1', port: NOVNC_UPSTREAM, path: path, method: req.method, headers: headers },
+          function (pres) { res.writeHead(pres.statusCode || 502, pres.headers); pres.pipe(res); }
+        );
+        preq.on('error', function () {
+          if (!res.headersSent) res.status(503).type('html').send('<p>Login desktop starting…</p>');
+        });
+        req.pipe(preq);
+      }
+      app.use('/novnc', function (req, res) { proxyHttp(req, res); });
+      app.use('/websockify', function (req, res) { proxyHttp(req, res); });
+      if (typeof server !== 'undefined' && server && server.on) {
+        server.on('upgrade', function (req, socket, head) {
+          const u = req.url || '';
+          if (u.indexOf('websockify') < 0 && u.indexOf('/novnc') < 0) return;
+          let path = u.replace(/^\/novnc/, '') || u;
+          const upstream = require('net').connect(NOVNC_UPSTREAM, '127.0.0.1', function () {
+            let hdr = 'GET ' + path + ' HTTP/1.1\r\n';
+            for (const k of Object.keys(req.headers || {})) {
+              const v = req.headers[k];
+              if (v == null) continue;
+              if (k.toLowerCase() === 'host') hdr += 'Host: 127.0.0.1:' + NOVNC_UPSTREAM + '\r\n';
+              else hdr += k + ': ' + v + '\r\n';
+            }
+            hdr += '\r\n';
+            upstream.write(hdr);
+            if (head && head.length) upstream.write(head);
+            upstream.pipe(socket); socket.pipe(upstream);
+          });
+          upstream.on('error', function () { try { socket.destroy(); } catch (_) {} });
+        });
+      }
+    })();
+    console.log('[ok] noVNC routes mounted (login secondary)');
+  } catch (e) { console.error('[warn] noVNC mount:', e && e.message); }
+
+}; // mount

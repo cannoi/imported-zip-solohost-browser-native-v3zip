@@ -62,46 +62,6 @@
     } catch { return false; }
   }
 
-  
-  function resolveSoloHref(hrefRaw, base) {
-    let abs = String(hrefRaw || '').trim();
-    if (!abs) return '';
-    try {
-      const u = new URL(abs, base || (typeof location !== 'undefined' ? location.href : 'https://example.com'));
-      if (u.pathname === '/api/proxy' && u.searchParams.get('url')) abs = u.searchParams.get('url');
-      else abs = u.href;
-    } catch (_) {}
-    // Bing tracking /ck/a?u=a1+base64
-    try {
-      const u = new URL(abs);
-      const host = u.hostname.replace(/^www\./, '').toLowerCase();
-      if ((host === 'bing.com' || host.endsWith('.bing.com')) && (u.pathname === '/ck/a' || u.pathname.indexOf('/ck/') === 0)) {
-        let packed = u.searchParams.get('u') || u.searchParams.get('url') || '';
-        if (/^a1/i.test(packed)) packed = packed.slice(2);
-        if (packed) {
-          try {
-            const b64 = packed.replace(/-/g, '+').replace(/_/g, '/');
-            const pad = b64.length % 4 === 0 ? b64 : b64 + '='.repeat(4 - (b64.length % 4));
-            const bin = atob(pad);
-            if (/^https?:\/\//i.test(bin)) abs = bin;
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
-    // DuckDuckGo /l/?uddg=
-    try {
-      const u = new URL(abs);
-      if (/duckduckgo\.com$/i.test(u.hostname) && (u.pathname === '/l/' || u.pathname === '/l')) {
-        const uddg = u.searchParams.get('uddg') || u.searchParams.get('u');
-        if (uddg && /^https?:/i.test(uddg)) abs = uddg;
-      }
-    } catch (_) {}
-    if (!/^https?:/i.test(abs) && !/^http:\/\/127\.0\.0\.1/i.test(abs)) {
-      try { abs = new URL(hrefRaw, base || 'https://example.com').href; } catch (_) { return ''; }
-    }
-    return abs;
-  }
-
   function isYouTubeVideoUrl(url) {
     try {
       const u = new URL(url);
@@ -120,22 +80,19 @@
     } catch (_) { return false; }
   }
 
-  // Direct audio files can play in the user's own browser without capturing backend audio.
-  function isDirectAudioUrl(raw) {
-    try {
-      const u = new URL(String(raw || '').trim());
-      if (!['http:', 'https:'].includes(u.protocol) || u.username || u.password) return false;
-      return /\.(?:mp3|m4a|aac|wav|flac|opus|oga|ogg)(?:$)/i.test(u.pathname || '');
-    } catch (_) { return false; }
-  }
-
   function classifyUrl(url) {
     const h = hostOf(url);
+    // Let Chromium's native viewer handle direct media, images and PDFs instead of
+    // trying to snapshot its internal browser UI through the DOM Bridge.
     if (isNativeMediaOrDocumentUrl(url)) return MODE.DIRECT;
     if (!h) return MODE.PROXY;
+    // Keep Bing's human verification page visible when embeddable; never solve it automatically.
     try { const bu = new URL(url); if (/(^|\.)bing\.com$/.test(bu.hostname) && /captcha|challenge|verify|pow/i.test(bu.pathname + bu.search)) return MODE.DIRECT; } catch (_) {}
+    // Site-owned authentication must use a normal system browser, not an embedded/automated view.
     if (isExternalAuthPath(url)) return MODE.EXTERNAL;
-    // YouTube → official player shell (PROXY) — unchanged from pre-noVNC
+    // YouTube watch/Shorts/live URLs must reach the server's official-player shell.
+    // The Bridge snapshot intentionally strips scripts/unsafe frames, so rendering these
+    // URLs in the automated DOM view leaves a visible page with a non-working player.
     if (isYouTubeVideoUrl(url)) return MODE.PROXY;
     try {
       const yu = new URL(url);
@@ -147,8 +104,11 @@
         return MODE.PROXY;
       }
     } catch (_) {}
+    // DRM/subscription streaming sites need their own full browser profile/DRM stack.
     if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
+    // Official embeddable players remain direct when on their official embed endpoint.
     if (isDirectEmbed(url)) return MODE.DIRECT;
+    // Dynamic sites use the JS-capable engine; do not rewrite them to proxy HTML pre-emptively.
     if (/google\./.test(h)) return MODE.ENGINE;
     if (/youtube\.com|youtu\.be/.test(h)) return MODE.PROXY;
     if (/(^|\.)(facebook|fb|instagram|whatsapp|messenger|tiktok|x|twitter|reddit)\.com$/.test(h)) return MODE.ENGINE;
@@ -277,7 +237,7 @@
       const r = await fetch('/api/browser/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ privateMode: !!tab.private, profileId: browserProfileId(), tabKey: String(tab.id || ''), locale: state.lang === 'vi' ? 'vi-VN' : 'en-US', timezoneId: state.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }),
+        body: JSON.stringify({ privateMode: !!tab.private, profileId: browserProfileId(), locale: state.lang === 'vi' ? 'vi-VN' : 'en-US', timezoneId: state.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }),
         signal: ac ? ac.signal : undefined
       });
       const j = await r.json();
@@ -321,41 +281,28 @@
         return { ok: false, reason: 'bridge_session_stale', detail: j };
       }
       if (!j || !j.ok) return { ok: false, reason: (j && j.error) || 'bridge_navigate_failed', detail: j };
-      if (j.externalRequired && j.externalReason !== 'bing_verification_required') return loadViaExternal(googleExternalTarget(j.url || url), j.externalReason || 'site_auth_policy', tab);
+      if (j.externalRequired && j.externalReason !== 'bing_verification_required') return loadViaExternal(googleExternalTarget(j.url || url), j.externalReason || 'site_auth_policy');
       const activeNav = ensureTabNav(tab);
       if (activeNav) activeNav.bridgeAudit = j.audit || {};
-      // Prefer showing whatever the Bridge has; only fail hard when empty AND explicit error
-      if (!j.hasContent && j.error && !j.title) return { ok: false, reason: j.error, detail: j };
-      if (!j.hasContent && j.backend === 'proxy' && j.error === 'empty_content') {
+      if (!j.hasContent && j.error) return { ok: false, reason: j.error, detail: j };
+      // If backend fell back to proxy inside server, treat as proxy success without bridge view
+      if (j.backend === 'proxy' && j.hasContent === false) {
         return { ok: false, reason: 'bridge_empty', detail: j };
       }
       const view = bridgeViewUrl(b);
-      if (!view) return { ok: false, reason: 'no_viewport' };
-      // A request may finish after the user switched tabs. Keep its Chromium
-      // session alive, but never let its late response replace the active tab UI.
-      if (!frame || state.activeTabId !== tab.id) {
-        if (tab) { tab.url = j.url || url; if (j.title) tab.title = j.title; }
-        return { ok: true, mode: (j.backend === 'webkit' || j.backend === 'playwright') ? MODE.ENGINE : MODE.PROXY,
-          backend: j.backend || b.backend, url: j.url || url, title: j.title || '', hasContent: !!j.hasContent, backgroundTab: true };
-      }
+      if (!frame || !view) return { ok: false, reason: 'no_viewport' };
       try {
-        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts');
-        frame.setAttribute('data-sh-tab-id', String(tab.id || ''));
-        // Reload only the viewport document, not the Chromium page/session.
-        const bust = view + (view.indexOf('?') >= 0 ? '&' : '?') + '_=' + Date.now();
-        frame.src = bust;
-        frame.setAttribute('data-sh-view', view);
+        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
+        frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
       } catch (_) {
         return { ok: false, reason: 'frame_error' };
       }
-      const be = String(j.backend || b.backend || '');
       return {
         ok: true,
-        mode: (be === 'webkit' || be === 'playwright') ? MODE.ENGINE : MODE.PROXY,
-        backend: be,
+        mode: (j.backend === 'webkit' || b.backend === 'webkit') ? MODE.ENGINE : MODE.PROXY,
+        backend: j.backend || b.backend,
         url: j.url || url,
-        title: j.title || '',
-        hasContent: !!j.hasContent
+        title: j.title || ''
       };
     } catch (e) {
       const reason = (e && e.name === 'AbortError') ? 'bridge_client_timeout' : String((e && e.message) || e);
@@ -365,12 +312,10 @@
     }
   }
 
-  function loadViaProxy(url, tabId) {
+  function loadViaProxy(url) {
     if (!frame) return { ok: false, reason: 'no_frame' };
     const frameSrc = proxyFrameUrl(url);
     try {
-      if (tabId && state.activeTabId !== tabId) return { ok: true, mode: MODE.PROXY, url, backgroundTab: true };
-      frame.setAttribute('data-sh-tab-id', String(tabId || state.activeTabId || ''));
       frame.removeAttribute('sandbox');
       frame.removeAttribute('srcdoc');
       frame.src = frameSrc;
@@ -380,11 +325,9 @@
     }
   }
 
-  function loadViaDirect(url, tabId) {
+  function loadViaDirect(url) {
     if (!frame) return { ok: false, reason: 'no_frame' };
     try {
-      if (tabId && state.activeTabId !== tabId) return { ok: true, mode: MODE.DIRECT, url, backgroundTab: true };
-      frame.setAttribute('data-sh-tab-id', String(tabId || state.activeTabId || ''));
       frame.removeAttribute('sandbox');
       frame.src = url;
       return { ok: true, mode: MODE.DIRECT, url };
@@ -398,12 +341,12 @@
     return url;
   }
 
-  function loadViaExternal(url, reason, ownerTab) {
-    const tab = ownerTab || getActiveTab(); const nav = ensureTabNav(tab);
+  function loadViaExternal(url, reason) {
+    const tab = getActiveTab(); const nav = ensureTabNav(tab);
     if (nav) nav.bridge = null;
-    // Do not clear another tab's viewport when a background navigation completes.
-    if (tab && state.activeTabId === tab.id && frame) { try { frame.removeAttribute('srcdoc'); frame.setAttribute('data-sh-tab-id', String(tab.id)); frame.src = 'about:blank'; } catch (_) {} }
-    if (tab && state.activeTabId === tab.id && btnOpen) btnOpen.href = url;
+    // Stop stale embedded pages from continuing to emit events after an auth/policy handoff.
+    if (frame) { try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {} }
+    if (btnOpen) btnOpen.href = url;
     showProxyHint(
       (state.lang === 'vi'
         ? 'Trang này cần mở ngoài. Lý do: '
@@ -449,30 +392,13 @@
   }
 
   async function softRefreshActiveBridge() {
-    // UI-only: repair missing images in the viewport. Never re-goto the backend page.
-    try {
-      const doc = frame && frame.contentDocument;
-      if (!doc) return false;
-      doc.querySelectorAll('img').forEach((img) => {
-        try {
-          if (!img.getAttribute('src') && img.dataset && img.dataset.src) img.src = img.dataset.src;
-          if (img.complete && img.naturalWidth === 0 && img.src) {
-            const u = img.src;
-            img.src = '';
-            img.src = u;
-          }
-        } catch (_) {}
-      });
-      return true;
-    } catch (_) {
-      return false;
-    }
+    // Disabled: rewriting the viewport caused flicker and scroll jumps.
+    // Kept as no-op for API compatibility (SoloBrowser.softRefreshActiveBridge).
+    return false;
   }
-
 
   async function bridgeEvent(ev) {
     const tab = getActiveTab();
-    const tabId = tab && tab.id;
     const nav = ensureTabNav(tab);
     const b = nav && nav.bridge;
     if (!b) return null;
@@ -482,20 +408,18 @@
       });
       const j = await r.json();
       if (j && j.ok && j.externalRequired) {
-        if (j.url && state.activeTabId === tabId) applyUrlToUi(j.url, j.title);
-        else if (tab && j.url) tab.url = j.url;
-        loadViaExternal(j.url || (tab && tab.url) || state.url, j.externalReason || 'site_auth_policy', tab);
+        if (j.url) applyUrlToUi(j.url, j.title);
+        loadViaExternal(j.url || (tab && tab.url) || state.url, j.externalReason || 'site_auth_policy');
         return j;
       }
-      if (j && j.ok && frame && state.activeTabId === tabId && frame.getAttribute('data-sh-tab-id') === String(tabId || '')) {
+      if (j && j.ok && frame) {
         // Typing must not reload the snapshot: doing so loses focus and breaks login forms.
         // The real page receives every input event in WebKit; refresh only after actions that may navigate/update UI.
         if (ev.type !== 'input' && ev.type !== 'change') {
           const view = bridgeViewUrl(b);
-          if (view) { frame.setAttribute('data-sh-tab-id', String(tabId || '')); frame.src = view + '&t=' + Date.now(); }
+          if (view) frame.src = view + '&t=' + Date.now();
         }
-        if (j.url && state.activeTabId === tabId) applyUrlToUi(j.url, j.title);
-        else if (tab && j.url) tab.url = j.url;
+        if (j.url) applyUrlToUi(j.url, j.title);
       }
       return j;
     } catch (_) { return null; }
@@ -683,46 +607,36 @@
           }
         }
         doc.addEventListener('click', (e) => {
-          if (frame && frame.getAttribute('data-sh-tab-id') !== String(state.activeTabId || '')) return;
-          // Universal link handler: keep navigation inside SoloHost only (never host Opera/Chrome tab).
-          const aEl = e.target && e.target.closest && e.target.closest('a[href]');
-          if (aEl) {
-            const hrefRaw = aEl.getAttribute('href') || '';
-            if (hrefRaw && hrefRaw.charAt(0) !== '#' && !/^(javascript|data|blob):/i.test(hrefRaw)) {
-              e.preventDefault();
-              e.stopPropagation();
-              try { e.stopImmediatePropagation(); } catch (_) {}
-              try {
-                if (/^(mailto|tel):/i.test(hrefRaw)) {
-                  window.parent.postMessage({ type: 'solohost-open-external', url: hrefRaw }, '*');
-                  return;
-                }
-                const eventTab = state.tabs.find(t => t.id === frame.getAttribute('data-sh-tab-id'));
-                let abs = resolveSoloHref(hrefRaw, (eventTab && eventTab.url) || state.url);
-                if (!abs || !/^https?:/i.test(abs)) return;
-                if (isYouTubeVideoUrl(abs)) {
-                  clientLog('info', 'youtube.video_handoff', { url: abs });
-                  navigate(abs, { force: true, mode: MODE.PROXY });
-                  return;
-                }
-                if (isNativeMediaOrDocumentUrl(abs)) {
-                  navigate(abs, { force: true });
-                  return;
-                }
-                // Ctrl/Meta → new SoloHost tab (not host browser)
-                if (e.ctrlKey || e.metaKey || String(aEl.getAttribute('target') || '').toLowerCase() === '_blank') newTab(abs);
-                else navigate(abs, { force: true });
-              } catch (err) {
-                clientLog('warn', 'link.navigate_fail', { detail: String(err && err.message || err) });
-              }
-              return;
-            }
-          }
           const el = e.target && e.target.closest && e.target.closest('[data-sh-id]');
           if (!el) return;
           const tag = (el.tagName || '').toLowerCase();
+          if (tag === 'a' && (e.ctrlKey || e.metaKey || el.target === '_blank')) {
+            e.preventDefault();
+            const href = el.getAttribute('href');
+            try {
+              const abs = new URL(href, state.url || 'https://example.com').href;
+              newTab(abs);
+            } catch (_) {}
+            return;
+          }
+          if (tag === 'a') {
+            try {
+              const abs = new URL(el.getAttribute('href') || '', state.url || 'https://example.com').href;
+              if (isNativeMediaOrDocumentUrl(abs)) {
+                e.preventDefault(); e.stopPropagation(); navigate(abs, { force: true }); return;
+              }
+              // Hand video clicks from YouTube's live DOM to the official player route.
+              // Do not click through the Playwright page and then display its script-stripped snapshot.
+              if (isYouTubeVideoUrl(abs)) {
+                e.preventDefault(); e.stopPropagation();
+                clientLog('info', 'youtube.video_handoff', { url: abs, detail: 'official_embed_player_route' });
+                navigate(abs, { force: true, mode: MODE.PROXY });
+                return;
+              }
+            } catch (_) {}
+          }
           const inputType = (el.getAttribute('type') || '').toLowerCase();
-          if (tag === 'button' || tag === 'label' || ['button','link','tab','checkbox','switch','option','menuitem'].includes(el.getAttribute('role')) ||
+          if (tag === 'a' || tag === 'button' || tag === 'label' || ['button','link','tab','checkbox','switch','option','menuitem'].includes(el.getAttribute('role')) ||
               (tag === 'input' && ['checkbox','radio','submit','button','reset'].includes(inputType)) ) {
             e.preventDefault();
             e.stopPropagation();
@@ -731,7 +645,6 @@
         }, true);
         const inputTimers = new WeakMap();
         doc.addEventListener('input', (e) => {
-          if (frame && frame.getAttribute('data-sh-tab-id') !== String(state.activeTabId || '')) return;
           const el = e.target && e.target.closest && e.target.closest('[data-sh-id]');
           if (!el) return;
           const id = el.getAttribute('data-sh-id');
@@ -741,13 +654,11 @@
           }, 90));
         }, true);
         doc.addEventListener('change', (e) => {
-          if (frame && frame.getAttribute('data-sh-tab-id') !== String(state.activeTabId || '')) return;
           const el = e.target && e.target.closest && e.target.closest('[data-sh-id]');
           if (!el) return;
           bridgeEvent({ type: 'change', targetId: el.getAttribute('data-sh-id'), value: (el.isContentEditable || el.getAttribute('role') === 'textbox') ? el.innerText : el.value, checked: !!el.checked, selectedIndex: el.selectedIndex });
         }, true);
         doc.addEventListener('keydown', (e) => {
-          if (frame && frame.getAttribute('data-sh-tab-id') !== String(state.activeTabId || '')) return;
           if (e.key !== 'Enter') return;
           const el = e.target;
           if (!el || !/^(INPUT|TEXTAREA)$/.test(el.tagName)) return;
@@ -758,7 +669,6 @@
           if (id) bridgeEvent({ type: 'submit', targetId: id });
         }, true);
         doc.addEventListener('submit', (e) => {
-          if (frame && frame.getAttribute('data-sh-tab-id') !== String(state.activeTabId || '')) return;
           const form = e.target;
           if (!form || !form.getAttribute) return;
           const id = form.getAttribute('data-sh-id');
@@ -796,7 +706,7 @@
         : '◎ Starter tasks · ✦ New requests use the unified assistant';
       if ($('sc-name-input')) $('sc-name-input').placeholder = vi ? 'Tên nhiệm vụ' : 'Task name';
       if ($('sc-url-input')) $('sc-url-input').placeholder = vi ? 'URL điều hướng…' : 'Navigate URL…';
-      if ($('pl-url-input')) $('pl-url-input').placeholder = vi ? 'Dán URL audio / video…' : 'Paste audio / video URL…';
+      if ($('pl-url-input')) $('pl-url-input').placeholder = vi ? 'Dán URL video…' : 'Paste video URL…';
       if ($('app-url-input')) $('app-url-input').placeholder = 'http://127.0.0.1:8090';
     } catch (_) {}
 
@@ -993,12 +903,10 @@
       const r = await fetch('/api/access/status', { cache: 'no-store', credentials: 'same-origin' });
       const j = await r.json();
       if (!j || !j.required) {
-        try { sessionStorage.removeItem('solo_access_required'); } catch (_) {}
         gate.hidden = true;
         gate.setAttribute('hidden', '');
         return true;
       }
-      try { sessionStorage.setItem('solo_access_required', '1'); } catch (_) {}
       gate.hidden = false;
       gate.removeAttribute('hidden');
       const title = $('access-gate-title');
@@ -1006,20 +914,13 @@
       const vi = state.lang === 'vi';
       if (title) title.textContent = vi ? 'Mật khẩu truy cập' : 'Access password';
       if (hint) hint.textContent = vi
-        ? 'Nhập mật khẩu đã đặt khi khởi chạy app trên SoloHost.'
-        : 'Enter the password you set when starting the app in SoloHost.';
+        ? 'Nhập mật khẩu SoloHost Browser để tiếp tục.'
+        : 'Enter the SoloHost Browser password to continue.';
       const input = $('access-gate-input');
       if (input) setTimeout(() => input.focus(), 50);
       return false;
     } catch (_) {
-      // Network/status failure: keep gate visible if a password field was previously required
-      try {
-        if (sessionStorage.getItem('solo_access_required') === '1') {
-          gate.hidden = false;
-          gate.removeAttribute('hidden');
-          return false;
-        }
-      } catch (__) {}
+      // If status fails on local, allow in
       gate.hidden = true;
       return true;
     }
@@ -1038,8 +939,8 @@
         const r = await fetch('/api/access/login', {
           method: 'POST',
           credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-          body: JSON.stringify({ password: String(pwd || '').trim() })
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pwd })
         });
         const j = await r.json().catch(() => ({}));
         if (r.ok && j.ok) {
@@ -1083,7 +984,6 @@
       // Hard timeout 5s — always dismiss
       setTimeout(function () { hideSplash(); checkAccessGate(); }, 5000);
       setTimeout(function () { hideSplash(); checkAccessGate(); }, 6500);
-      setTimeout(function () { checkAccessGate(); }, 8000);
     } catch (_) {
       try { hideSplash(); } catch (__) {}
     }
@@ -1130,33 +1030,21 @@
     }
     const tab = { id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), title: options.private ? (state.lang === 'vi' ? 'Tab riêng tư' : 'Private tab') : (state.lang === 'vi' ? 'Tab mới' : 'New tab'), url: '', private: !!options.private, nav: null };
     state.tabs.push(tab); state.activeTabId = tab.id; renderTabs();
-    if (url) navigate(url); else { state.url = ''; if (input) input.value = ''; if (btnOpen) btnOpen.href = '#'; if (frame) { frame.setAttribute('data-sh-tab-id', String(tab.id || '')); frame.src = 'about:blank'; } showStart(); }
+    if (url) navigate(url); else { state.url = ''; if (input) input.value = ''; if (btnOpen) btnOpen.href = '#'; if (frame) frame.src = 'about:blank'; showStart(); }
     return tab;
   }
   function switchTab(id) {
     const tab = state.tabs.find(t => t.id === id); if (!tab) return;
     state.activeTabId = id; state.url = tab.url || ''; renderTabs();
     if (input) input.value = state.url; if (btnOpen) btnOpen.href = state.url || '#';
-    // Restore cached Bridge view only — never re-navigate Chromium for a tab switch.
+    // Restore the existing tab's Bridge view instead of reloading the website.
     const nav = ensureTabNav(tab);
     const view = nav && nav.bridge && bridgeViewUrl(nav.bridge);
     if (state.url && view) {
-      if (frame) {
-        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts');
-        frame.setAttribute('data-sh-tab-id', String(tab.id || ''));
-        if (frame.getAttribute('data-sh-view') !== view) {
-          frame.src = view;
-          frame.setAttribute('data-sh-view', view);
-        }
-      }
+      if (frame) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); frame.src = view + '&t=' + Date.now(); }
       hideStart();
-    } else if (state.url) {
-      // Session missing: one deliberate load, not a continuous loop
-      navigate(state.url, { force: true, skipHistory: true });
-    } else {
-      if (frame) { frame.setAttribute('data-sh-tab-id', String(tab.id || '')); frame.src = 'about:blank'; frame.removeAttribute('data-sh-view'); }
-      showStart();
-    }
+    } else if (state.url) navigate(state.url, { force: true, skipHistory: true });
+    else { if (frame) frame.src = 'about:blank'; showStart(); }
   }
   function destroyTabSession(tab) {
     const b = tab && tab.nav && tab.nav.bridge;
@@ -1228,14 +1116,13 @@
     url = toPlayableUrl(url);
 
     const now = Date.now();
-    if (!opts.force && state.url === url && now - (state.lastNavAt || 0) < 4000) {
+    if (!opts.force && state.url === url && now - (state.lastNavAt || 0) < 1200) {
       clientLog('warn', 'navigate_deduped', { url: url });
       return;
     }
     state.lastNavAt = now;
 
     const tab = getActiveTab();
-    const navigationTabId = tab && tab.id;
     const nav = ensureTabNav(tab);
     const preferred = opts.mode || classifyUrl(url);
     hideProxyHint();
@@ -1260,21 +1147,20 @@
 
     if (preferred === MODE.EXTERNAL) {
       const externalTarget = googleExternalTarget(url);
-      result = loadViaExternal(externalTarget, /accounts\.google\.com/i.test(url) ? 'google_auth_policy_external_session' : 'site_policy_external', tab);
+      result = loadViaExternal(externalTarget, /accounts\.google\.com/i.test(url) ? 'google_auth_policy_external_session' : 'site_policy_external');
     } else if (preferred === MODE.DIRECT) {
-      result = loadViaDirect(url, navigationTabId);
-      if (!result.ok) result = loadViaProxy(url, navigationTabId);
+      result = loadViaDirect(url);
+      if (!result.ok) result = loadViaProxy(url);
     } else if (preferred === MODE.ENGINE) {
       // Fast fail: if WebKit known down, skip bridge entirely
       result = await tryEngine();
       if (!result.ok) {
         const reason = result.reason || 'engine_failed';
         clientLog('warn', 'navigate_engine_fallback', { url, reason });
-        // Keep bridge session so Chromium tab stays aligned; proxy is display-only fallback.
         if (isLoginPath(url)) {
-          result = loadViaExternal(url, 'login_requires_full_browser_context:' + reason, tab);
+          result = loadViaExternal(url, 'login_requires_full_browser_context:' + reason);
         } else {
-          result = loadViaProxy(url, navigationTabId);
+          result = loadViaProxy(url);
           if (result.ok) {
             result.mode = MODE.PROXY;
             result.reason = 'fallback_from_engine:' + reason;
@@ -1282,25 +1168,21 @@
         }
       }
     } else if (preferred === MODE.PROXY) {
-      result = loadViaProxy(url, navigationTabId);
+      result = loadViaProxy(url);
     } else {
-      result = loadViaProxy(url, navigationTabId);
+      result = loadViaProxy(url);
     }
 
     if (!result.ok && preferred !== MODE.EXTERNAL) {
-      result = loadViaExternal(url, result.reason || 'all_modes_failed', tab);
+      result = loadViaExternal(url, result.reason || 'all_modes_failed');
     }
 
     if (nav) {
       nav.mode = result.mode || preferred;
       nav.reason = result.reason || '';
     }
-    if (result.url) { tab.url = result.url; if (result.title) tab.title = result.title; }
-    if (state.activeTabId === navigationTabId) {
-      if (result.url && result.url !== url) applyUrlToUi(result.url, result.title);
-      else if (result.title) applyUrlToUi(url, result.title);
-    }
-    renderTabs();
+    if (result.url && result.url !== url) applyUrlToUi(result.url, result.title);
+    else if (result.title) applyUrlToUi(url, result.title);
 
     syncNavButtons();
     clientLog('info', 'navigate_result', {
@@ -1316,21 +1198,11 @@
     navigate(raw, { mode: MODE.PROXY });
   }
 
-  // Proxy/Bridge frames postMessage so clicks never open the host browser (Opera/Chrome).
+  // Links inside proxied pages postMessage to navigate without leaving the shell
   window.addEventListener('message', (ev) => {
     try {
-      const d = ev && ev.data;
-      if (!d || !d.url || !frame || ev.source !== frame.contentWindow) return;
-      if (d.type === 'solohost-open-external') {
-        if (/^(mailto|tel):/i.test(String(d.url))) window.location.href = String(d.url);
-        return;
-      }
-      if (d.type !== 'solohost-navigate' && d.type !== 'solohost-nav') return;
-      const abs = typeof resolveSoloHref === 'function' ? resolveSoloHref(d.url, state.url) : d.url;
-      if (!abs || !/^https?:/i.test(abs)) return;
-      clientLog('info', 'nav.postmessage', { url: abs, newTab: !!d.newTab });
-      if (d.newTab) newTab(abs);
-      else navigate(abs, { force: true });
+      const d = ev.data;
+      if (d && d.type === 'solohost-navigate' && d.url) navigate(d.url);
     } catch (_) {}
   });
 
@@ -1436,36 +1308,6 @@
     });
   }
 
-  if ($('btn-novnc')) $('btn-novnc').addEventListener('click', async () => {
-    const vi = state.lang === 'vi';
-    try {
-      // Lazy-start desktop only when user needs login/CAPTCHA (Bridge stays primary)
-      try {
-        await fetch('/api/novnc/start', { method: 'POST', credentials: 'same-origin' });
-      } catch (_) {}
-      await new Promise((r) => setTimeout(r, 800));
-      const response = await fetch('/api/novnc/status', { credentials: 'same-origin', cache: 'no-store' });
-      const data = await response.json();
-      if (!data || !data.enabled) {
-        const reason = data && data.reason;
-        if (reason === 'packages_missing') {
-          alert(vi
-            ? 'Desktop đăng nhập chưa có trong image (build CI). Duyệt web vẫn dùng Bridge. Build WITH_NOVNC=1 nếu cần đăng nhập tay.'
-            : 'Login desktop is not in this image (CI build). Browsing still uses Bridge. Rebuild WITH_NOVNC=1 for manual login.');
-        } else {
-          alert(vi
-            ? 'Desktop đăng nhập chưa bật. Duyệt thường vẫn qua Bridge.'
-            : 'Login desktop is off. Normal browsing still uses Bridge.');
-        }
-        return;
-      }
-      const url = data.url || '/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify';
-      window.open(url, 'solohost-novnc', 'noopener,noreferrer');
-    } catch (e) {
-      alert(vi ? 'Không mở được desktop đăng nhập. Tiếp tục dùng Bridge hoặc Open ↗.' : 'Cannot open login desktop. Continue with Bridge or Open ↗.');
-    }
-  });
-
   if ($('btn-new-tab')) $('btn-new-tab').addEventListener('click', () => newTab());
   if ($('btn-bookmark')) $('btn-bookmark').addEventListener('click', addCurrentBookmark);
   if ($('btn-library')) $('btn-library').addEventListener('click', () => openLibrary('bookmarks'));
@@ -1473,52 +1315,21 @@
   if ($('library-close')) $('library-close').addEventListener('click', () => { $('library-overlay').hidden = true; });
   document.querySelectorAll('[data-library]').forEach(b => b.addEventListener('click', () => openLibrary(b.dataset.library)));
   if ($('history-clear')) $('history-clear').addEventListener('click', async () => {
+  if ($('btn-private-tab')) $('btn-private-tab').addEventListener('click', () => {
+    const id = 't' + Date.now().toString(36);
+    const tab = { id, title: state.lang === 'vi' ? 'Tab ẩn danh' : 'Private tab', url: '', private: true };
+    state.tabs.push(tab);
+    state.activeTabId = id;
+    renderTabs();
+    showStart();
+    state.url = '';
+    if (input) input.value = '';
+    if (frame) { try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {} }
+    clientLog('info', 'tab.private_new', { id });
+  });
     if (state.libraryMode !== 'history') return;
     try { await fetch('/api/browser/history', { method: 'DELETE' }); openLibrary('history'); } catch (_) {}
   });
-    function openPrivateTab(startUrl) {
-    try {
-      const tab = newTab(startUrl || '', { private: true });
-      if (!tab) {
-        clientLog('warn', 'tab.private_new_failed', { reason: 'newTab_null' });
-        return null;
-      }
-      state.activeTabId = tab.id;
-      state.url = startUrl || '';
-      if (input) input.value = startUrl || '';
-      if (frame) {
-        try { frame.removeAttribute('srcdoc'); frame.src = 'about:blank'; } catch (_) {}
-      }
-      renderTabs();
-      if (startUrl) navigate(startUrl, { force: true });
-      else showStart();
-      clientLog('info', 'tab.private_new', { id: tab.id });
-      return tab;
-    } catch (e) {
-      clientLog('error', 'tab.private_new_error', { error: String(e && e.message || e).slice(0, 160) });
-      return null;
-    }
-  }
-  const privBtn = $('btn-private-tab') || document.getElementById('btn-private-tab');
-  if (privBtn && !privBtn.dataset.privateBound) {
-    privBtn.dataset.privateBound = '1';
-    privBtn.addEventListener('click', function (ev) {
-      try { ev.preventDefault(); ev.stopPropagation(); } catch (_) {}
-      openPrivateTab('');
-    }, true);
-  }
-  // Re-bind after short delay (mobile WebView late paint)
-  setTimeout(function () {
-    const b = document.getElementById('btn-private-tab');
-    if (b && !b.dataset.privateBound) {
-      b.dataset.privateBound = '1';
-      b.addEventListener('click', function (ev) {
-        try { ev.preventDefault(); ev.stopPropagation(); } catch (_) {}
-        openPrivateTab('');
-      }, true);
-    }
-  }, 400);
-
   if ($('library-overlay')) $('library-overlay').addEventListener('click', e => { if (e.target === $('library-overlay')) $('library-overlay').hidden = true; });
 
   const form = $('nav-form');
@@ -1819,8 +1630,6 @@
       dock.setAttribute('hidden', '');
       const bg = $('bg-music-frame');
       if (bg) bg.src = 'about:blank';
-      const audio = $('bg-music-audio');
-      if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.hidden = true; }
     }
   }
 
@@ -1840,27 +1649,8 @@
     const it = pl.items[homeLib.playIndex];
     if (!it) return;
     const embed = getVideoEmbedUrl(it.url);
-    const audio = $('bg-music-audio');
     if (title) { title.textContent = it.title || it.url; title.dataset.userTitle = '1'; }
-    if (isDirectAudioUrl(it.url) && audio) {
-      if (player) player.src = 'about:blank';
-      if (panelPlayer && panelPlayer !== player) panelPlayer.src = 'about:blank';
-      audio.hidden = false;
-      audio.src = new URL(it.url).toString();
-      audio.load();
-      homeLib.isPlaying = true; updateMusicControls();
-      showMusicDock(true, it.title || it.url);
-      if (hint) hint.textContent = state.lang === 'vi'
-        ? 'Âm thanh trực tiếp đang phát trên thiết bị của bạn; nguồn phải là tệp audio HTTP(S) công khai và được trình duyệt hỗ trợ.'
-        : 'Direct audio plays in your device browser; the source must be a public HTTP(S) audio file supported by the browser.';
-      const playAttempt = audio.play();
-      if (playAttempt && typeof playAttempt.catch === 'function') playAttempt.catch(() => {
-        homeLib.isPlaying = false; updateMusicControls();
-        if (hint) hint.textContent = state.lang === 'vi' ? 'Nhấn Phát trên trình phát âm thanh để bắt đầu; trình duyệt có thể chặn tự phát.' : 'Press Play on the audio control to start; browser autoplay may be blocked.';
-      });
-      clientLog('info', 'playlist.direct_audio_play', { source: it.source || 'direct_audio', playback: 'client_native' });
-    } else if (embed && player) {
-      if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.hidden = true; }
+    if (embed && player) {
       const src = withPlayerApi(embed);
       player.src = src;
       // Keep panel preview in sync if open
@@ -1872,7 +1662,6 @@
         : 'Background play — keeps playing if the app window stays open.';
       clientLog('info', 'playlist.embed_play', { source: it.source || 'video', background: true });
     } else {
-      if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.hidden = true; }
       if (player) player.src = 'about:blank';
       homeLib.isPlaying = false; updateMusicControls(); showMusicDock(false);
       if (hint) hint.textContent = state.lang === 'vi' ? 'Nguồn này chưa có trình nhúng chính thức được hỗ trợ. Hãy thêm liên kết YouTube, Vimeo hoặc TikTok.' : 'This source has no supported official embed. Add a YouTube, Vimeo, or TikTok link.';
@@ -1885,7 +1674,6 @@
   function updateMusicControls() {
     const play = $('btn-pl-play'), shuffle = $('btn-pl-shuffle'), repeat = $('btn-pl-repeat');
     if (play) { play.textContent = homeLib.isPlaying ? 'Ⅱ' : '▶'; play.title = state.lang === 'vi' ? (homeLib.isPlaying ? 'Tạm dừng' : 'Phát') : (homeLib.isPlaying ? 'Pause' : 'Play'); play.setAttribute('aria-label', play.title); }
-    const dockPlay = $('bg-music-play'); if (dockPlay) { dockPlay.textContent = homeLib.isPlaying ? 'Ⅱ' : '▶'; dockPlay.title = state.lang === 'vi' ? (homeLib.isPlaying ? 'Tạm dừng' : 'Phát') : (homeLib.isPlaying ? 'Pause' : 'Play'); }
     if (shuffle) { shuffle.classList.toggle('active', homeLib.shuffle); shuffle.setAttribute('aria-pressed', homeLib.shuffle ? 'true' : 'false'); shuffle.title = (state.lang === 'vi' ? 'Trộn bài: ' : 'Shuffle: ') + (homeLib.shuffle ? (state.lang === 'vi' ? 'Bật' : 'On') : (state.lang === 'vi' ? 'Tắt' : 'Off')); }
     if (repeat) { const labels = { off: state.lang === 'vi' ? 'Tắt lặp' : 'Repeat off', all: state.lang === 'vi' ? 'Lặp tất cả' : 'Repeat all', one: state.lang === 'vi' ? 'Lặp một bài' : 'Repeat one' }; repeat.classList.toggle('active', homeLib.repeatMode !== 'off'); repeat.textContent = homeLib.repeatMode === 'one' ? '🔂' : '🔁'; repeat.title = labels[homeLib.repeatMode] || labels.off; repeat.setAttribute('aria-pressed', homeLib.repeatMode !== 'off' ? 'true' : 'false'); }
   }
@@ -1902,29 +1690,6 @@
     else { let next = homeLib.playIndex + direction; if (next >= pl.items.length) { if (automatic && homeLib.repeatMode !== 'all') { homeLib.isPlaying = false; updateMusicControls(); return; } next = 0; } if (next < 0) next = pl.items.length - 1; homeLib.playIndex = next; }
     playPlaylistItem(); renderPlaylists();
   }
-  const directAudio = $('bg-music-audio');
-  if (directAudio) {
-    directAudio.addEventListener('play', () => { homeLib.isPlaying = true; updateMusicControls(); });
-    directAudio.addEventListener('pause', () => { if (!directAudio.ended) homeLib.isPlaying = false; updateMusicControls(); });
-    directAudio.addEventListener('ended', () => advancePlaylist(1, true));
-    directAudio.addEventListener('error', () => {
-      homeLib.isPlaying = false; updateMusicControls();
-      const hint = $('playlist-player-hint');
-      if (hint) hint.textContent = state.lang === 'vi' ? 'Không phát được tệp audio. Kiểm tra liên kết, định dạng, quyền truy cập hoặc CORS/chính sách máy chủ nguồn.' : 'Audio could not be played. Check the URL, format, access permissions, and source-server policy.';
-      clientLog('warn', 'playlist.direct_audio_error', { code: directAudio.error ? directAudio.error.code : 0 });
-    });
-  }
-  if ($('bg-music-play')) $('bg-music-play').addEventListener('click', () => {
-    const audio = $('bg-music-audio');
-    if (audio && !audio.hidden && audio.src) {
-      if (audio.paused) audio.play().catch(() => {}); else audio.pause();
-    } else if (homeLib.isPlaying) { if (!sendPlayerCommand('pauseVideo')) { const f = musicPlayerFrame(); if (f) f.src = 'about:blank'; homeLib.isPlaying = false; } }
-    else playPlaylistItem();
-    updateMusicControls();
-  });
-  if ($('bg-music-next')) $('bg-music-next').addEventListener('click', () => advancePlaylist(1, false));
-  if ($('bg-music-prev')) $('bg-music-prev').addEventListener('click', () => advancePlaylist(-1, false));
-  if ($('bg-music-close')) $('bg-music-close').addEventListener('click', () => { const audio = $('bg-music-audio'); if (audio) { audio.pause(); audio.removeAttribute('src'); audio.load(); audio.hidden = true; } showMusicDock(false); homeLib.isPlaying = false; updateMusicControls(); });
   const musicFrame = $('playlist-player-frame');
   if (musicFrame) musicFrame.addEventListener('load', () => {
     try { const u = new URL(musicFrame.src); if (/youtube-nocookie\.com$/.test(u.hostname)) musicFrame.contentWindow.postMessage(JSON.stringify({ event: 'command', func: 'addEventListener', args: ['onStateChange'] }), 'https://www.youtube-nocookie.com'); } catch (_) {}
@@ -2196,11 +1961,6 @@
     });
     if ($('btn-pl-play')) $('btn-pl-play').addEventListener('click', () => {
       const pl = activePlaylist(); if (!pl || !pl.items || !pl.items.length) return;
-      const audio = $('bg-music-audio');
-      if (audio && !audio.hidden && audio.src) {
-        if (audio.paused) audio.play().catch(() => {}); else audio.pause();
-        updateMusicControls(); return;
-      }
       if (!homeLib.isPlaying) { if (!$('playlist-player-frame')?.src || $('playlist-player-frame').src.endsWith('about:blank')) playPlaylistItem(); else if (!sendPlayerCommand('playVideo')) playPlaylistItem(); homeLib.isPlaying = true; }
       else { if (!sendPlayerCommand('pauseVideo')) { const f = $('playlist-player-frame'); if (f) f.src = 'about:blank'; homeLib.isPlaying = false; } else homeLib.isPlaying = false; }
       updateMusicControls();
@@ -2259,29 +2019,7 @@
   // Extra bind after paint (mobile WebView)
   setTimeout(function () { try { bindHomeLibrary(); refreshHomeLibrary(); } catch (_) {} }, 300);
   document.documentElement.setAttribute('data-solo-home-utils-ready', '1');
-
-  function getBridgeSession() {
-    const tab = getActiveTab();
-    const nav = ensureTabNav(tab);
-    return nav && nav.bridge ? { sessionId: nav.bridge.sessionId, token: nav.bridge.token, backend: nav.bridge.backend, url: state.url || '' } : null;
-  }
-  async function ensureBridgeSession() {
-    let b = getBridgeSession();
-    if (b && b.sessionId && b.token) return b;
-    try {
-      // Create a lightweight session via navigate to about:blank / example
-      if (typeof ensureEngineSession === 'function') {
-        await ensureEngineSession(getActiveTab());
-      } else if (typeof createBridgeSession === 'function') {
-        await createBridgeSession(getActiveTab());
-      } else {
-        // Soft navigate to open a backend session
-        await navigate('https://example.com/', { force: true, skipHistory: true });
-      }
-    } catch (_) {}
-    return getBridgeSession();
-  }
-  window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary, addCurrentUrlToPlaylist, refreshHomeLibrary, runScript, stopScript, showTasksPanel() { showStart(); openHomePanel('panel-scripts'); refreshHomeLibrary(); }, openHomePanel, getActiveBridge: getBridgeSession, getBridgeSession, ensureBridgeSession,
+  window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary, addCurrentUrlToPlaylist, refreshHomeLibrary, runScript, stopScript, showTasksPanel() { showStart(); openHomePanel('panel-scripts'); refreshHomeLibrary(); }, openHomePanel, getActiveBridge() { const tab = getActiveTab(); const nav = ensureTabNav(tab); return nav && nav.bridge ? { sessionId: nav.bridge.sessionId, token: nav.bridge.token, backend: nav.bridge.backend, url: state.url || '' } : null; },
     softRefreshActiveBridge: softRefreshActiveBridge, refreshBridgeView() {
       const tab = getActiveTab();
       const nav = ensureTabNav(tab);
@@ -2289,20 +2027,9 @@
       const view = bridgeViewUrl(nav.bridge);
       if (!view) return false;
       try {
-        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts');
-        frame.setAttribute('data-sh-tab-id', String(tab.id || ''));
-        if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); }
+        frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts');
+        frame.src = view + (view.indexOf('?') >= 0 ? '&' : '?') + 't=' + Date.now();
         return true;
       } catch (_) { return false; }
-    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-scripts'); if (frame.getAttribute('data-sh-view') !== view) { frame.src = view; frame.setAttribute('data-sh-view', view); } } } } };
+    }, syncBackendState(url, title) { const tab = getActiveTab(); const nav = ensureTabNav(tab); if (url && !isInternalBridgeViewUrl(url)) { const nu = normalizeNavUrl(url); if (state.url !== nu && nav) { if (nav.index >= 0 && nav.stack[nav.index]) { nav.stack[nav.index] = nu; } else { pushNav(tab, nu); } saveVisit(nu); } applyUrlToUi(nu, title || ''); } if (nav && nav.bridge && frame) { const view = bridgeViewUrl(nav.bridge); if (view) { frame.setAttribute('sandbox', 'allow-same-origin allow-forms allow-popups allow-scripts'); frame.src = view + '&t=' + Date.now(); } } } };
 })();
-
-  try {
-    window.addEventListener('message', function (ev) {
-      try {
-        if (!ev || !ev.data || ev.data.type !== 'solohost-open-novnc') return;
-        var btn = document.getElementById('btn-novnc');
-        if (btn) btn.click();
-      } catch (_) {}
-    });
-  } catch (_) {}

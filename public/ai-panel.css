@@ -410,12 +410,3 @@
 .agent-confirm-btns{display:flex;gap:8px;margin-top:8px}
 .agent-spin{width:14px;height:14px;border-radius:50%;border:2px solid #22c55e;border-top-color:transparent;animation:agentspin .8s linear infinite;flex:0 0 auto}
 @keyframes agentspin{to{transform:rotate(360deg)}}
-
-
-/* Agent time limit — stays inside Settings pane, never on tab bar */
-.panel-tabs .agent-time-field,
-.panel-tabs #agent-time-limit,
-.tab #agent-time-limit { display: none !important; }
-.agent-time-field { position: relative; z-index: 0; clear: both; width: 100%; box-sizing: border-box; }
-.agent-time-field input[type="number"] { width: 100%; box-sizing: border-box; max-width: 100%; }
-.settings-body { overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }

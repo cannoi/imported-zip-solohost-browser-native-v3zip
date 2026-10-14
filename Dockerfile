@@ -1,5 +1,5 @@
-# SoloHost Browser v10.25.20 — Chromium Bridge with shared-profile tab synchronization
-FROM mcr.microsoft.com/playwright:v1.51.1-jammy
+# SoloHost Browser v10.25.27 presentation=v10.20.2 — Chromium Bridge with shared-profile tab synchronization
+FROM mcr.microsoft.com/playwright:v1.49.1-jammy
 
 WORKDIR /app
 
@@ -57,7 +57,7 @@ COPY native ./native
 RUN chmod +x start.sh \
  && mkdir -p /app/data/pw-profiles /tmp/solohost-browser \
  && chmod -R a+rwX /app/data /tmp/solohost-browser \
- && node -e "require('./lib/app-adapter'); require('./lib/novnc-launcher'); console.log('adapter-ok')"
+ && node --check server.js && node --check lib/app-adapter.js
 
 EXPOSE 8080
 
