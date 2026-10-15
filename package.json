@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.25.32",
-  "description": "SoloHost Browser \u2014 full JS/cookies/storage in Chromium engine + safe ad filter",
+  "version": "10.25.33",
+  "description": "SoloHost Browser \u2014 Chromium ENGINE preferred; proxy only as last resort",
   "main": "server.js",
   "engines": {
     "node": ">=18"

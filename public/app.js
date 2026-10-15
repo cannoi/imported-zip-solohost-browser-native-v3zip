@@ -94,29 +94,32 @@
   function classifyUrl(url) {
     const h = hostOf(url);
     if (isNativeMediaOrDocumentUrl(url)) return MODE.DIRECT;
-    if (!h) return MODE.PROXY;
-    try { const bu = new URL(url); if (/(^|\.)bing\.com$/.test(bu.hostname) && /captcha|challenge|verify|pow/i.test(bu.pathname + bu.search)) return MODE.DIRECT; } catch (_) {}
-    if (isExternalAuthPath(url)) return MODE.EXTERNAL;
-    // YouTube → official player shell (PROXY) — unchanged from pre-noVNC
-    if (isYouTubeVideoUrl(url)) return MODE.PROXY;
+    if (!h) return MODE.ENGINE;
     try {
-      const yu = new URL(url);
-      const yh = yu.hostname.replace(/^www\./, '').toLowerCase();
-      let yp = yu.pathname || '/';
-      if (yp.length > 1 && yp.endsWith('/')) yp = yp.slice(0, -1);
-      if ((yh === 'youtube.com' || yh === 'm.youtube.com' || yh === 'youtu.be') &&
-          (yp === '/' || yp === '/feed' || yp.indexOf('/feed/') === 0)) {
-        return MODE.PROXY;
-      }
+      const bu = new URL(url);
+      if (/(^|\.)bing\.com$/.test(bu.hostname) && /captcha|challenge|verify|pow/i.test(bu.pathname + bu.search)) return MODE.DIRECT;
     } catch (_) {}
+    if (isExternalAuthPath(url)) return MODE.EXTERNAL;
     if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
     if (isDirectEmbed(url)) return MODE.DIRECT;
+    // Always Chromium ENGINE for interactive / SPA / media sites (never prefer PROXY)
+    if (isYouTubeVideoUrl(url) || /youtube\.com|youtu\.be/.test(h)) return MODE.ENGINE;
     if (/google\./.test(h)) return MODE.ENGINE;
-    if (/youtube\.com|youtu\.be/.test(h)) return MODE.PROXY;
-    if (/(^|\.)(facebook|fb|instagram|whatsapp|messenger|tiktok|x|twitter|reddit)\.com$/.test(h)) return MODE.ENGINE;
+    if (/(^|\.)(facebook|fb|instagram|whatsapp|messenger|tiktok|x|twitter|reddit|linkedin)\.com$/.test(h)) return MODE.ENGINE;
+    if (/(thanhnien|tuoitre|vnexpress|wikipedia|24h\.com)/.test(h)) return MODE.ENGINE;
     if (isLoginPath(url)) return MODE.ENGINE;
     return MODE.ENGINE;
   }
+
+  function mustUseEngine(url) {
+    const h = hostOf(url);
+    if (!h) return true;
+    if (isLoginPath(url) || isExternalAuthPath(url)) return true;
+    if (/google\.|youtube\.com|youtu\.be|bing\.com/.test(h)) return true;
+    if (/(facebook|instagram|tiktok|twitter|reddit|linkedin|shopee|lazada|amazon|thanhnien|tuoitre|vnexpress|wikipedia)/.test(h)) return true;
+    return false;
+  }
+
 
   function modeLabel(mode, lang) {
     const vi = {
@@ -1199,14 +1202,18 @@
       result = loadViaDirect(url, navigationTabId);
       if (!result.ok) result = loadViaProxy(url, navigationTabId);
     } else if (preferred === MODE.ENGINE) {
-      // Fast fail: if WebKit known down, skip bridge entirely
       result = await tryEngine();
       if (!result.ok) {
+        try { result = await tryEngine(); } catch (_) {}
+      }
+      if (!result.ok) {
         const reason = result.reason || 'engine_failed';
-        clientLog('warn', 'navigate_engine_fallback', { url, reason });
-        // Keep bridge session so Chromium tab stays aligned; proxy is display-only fallback.
+        clientLog('warn', 'navigate_engine_fallback', { url: url, reason: reason, mustEngine: mustUseEngine(url) });
         if (isLoginPath(url)) {
           result = loadViaExternal(url, 'login_requires_full_browser_context:' + reason, tab);
+        } else if (mustUseEngine(url)) {
+          clientLog('warn', 'navigate_engine_required_no_proxy', { url: url, reason: reason });
+          result = { ok: false, mode: MODE.ENGINE, reason: 'engine_required:' + reason, url: url };
         } else {
           result = loadViaProxy(url, navigationTabId);
           if (result.ok) {
@@ -1216,9 +1223,18 @@
         }
       }
     } else if (preferred === MODE.PROXY) {
-      result = loadViaProxy(url, navigationTabId);
+      if (mustUseEngine(url)) {
+        result = await tryEngine();
+        if (!result.ok) {
+          clientLog('warn', 'proxy_request_forced_engine_failed', { url: url });
+          result = { ok: false, mode: MODE.ENGINE, reason: 'engine_required_after_proxy_request', url: url };
+        }
+      } else {
+        result = loadViaProxy(url, navigationTabId);
+      }
     } else {
-      result = loadViaProxy(url, navigationTabId);
+      result = await tryEngine();
+      if (!result.ok && !mustUseEngine(url)) result = loadViaProxy(url, navigationTabId);
     }
 
     if (!result.ok && preferred !== MODE.EXTERNAL) {
