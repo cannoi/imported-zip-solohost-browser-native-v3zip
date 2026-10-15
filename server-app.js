@@ -277,7 +277,7 @@ function healthPayload() {
 // Quick search redirect (no JS required) — Google/YouTube shell forms
 app.get('/api/browser/go', (req, res) => {
   try {
-    const engine = String(req.query.engine || 'bing').toLowerCase();
+    const engine = String(req.query.engine || 'google').toLowerCase();
     const q = String(req.query.q || '').trim();
     if (!q) return res.status(400).type('html').send('<p>Missing q</p>');
     let target;
@@ -287,8 +287,10 @@ app.get('/api/browser/go', (req, res) => {
       target = 'https://www.bing.com/search?q=' + encodeURIComponent(q);
     } else if (engine === 'ddg' || engine === 'duckduckgo') {
       target = 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q);
+    } else if (engine === 'google') {
+      target = 'https://www.google.com/search?q=' + encodeURIComponent(q);
     } else {
-      target = 'https://www.google.com/search?gbv=1&hl=en&q=' + encodeURIComponent(q);
+      target = 'https://www.google.com/search?q=' + encodeURIComponent(q);
     }
     const dest = '/api/proxy?url=' + encodeURIComponent(target);
     res.redirect(302, dest);

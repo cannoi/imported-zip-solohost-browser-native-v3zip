@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.25.39",
-  "description": "SoloHost Browser \u2014 up to 50 virtual tabs, 6 hot Chromium pages",
+  "version": "10.25.40",
+  "description": "SoloHost Browser \u2014 Chromium + proxy only; default search Google",
   "main": "server.js",
   "engines": {
     "node": ">=18"

@@ -14,7 +14,7 @@
     url: '',
     lang: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_lang')) || 'en',
     theme: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_theme')) || 'rainbow',
-    searchEngine: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_engine')) || 'bing',
+    searchEngine: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_engine')) || 'google',
     customSearchUrl: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_custom_url')) || '',
     timeZone: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_timezone')) || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     localeReady: false,
@@ -835,7 +835,7 @@
 
   function buildSearchUrl(query) {
     const encoded = encodeURIComponent(String(query || '').trim());
-    const engine = String(state.searchEngine || 'bing').toLowerCase();
+    const engine = String(state.searchEngine || 'google').toLowerCase();
     if (engine === 'google') return 'https://www.google.com/search?q=' + encoded;
     if (engine === 'duckduckgo') return 'https://html.duckduckgo.com/html/?q=' + encoded;
     if (engine === 'brave') return 'https://search.brave.com/search?q=' + encoded;
@@ -844,7 +844,7 @@
       if (/^https?:\/\//i.test(template) && /(?:\{query\}|%s)/i.test(template))
         return template.replace(/\{query\}/gi, encoded).replace(/%s/gi, encoded);
     }
-    return 'https://www.bing.com/search?q=' + encoded;
+    return 'https://www.google.com/search?q=' + encoded;
   }
 
   function normalizeUrl(raw) {
@@ -1548,7 +1548,7 @@
   function closeSearchSettings() { const overlay = $('search-settings-overlay'); if (overlay) overlay.hidden = true; }
   function openSearchSettings() {
     const overlay = $('search-settings-overlay'); if (!overlay) return;
-    if ($('search-engine-select')) $('search-engine-select').value = state.searchEngine || 'bing';
+    if ($('search-engine-select')) $('search-engine-select').value = state.searchEngine || 'google';
     if ($('search-engine-custom')) $('search-engine-custom').value = state.customSearchUrl || '';
     if ($('search-engine-status')) $('search-engine-status').textContent = '';
     overlay.hidden = false; closeSettings();
@@ -1557,7 +1557,7 @@
   ['search-settings-close','search-settings-cancel'].forEach(id => { if ($(id)) $(id).addEventListener('click', closeSearchSettings); });
   if ($('search-settings-overlay')) $('search-settings-overlay').addEventListener('click', ev => { if (ev.target === $('search-settings-overlay')) closeSearchSettings(); });
   if ($('search-settings-save')) $('search-settings-save').addEventListener('click', () => {
-    const engine = String(($('search-engine-select') || {}).value || 'bing').toLowerCase();
+    const engine = String(($('search-engine-select') || {}).value || 'google').toLowerCase();
     const template = String(($('search-engine-custom') || {}).value || '').trim();
     const status = $('search-engine-status');
     if (engine === 'custom') {
@@ -1569,7 +1569,7 @@
         return;
       }
     }
-    state.searchEngine = ['bing','google','duckduckgo','brave','custom'].includes(engine) ? engine : 'bing';
+    state.searchEngine = ['google','bing','duckduckgo','brave','custom'].includes(engine) ? engine : 'google';
     state.customSearchUrl = template;
     try { localStorage.setItem('solo_search_engine', state.searchEngine); localStorage.setItem('solo_search_custom_url', template); } catch (_) {}
     if (status) status.textContent = state.lang === 'vi' ? 'Đã lưu công cụ tìm kiếm.' : 'Search engine saved.';
