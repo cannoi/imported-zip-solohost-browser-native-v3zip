@@ -102,8 +102,19 @@
     if (isExternalAuthPath(url)) return MODE.EXTERNAL;
     if (/(^|\.)(netflix|disneyplus|hulu|primevideo)\.com$/.test(h)) return MODE.EXTERNAL;
     if (isDirectEmbed(url)) return MODE.DIRECT;
-    // Always Chromium ENGINE for interactive / SPA / media sites (never prefer PROXY)
-    if (isYouTubeVideoUrl(url) || /youtube\.com|youtu\.be/.test(h)) return MODE.ENGINE;
+    // YouTube: keep PROXY priority (player/embed shell already optimized)
+    if (isYouTubeVideoUrl(url) || /youtube\.com|youtu\.be|youtube-nocookie\.com/.test(h)) return MODE.PROXY;
+    try {
+      const yu = new URL(url);
+      const yh = yu.hostname.replace(/^www\./, '').toLowerCase();
+      let yp = yu.pathname || '/';
+      if (yp.length > 1 && yp.endsWith('/')) yp = yp.slice(0, -1);
+      if ((yh === 'youtube.com' || yh === 'm.youtube.com' || yh === 'youtu.be') &&
+          (yp === '/' || yp === '/feed' || yp.indexOf('/feed/') === 0)) {
+        return MODE.PROXY;
+      }
+    } catch (_) {}
+    // Google / social / news / login → ENGINE (proxy layout is poor)
     if (/google\./.test(h)) return MODE.ENGINE;
     if (/(^|\.)(facebook|fb|instagram|whatsapp|messenger|tiktok|x|twitter|reddit|linkedin)\.com$/.test(h)) return MODE.ENGINE;
     if (/(thanhnien|tuoitre|vnexpress|wikipedia|24h\.com)/.test(h)) return MODE.ENGINE;
@@ -114,8 +125,10 @@
   function mustUseEngine(url) {
     const h = hostOf(url);
     if (!h) return true;
+    // YouTube is proxy-optimized — allow proxy path
+    if (/youtube\.com|youtu\.be|youtube-nocookie\.com/.test(h)) return false;
     if (isLoginPath(url) || isExternalAuthPath(url)) return true;
-    if (/google\.|youtube\.com|youtu\.be|bing\.com/.test(h)) return true;
+    if (/google\.|bing\.com/.test(h)) return true;
     if (/(facebook|instagram|tiktok|twitter|reddit|linkedin|shopee|lazada|amazon|thanhnien|tuoitre|vnexpress|wikipedia)/.test(h)) return true;
     return false;
   }

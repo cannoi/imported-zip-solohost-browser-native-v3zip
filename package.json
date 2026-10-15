@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.25.33",
-  "description": "SoloHost Browser \u2014 Chromium ENGINE preferred; proxy only as last resort",
+  "version": "10.25.34",
+  "description": "SoloHost Browser \u2014 ENGINE first; YouTube keeps PROXY priority",
   "main": "server.js",
   "engines": {
     "node": ">=18"
