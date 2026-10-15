@@ -1073,10 +1073,16 @@
   }
   function newTab(url, options) {
     options = options || {};
-    if (state.tabs.length >= 12) {
+    const MAX_TABS = Math.max(8, Math.min(50, Number(window.SOLOHOST_MAX_TABS) || 50));
+    if (state.tabs.length >= MAX_TABS) {
       const disposable = state.tabs.find(t => t.id !== state.activeTabId && (t.private || !t.url));
       if (disposable) closeTab(disposable.id);
-      else { showToast(state.lang === 'vi' ? 'Đã đạt giới hạn 12 tab. Hãy đóng một tab trước.' : '12-tab limit reached. Close a tab first.'); return null; }
+      else {
+        showToast(state.lang === 'vi'
+          ? ('Đã đạt giới hạn ' + MAX_TABS + ' tab. Hãy đóng một tab trước.')
+          : (MAX_TABS + '-tab limit reached. Close a tab first.'));
+        return null;
+      }
     }
     const tab = { id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7), title: options.private ? (state.lang === 'vi' ? 'Tab riêng tư' : 'Private tab') : (state.lang === 'vi' ? 'Tab mới' : 'New tab'), url: '', private: !!options.private, nav: null };
     state.tabs.push(tab); state.activeTabId = tab.id; renderTabs();
