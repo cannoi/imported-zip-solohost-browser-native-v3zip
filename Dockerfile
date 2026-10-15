@@ -56,8 +56,14 @@ COPY native ./native
 
 RUN chmod +x start.sh \
  && mkdir -p /app/data/pw-profiles /tmp/solohost-browser \
+ && (id pwuser >/dev/null 2>&1 || (groupadd -r pwuser && useradd -r -g pwuser -G audio,video pwuser)) \
+ && chown -R pwuser:pwuser /app /tmp/solohost-browser 2>/dev/null || chown -R 1000:1000 /app /tmp/solohost-browser 2>/dev/null || true \
  && chmod -R a+rwX /app/data /tmp/solohost-browser \
  && node -e "require('./lib/app-adapter'); require('./lib/novnc-launcher'); console.log('adapter-ok')"
+
+# Non-root runtime — reduces container-escape blast radius. Chromium still uses --no-sandbox
+# (required in many SoloHost Docker setups without SYS_ADMIN).
+USER pwuser
 
 EXPOSE 8080
 
