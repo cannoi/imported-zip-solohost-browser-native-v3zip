@@ -1414,6 +1414,11 @@
         return;
       }
       const url = data.url || '/novnc/vnc.html?autoconnect=1&resize=remote&path=websockify';
+      if (data.passwordRequired) {
+        alert(vi
+          ? 'Desktop đăng nhập dùng cùng mật khẩu Admin của app. Nhập mật khẩu đó khi noVNC hỏi Password.'
+          : 'Login desktop uses the same app Admin password. Enter that password when noVNC asks for Password.');
+      }
       window.open(url, 'solohost-novnc', 'noopener,noreferrer');
     } catch (e) {
       alert(vi ? 'Không mở được desktop đăng nhập. Tiếp tục dùng Bridge hoặc Open ↗.' : 'Cannot open login desktop. Continue with Bridge or Open ↗.');

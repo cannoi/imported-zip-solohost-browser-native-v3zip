@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.25.35",
-  "description": "SoloHost Browser \u2014 Chromium Bridge; stealth fingerprints; non-root Docker",
+  "version": "10.25.37",
+  "description": "SoloHost Browser \u2014 noVNC shares BROWSER_ACCESS_PASSWORD",
   "main": "server.js",
   "engines": {
     "node": ">=18"

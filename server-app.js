@@ -396,7 +396,8 @@ app.get('/api/novnc/status', async (req, res) => {
     enabled: true,
     ready: !!st.ready,
     url: '/novnc/vnc.html?autoconnect=1&resize=scale&quality=6&compression=2&path=websockify',
-    passwordRequired: false,
+    passwordRequired: !!st.passwordRequired,
+    passwordHint: st.passwordHint || (st.passwordRequired ? 'same_as_app_admin' : null),
     primary: 'bridge',
     role: 'login_secondary',
     browserMode: st.ready ? 'shared-headed-chromium' : 'start_required'
@@ -415,6 +416,8 @@ app.post('/api/novnc/start', async (req, res) => {
       ready: !!out.ready,
       error: out.error || null,
       url: out.ok ? '/novnc/vnc.html?autoconnect=1&resize=scale&quality=6&compression=2&path=websockify' : null,
+      passwordRequired: !!out.passwordRequired,
+      passwordHint: out.passwordHint || (out.passwordRequired ? 'same_as_app_admin' : null),
       primary: 'bridge',
       role: 'login_secondary'
     });
