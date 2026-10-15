@@ -385,6 +385,19 @@ app.delete('/api/engine/session/:id', requireEngineEnabled, async (req, res) => 
   }
 });
 
+app.post('/api/browser/engine/release', async (req, res) => {
+  try {
+    const pw = require('./lib/engine/playwright-engine');
+    if (typeof pw.sweepIdleSessions === 'function') await pw.sweepIdleSessions(true);
+    const out = typeof pw.releaseEngineIfIdle === 'function'
+      ? await pw.releaseEngineIfIdle(true)
+      : { released: false, reason: 'unsupported' };
+    res.json({ ok: true, ...out });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: String(e.message || e).slice(0, 200) });
+  }
+});
+
 app.get('/api/novnc/status', async (req, res) => {
   let novnc = { status: () => ({ featureEnabled: false, packagesPresent: false, ready: false }) };
   try { novnc = require('./lib/novnc-launcher'); } catch (_) {}

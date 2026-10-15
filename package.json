@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.25.37",
-  "description": "SoloHost Browser \u2014 noVNC shares BROWSER_ACCESS_PASSWORD",
+  "version": "10.25.38",
+  "description": "SoloHost Browser \u2014 aggressive Chromium RAM release + session caps",
   "main": "server.js",
   "engines": {
     "node": ">=18"
