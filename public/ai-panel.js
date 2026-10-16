@@ -806,6 +806,30 @@ function agentTimeLimitMs() {
     return Math.max(60000, Math.min(3600000, (min || 60) * 60000));
   } catch (_) { return 3600000; }
 }
+
+/** CHAT | QUICK_LOOKUP | TASK — lean intent (mirrors lib/agent-intent.js) */
+function classifyUserIntent(text) {
+  const t = String(text || '').trim().replace(/\s+/g, ' ');
+  if (!t) return { kind: 'CHAT', reason: 'empty' };
+  const low = t.toLowerCase();
+  const isBrief = t.length > 500 || /role\s*:|goal\s*:|step-by-step|required output|guardrails/i.test(t)
+    || /(?:hãy thực hiện|thực hiện ngay|execute now|run this task)/i.test(t);
+  const isTask = isBrief
+    || /(?:so sánh|so sanh|compare|versus|\bvs\.?\b)/i.test(low)
+    || /(?:giá|price|bao nhiêu tiền|how much).{0,80}(?:rẻ|cheap|nơi bán|where to buy|nhà bán|retailer|store)/i.test(low)
+    || /(?:nơi nào bán|where (?:can i )?buy|best price|giá rẻ nhất)/i.test(low)
+    || /(?:tổng hợp|digest|tin tức|news).{0,40}(?:24\s*h|hôm nay|today|nhiều nguồn)/i.test(low)
+    || /(?:nghiên cứu|research|deep dive|thu thập|extract)/i.test(low)
+    || /(?:tìm\s+\d+|find\s+\d+|top\s*\d+|liệt kê)/i.test(low)
+    || /(?:iphone|samsung|pixel|laptop|macbook).{0,60}(?:giá|price|bao nhiêu)/i.test(low)
+    || /(?:giá|price).{0,60}(?:iphone|samsung|pixel|laptop|macbook)/i.test(low)
+    || ((t.match(/https?:\/\/[^\s]+/gi) || []).length >= 2);
+  if (isTask) return { kind: 'TASK', reason: 'multi_step_or_research' };
+  if (/^https?:\/\//i.test(t) || /^(?:mở|open|truy cập|go to)\s+https?:\/\//i.test(t)) return { kind: 'QUICK_LOOKUP', reason: 'url' };
+  if (/^(?:hãy\s+|please\s+)?(?:mở|open|tìm trên|search on)\s+(?:youtube|google|facebook|tiktok)\b/i.test(t)) return { kind: 'QUICK_LOOKUP', reason: 'single_site' };
+  return { kind: 'CHAT', reason: 'conversational' };
+}
+
 function isAgentBrief(text) {
   const t = String(text || '');
   if (t.length > 500) return true;
@@ -817,13 +841,10 @@ function isAgentBrief(text) {
 function shouldRunAgent(text) {
   if (!window.SoloAgent) return false;
   if (agentCtx) return true;
-  const t = String(text || '').trim();
-  if (isAgentBrief(t)) return true;
-  // Avoid \b after Vietnamese verbs
-  const imperative = /^(?:hãy\s+|vui lòng\s+|giúp tôi\s+|giup toi\s+|please\s+|can you\s+|could you\s+)?(?:mở|mo\b|truy cập|truy cap|đi tới|di toi|tìm kiếm|tim kiem|tìm và mở|tim va mo|bấm|bam|nhấn|nhan|nhập|nhap|cuộn|cuon|chọn|chon|open\b|visit\b|go to|navigate to|search(?: for)?|find and open|click\b|type into|scroll to|select\b|buy\b|purchase|checkout|order|add to cart|nghe|phát|phat|play\b|nghiên cứu|nghien cuu|research)/i.test(t);
-  const hasTarget = /https?:\/\/|www\.|youtube|google|bing|facebook|tiktok|instagram|reddit|wikipedia|github|pypi|huggingface|website|web page|trang web|trang hiện tại|current page|video|link|nhạc|nhac|music|framework|llm|agent/i.test(t);
-  return imperative && hasTarget && t.length < 12000;
+  const c = classifyUserIntent(text);
+  return c.kind === 'TASK';
 }
+
 
 /** Fast local browser action — no AI round-trip for clear open/search intents */
 function resolveLocalBrowserAction(text) {
