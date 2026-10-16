@@ -43,7 +43,9 @@
         bridge = browser().getBridgeSession ? browser().getBridgeSession() : bridge;
       }
       if (!bridge || !bridge.sessionId) throw new Error('browser_session_unauthorized');
-      const started = await api('/api/browser/agent/tasks', { method: 'POST', body: JSON.stringify({ sessionId: bridge.sessionId, token: bridge.token, task, lang: (browser().state && browser().state.lang) || 'en', history, maxSteps: opts.maxSteps || 200, maxMs: opts.maxMs || (Number(localStorage.getItem('solo_agent_time_min')||60)*60000), workMemory: opts.workMemory || null }) });
+      const started = opts.resumeTaskId && opts.clarification
+        ? await api('/api/browser/agent/sessions/' + encodeURIComponent(bridge.sessionId) + '/tasks/' + encodeURIComponent(opts.resumeTaskId) + '/answer', { method: 'POST', body: JSON.stringify({ token: bridge.token, text: opts.clarification }) })
+        : await api('/api/browser/agent/tasks', { method: 'POST', body: JSON.stringify({ sessionId: bridge.sessionId, token: bridge.token, task, resumeTaskId: opts.resumeTaskId || null, lang: (browser().state && browser().state.lang) || 'en', history, maxSteps: opts.maxSteps || 200, maxMs: opts.maxMs || (Number(localStorage.getItem('solo_agent_time_min')||60)*60000), workMemory: opts.workMemory || null }) });
       S.taskId = started.taskId;
       while (!S.pollAbort && !S.stop) {
         const st = await api('/api/browser/agent/sessions/' + encodeURIComponent(bridge.sessionId) + '/tasks/' + encodeURIComponent(S.taskId) + '?after=' + cursor, { method: 'GET' });

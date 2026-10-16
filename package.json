@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.29.0",
+  "version": "10.30.0",
   "description": "SoloHost Browser \u2014 Agent evidence ledger, research tools, history fix",
   "main": "server.js",
   "engines": {
@@ -8,7 +8,7 @@
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node test-syntax.js && node test-v10.25.23-legacy-extraction.js && node test-legacy-content-restoration.js && node test.js && node test-security.js && node test-bridge.js && node test-ai-compat.js && node test-agent.js && node test-backend-agent.js && node test-youtube.js && node test-youtube-click-routing.js && node test-mobile-resilience.js && node test-bing-default.js && node test-browser-standards.js && node test-focused-content.js && node test-adaptive-layout.js && node test-interaction-performance.js && node test-context-menu-tabs.js && node test-v10.25.23-tab-sync.js && node test-media-search-settings.js && node test-ai-tasks-playlist.js && node test-ai-memory-music-unified.js && node test-perf-ssrf.js && node --check lib/engine/playwright-engine.js && node test-v10.23.0-upgrade.js && node test-novnc-upgrade.js && node test-v10.25.0-audio.js && node test-agent-v1026.js && node test-v10.27-bridge-ux.js && node test-v10.27.1-phase34.js && node test-agent-benchmark.js && node test-agent-report.js && node test-agent-evidence-v1029.js",
+    "test": "node test-syntax.js && node test-v10.25.23-legacy-extraction.js && node test-legacy-content-restoration.js && node test.js && node test-security.js && node test-bridge.js && node test-ai-compat.js && node test-agent.js && node test-backend-agent.js && node test-youtube.js && node test-youtube-click-routing.js && node test-mobile-resilience.js && node test-bing-default.js && node test-browser-standards.js && node test-focused-content.js && node test-adaptive-layout.js && node test-interaction-performance.js && node test-context-menu-tabs.js && node test-v10.25.23-tab-sync.js && node test-media-search-settings.js && node test-ai-tasks-playlist.js && node test-ai-memory-music-unified.js && node test-perf-ssrf.js && node --check lib/engine/playwright-engine.js && node test-v10.23.0-upgrade.js && node test-novnc-upgrade.js && node test-v10.25.0-audio.js && node test-agent-v1026.js && node test-v10.27-bridge-ux.js && node test-v10.27.1-phase34.js && node test-agent-benchmark.js && node test-agent-report.js && node test-agent-evidence-v1029.js && node test-agent-v1030.js",
     "test:e2e": "node test-agent-e2e.js",
     "test:agent": "node test-agent-v1026.js"
   },

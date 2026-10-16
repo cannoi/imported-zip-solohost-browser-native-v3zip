@@ -1,0 +1,15 @@
+'use strict';
+const assert = require('assert');
+const analyzer = require('./lib/agent-task-analyzer');
+const planner = require('./lib/browser-agent');
+const long = 'Role: analyst\nGoal: Review news\nGuardrails: Use public sources only\nRequired Output Format:\nExecutive Summary\nTrending Keywords\n' + 'x'.repeat(3000);
+const spec = analyzer.analyzeTask(long, 'en');
+assert.ok(spec.output_format.startsWith('Executive Summary\nTrending Keywords'));
+assert.ok(spec.guardrails.join(' ').includes('Use public sources only'));
+assert.ok(long.length > 3000, 'long brief fixture');
+const ask = planner.validateAction({ type: 'ask_user', question: 'Please provide a repository URL' }, { elements: [] });
+assert.ok(ask.ok, 'ask_user action should validate');
+assert.strictEqual(ask.action.question || ask.action.message, 'Please provide a repository URL');
+const checklist = analyzer.buildChecklist({ kind: 'news', sources: ['a.test'], output_format: '## Executive Summary' });
+assert.ok(checklist.citation_required && checklist.sources.includes('a.test'));
+console.log('v10.30.0 task analyzer tests passed');

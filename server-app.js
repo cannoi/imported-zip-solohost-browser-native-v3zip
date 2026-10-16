@@ -88,7 +88,7 @@ let aiCompat = softRequire('ai-compat', './lib/ai-compat', {
 try { installShutdownHooks(); } catch (_) {}
 try { appLog.configure(DATA_DIR); } catch (_) {}
 const PKG = (() => {
-  try { return require('./package.json'); } catch { return { version: '10.25.23' }; }
+  try { return require('./package.json'); } catch { return { version: '10.30.0' }; }
 })();
 
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* ignore */ }
@@ -266,7 +266,7 @@ function healthPayload() {
     status: 'ok',
     ok: true,
     service: 'solohost-browser',
-    version: PKG.version || '10.25.23',
+    version: PKG.version || '10.30.0',
     mode: 'hybrid-proxy',
     engine: engineCaps.detect(),
     port: PORT,
@@ -611,7 +611,7 @@ app.post('/api/browser/agent/tasks', async (req, res) => {
     const body = req.body || {};
     const session = domBridge.authSession(String(body.sessionId || ''), String(body.token || req.get('x-session-token') || ''));
     if (!session) return res.status(401).json({ ok: false, error: 'browser_session_unauthorized' });
-    const out = await backendAgent.start({ ai, session, task: body.task, lang: body.lang, history: body.history, maxSteps: body.maxSteps, maxMs: body.maxMs, workMemory: body.workMemory });
+    const out = await backendAgent.start({ ai, session, task: body.task, lang: body.lang, history: body.history, maxSteps: body.maxSteps, maxMs: body.maxMs, workMemory: body.workMemory, resumeTaskId: body.resumeTaskId });
     appLog.log('info', 'agent.task.started', { taskId: out.taskId, sessionId: session.id });
     res.status(202).json(out);
   } catch (e) {
@@ -626,6 +626,15 @@ app.get('/api/browser/agent/sessions/:sessionId/tasks/:taskId', (req, res) => {
   if (!out) return res.status(404).json({ ok: false, error: 'task_not_found' });
   res.json(out);
 });
+app.post('/api/browser/agent/sessions/:sessionId/tasks/:taskId/answer', async (req, res) => {
+  const body = req.body || {};
+  const session = domBridge.authSession(req.params.sessionId, String(req.get('x-session-token') || body.token || ''));
+  if (!session) return res.status(401).json({ ok: false, error: 'browser_session_unauthorized' });
+  const out = await backendAgent.answer(req.params.taskId, session.id, body.text);
+  if (!out) return res.status(404).json({ ok: false, error: 'task_not_found' });
+  res.status(202).json(out);
+});
+
 app.post('/api/browser/agent/sessions/:sessionId/tasks/:taskId/stop', (req, res) => {
   const body = req.body || {};
   const session = domBridge.authSession(req.params.sessionId, String(req.get('x-session-token') || body.token || ''));
@@ -665,7 +674,7 @@ try {
   const fbOpts = {
     appId: process.env.SHFH_APP_ID || 'solohost-browser',
     appName: 'SoloHost Browser',
-    version: PKG.version || '10.25.23'
+    version: PKG.version || '10.30.0'
   };
   if (process.env.SHFH_HUB_ID) fbOpts.hubId = process.env.SHFH_HUB_ID;
   if (process.env.SHFH_HUB_URL) fbOpts.baseUrl = process.env.SHFH_HUB_URL;
