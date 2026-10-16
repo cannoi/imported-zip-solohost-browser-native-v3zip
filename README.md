@@ -1,4 +1,4 @@
-# SoloHost Browser v10.25.23
+# SoloHost Browser v10.30.1
 
 Version 10.16.0 routes YouTube watch/Shorts/live clicks through the official player shell and improves policy-compliant diagnostics. Version 10.15.0 adds a configurable default search engine (Bing, Google, DuckDuckGo, Brave Search, or a custom HTTP(S) URL template), native browser viewing for direct media/images/PDF links, and a wider but explicit CSP allowlist for official media embeds (YouTube, TikTok, Vimeo, Spotify, Twitch, Dailymotion). The AI Panel knowledge is generated at runtime from the installed package version and engine capabilities, and documents current architecture, search settings, media support and limitations.
 
@@ -60,3 +60,10 @@ Historical release note. The v10.25.23 release above further reverts post-baseli
 - Removed the newer DOM-based family heuristics and page-family marker injection from the rendering path.
 - Retained current sanitizer hardening, safe base URL handling, SoloHost link routing, tab synchronization, popup handling, persistent profiles, Reader, AI, media and other unrelated features.
 - Exact v10.20.1/v10.20.2 archives were not available for direct comparison. See `docs/V10.25.22_V10.20.0_BEHAVIOR_RESTORATION_REPORT.md` for the baseline, tests and limitations.
+
+## v10.30.1 — Agent session recovery and anti-hang fix
+
+- Recovers a stale Playwright engine session and retries navigation once.
+- Refreshes the bridge snapshot after recovering from a stale browser event session.
+- Tracks source navigation success/failure and prevents the required-source completion gate from remaining indefinitely pending.
+- See `docs/V10.30.1_AGENT_HANG_FIX_REPORT.md` for diagnosis, changes, and validation limitations.

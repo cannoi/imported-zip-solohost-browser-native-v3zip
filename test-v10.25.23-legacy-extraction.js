@@ -8,7 +8,7 @@ const engine = read('lib/engine/playwright-engine.js');
 const bridge = read('lib/engine/dom-bridge.js');
 const proxy = read('lib/frame-proxy.js');
 const pkg = require('./package.json');
-assert.strictEqual(pkg.version, '10.30.0');
+assert.strictEqual(pkg.version, '10.30.1');
 const start = engine.indexOf('async function markInteractive(page)');
 const end = engine.indexOf('\nasync function navigate(', start);
 assert(start >= 0 && end > start, 'legacy markInteractive extraction function exists');

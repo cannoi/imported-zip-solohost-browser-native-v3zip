@@ -9,7 +9,7 @@ assert.ok(helper, 'YouTube video URL classifier exists');
 assert.ok(app.includes('if (isYouTubeVideoUrl(url) || /youtube\\.com'), 'video page classification routes to official player shell');
 assert.ok(/youtube\.video_handoff/.test(app), 'click handoff is observable in logs');
 assert.ok(/navigate\(abs, \{ force: true, mode: MODE\.PROXY \}\)/.test(app), 'video links navigate through proxy player route');
-assert.strictEqual(caps.version, '10.30.0');
+assert.strictEqual(caps.version, '10.30.1');
 assert.strictEqual(caps.features.youtubeVideoClickHandoff, true);
 // Exercise equivalent URL policy cases without relying on live YouTube or anti-bot bypasses.
 function isVideo(raw) {
