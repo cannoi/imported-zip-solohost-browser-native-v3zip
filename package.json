@@ -1,6 +1,6 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.31.0",
+  "version": "10.31.1",
   "description": "SoloHost Browser \u2014 Agent evidence ledger, research tools, history fix",
   "main": "server.js",
   "engines": {

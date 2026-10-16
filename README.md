@@ -1,4 +1,4 @@
-# SoloHost Browser v10.31.0
+# SoloHost Browser v10.31.1
 
 Version 10.16.0 routes YouTube watch/Shorts/live clicks through the official player shell and improves policy-compliant diagnostics. Version 10.15.0 adds a configurable default search engine (Bing, Google, DuckDuckGo, Brave Search, or a custom HTTP(S) URL template), native browser viewing for direct media/images/PDF links, and a wider but explicit CSP allowlist for official media embeds (YouTube, TikTok, Vimeo, Spotify, Twitch, Dailymotion). The AI Panel knowledge is generated at runtime from the installed package version and engine capabilities, and documents current architecture, search settings, media support and limitations.
 
@@ -69,10 +69,10 @@ Historical release note. The v10.25.23 release above further reverts post-baseli
 - See `docs/V10.30.1_AGENT_HANG_FIX_REPORT.md` for diagnosis, changes, and validation limitations.
 
 
-## v10.31.0 — Agent isolation, link integrity, structured search
+## v10.31.1 — Agent isolation, link integrity, structured search
 
 - Server-owned per-task memory and private browser session; new tasks no longer inherit the active page or client-supplied findings/history.
 - Evidence-led reports exclude search-result/CAPTCHA/redirector URLs and unledgered links; citations resolve to evidence entries.
 - Structured public search defaults to Bing with DuckDuckGo/Brave fallback; SERP results are candidates, not evidence.
 - Markdown links/tables render safely; system errors are shown under scope and limitations, not Findings.
-- See `docs/V10.31.0_AGENT_PRO_REPORT.md` for verified tests and incomplete acceptance items.
+- See `docs/V10.31.1_AGENT_PRO_REPORT.md` for verified tests and incomplete acceptance items.

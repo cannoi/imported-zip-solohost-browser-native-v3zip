@@ -12,7 +12,7 @@ const adapter = read('lib/app-adapter.js');
 const readme = read('README.md');
 const pkg = JSON.parse(read('package.json'));
 
-assert.strictEqual(pkg.version, '10.31.0', 'version is bumped');
+assert.strictEqual(pkg.version, '10.31.1', 'version is bumped');
 assert(engine.includes("openerPage.on('popup'"), 'popup handler belongs to opener page');
 assert(!engine.includes("state.context.on('page'"), 'no per-session shared-context page listener');
 assert(engine.includes('findUnownedPage(s.context, s) || await s.context.newPage()'), 'recovery must not steal context.pages()[0]');

@@ -3,6 +3,8 @@ const assert = require('assert');
 const fs = require('fs');
 const bridge = fs.readFileSync(require.resolve('./lib/engine/dom-bridge'), 'utf8');
 const agent = fs.readFileSync(require.resolve('./lib/backend-agent'), 'utf8');
+const app = fs.readFileSync(require.resolve('./public/app.js'), 'utf8');
+const client = fs.readFileSync(require.resolve('./public/browser-agent.js'), 'utf8');
 
 assert.ok(bridge.includes('async function recreatePlaywrightSession(session)'), 'bridge has explicit Playwright session recovery');
 assert.ok(bridge.includes('bridge.playwright_session_recovered'), 'session recovery is observable in logs');
@@ -12,4 +14,9 @@ assert.ok(agent.includes("status: 'failed', reason: clip((r && r.error) || 'navi
 assert.ok(agent.includes('task.noProgressDoneAttempts < 2'), 'done gate has bounded retry attempts');
 assert.ok(agent.includes('Finalizing a partial report with explicit limitations.'), 'source failure ends in partial report instead of infinite pending status');
 assert.ok(agent.includes('sourcesStatus: task.sourcesStatus || {}'), 'source state is persisted for resume');
-console.log('v10.31.0 session recovery + bounded source gate regression tests passed');
+assert.ok(app.includes('b = await tabBridgeSession(tab, true)'), 'Agent session bootstrap creates a bridge session directly instead of calling an undefined helper');
+assert.ok(app.includes('setTimeout(() => ac.abort(), 20000)'), 'session creation allows cold Chromium startup');
+assert.ok(app.includes('nav.bridgePromise'), 'parallel session creation requests are coalesced per tab');
+assert.ok(app.includes('/state?token='), 'cached session credentials are validated and stale sessions recreated');
+assert.ok(client.includes('window.soloBridgeLastError'), 'session failures expose the actual backend error');
+console.log('v10.31.1 session recovery + bounded source gate regression tests passed');

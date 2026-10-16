@@ -30,9 +30,12 @@
           bridge = browser().getActiveBridge && browser().getActiveBridge();
         }
       } catch (e) { S.sessionError = String(e && e.message || e); }
+      if (!bridge || !bridge.sessionId || !bridge.token) S.sessionError = S.sessionError || window.soloBridgeLastError || '';
     }
     if (!bridge || !bridge.sessionId || !bridge.token) {
-      return { status: 'error', message: 'Không tạo được phiên backend cho Agent. Thử tạo lại phiên; nếu lỗi còn tiếp diễn, kiểm tra trạng thái Playwright/Chromium. ' + (S.sessionError || ''), history: [] };
+      const detail = S.sessionError ? ' (' + S.sessionError + ')' : '';
+      const vi = (browser().state && browser().state.lang) === 'vi';
+      return { status: 'error', message: (vi ? 'Không tạo được phiên backend cho Agent. Hãy thử lại; nếu lỗi tiếp diễn, kiểm tra trạng thái Playwright/Chromium.' : 'Could not create a backend session for the Agent. Please retry; if it persists, check Playwright/Chromium status.') + detail, history: [] };
     }
     S.running = true; S.stop = false; S.pollAbort = false; S.bridge = bridge; S.taskId = null;
     let cursor = 0, history = Array.isArray(opts.history) ? opts.history.slice() : [];

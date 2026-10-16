@@ -243,29 +243,43 @@
     try { let id = localStorage.getItem('solo_browser_profile_id'); if (/^[a-f0-9]{32}$/i.test(id || '')) return id.toLowerCase(); const b = new Uint8Array(16); if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(b); else for (let i=0;i<b.length;i++) b[i]=Math.floor(Math.random()*256); id = Array.from(b, x => x.toString(16).padStart(2,'0')).join(''); localStorage.setItem('solo_browser_profile_id', id); return id; } catch (_) { return ''; }
   }
 
-  async function tabBridgeSession(tab) {
+  async function tabBridgeSession(tab, forceNew) {
     if (!state.localeReady && localeSyncPromise) {
       try { await Promise.race([localeSyncPromise, new Promise(resolve => setTimeout(resolve, 1600))]); } catch (_) {}
     }
     const nav = ensureTabNav(tab);
-    if (nav.bridge && nav.bridge.sessionId && nav.bridge.token) return nav.bridge;
-    const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = ac ? setTimeout(() => ac.abort(), 2500) : null;
-    try {
-      const r = await fetch('/api/browser/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ privateMode: !!tab.private, profileId: browserProfileId(), tabKey: String(tab.id || ''), locale: state.lang === 'vi' ? 'vi-VN' : 'en-US', timezoneId: state.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }),
-        signal: ac ? ac.signal : undefined
-      });
-      const j = await r.json();
-      if (j && j.ok && j.sessionId && j.token) {
+    if (!nav) return null;
+    if (!forceNew && nav.bridge && nav.bridge.sessionId && nav.bridge.token) return nav.bridge;
+    // A Playwright context/page may take several seconds to start on a cold SoloHost.
+    // Share one in-flight creation per tab and do not abort it after the old 2.5s limit.
+    if (nav.bridgePromise) return nav.bridgePromise;
+    nav.bridgePromise = (async () => {
+      const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const timer = ac ? setTimeout(() => ac.abort(), 20000) : null;
+      try {
+        const r = await fetch('/api/browser/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ privateMode: !!tab.private, profileId: browserProfileId(), tabKey: String(tab.id || ''), locale: state.lang === 'vi' ? 'vi-VN' : 'en-US', timezoneId: state.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }),
+          signal: ac ? ac.signal : undefined
+        });
+        const j = await r.json().catch(() => null);
+        if (!r.ok || !j || !j.ok || !j.sessionId || !j.token) {
+          window.soloBridgeLastError = (j && (j.error || j.message)) || ('HTTP ' + r.status);
+          return null;
+        }
         nav.bridge = { sessionId: j.sessionId, token: j.token, backend: j.backend };
+        window.soloBridgeLastError = '';
         return nav.bridge;
+      } catch (e) {
+        window.soloBridgeLastError = e && e.name === 'AbortError' ? 'backend_session_timeout_20s' : String(e && e.message || e);
+        return null;
+      } finally {
+        if (timer) clearTimeout(timer);
+        nav.bridgePromise = null;
       }
-    } catch (_) {}
-    finally { if (timer) clearTimeout(timer); }
-    return null;
+    })();
+    return nav.bridgePromise;
   }
 
   function bridgeHeaders(b) {
@@ -2569,21 +2583,22 @@
     return nav && nav.bridge ? { sessionId: nav.bridge.sessionId, token: nav.bridge.token, backend: nav.bridge.backend, url: state.url || '' } : null;
   }
   async function ensureBridgeSession() {
+    const tab = getActiveTab();
     let b = getBridgeSession();
-    if (b && b.sessionId && b.token) return b;
-    try {
-      // Create a lightweight session via navigate to about:blank / example
-      if (typeof ensureEngineSession === 'function') {
-        await ensureEngineSession(getActiveTab());
-      } else if (typeof createBridgeSession === 'function') {
-        await createBridgeSession(getActiveTab());
-      } else {
-        // Do not navigate to a placeholder URL just to initialize the Agent.
-        // Return null so the UI can offer a retry without changing the user's page.
-        return null;
-      }
-    } catch (_) {}
-    return getBridgeSession();
+    // Validate cached credentials; stale sessions can survive tab changes or backend restarts.
+    if (b && b.sessionId && b.token) {
+      try {
+        const r = await fetch('/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '/state?token=' + encodeURIComponent(b.token), { cache: 'no-store' });
+        const j = await r.json().catch(() => null);
+        if (r.ok && j && j.ok) return b;
+      } catch (_) {}
+      const nav = ensureTabNav(tab);
+      if (nav) nav.bridge = null;
+      b = null;
+    }
+    b = await tabBridgeSession(tab, true);
+    if (!b) window.soloBridgeLastError = window.soloBridgeLastError || 'backend_session_create_failed';
+    return b;
   }
   window.SoloBrowser = { navigate, extractPage, aiProcess, state, newTab, openLibrary, addCurrentUrlToPlaylist, refreshHomeLibrary, runScript, stopScript, showTasksPanel() { showStart(); openHomePanel('panel-scripts'); refreshHomeLibrary(); }, openHomePanel, getActiveBridge: getBridgeSession, getBridgeSession, ensureBridgeSession,
     softRefreshActiveBridge: softRefreshActiveBridge, refreshBridgeView() {
