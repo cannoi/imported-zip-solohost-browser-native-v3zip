@@ -13,12 +13,10 @@ services:
       SOLOHOST_BROWSER_HEADFUL: "0"
       HOME: "/tmp/solohost-browser"
       SOLOHOST_PLAYWRIGHT: "1"
-      SOLOHOST_BROWSER_ENGINE: "chromium"
-      SOLOHOST_BROWSER_PERSIST_SESSIONS: "1"
+            SOLOHOST_BROWSER_PERSIST_SESSIONS: "1"
       SOLOHOST_BROWSER_CONTENT_MODE: "adaptive"
       SOLOHOST_BROWSER_BLOCK_ADS: "1"
-      SOLOHOST_WEBKIT: "0"
-      SOLOHOST_DATA_DIR: "/app/data"
+            SOLOHOST_DATA_DIR: "/app/data"
     restart: unless-stopped
     labels:
       pi.ui.primary: "true"

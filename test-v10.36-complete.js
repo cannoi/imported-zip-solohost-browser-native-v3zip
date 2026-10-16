@@ -1,0 +1,17 @@
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+assert.ok(fs.existsSync('lib/net-guard.js'));
+assert.ok(fs.existsSync('lib/agent-web.js'));
+assert.ok(fs.existsSync('lib/agent-planner.js'));
+assert.ok(!fs.existsSync('lib/engine/live-stream.js'), 'live-stream removed');
+assert.ok(!fs.existsSync('public/live-view.js'), 'live-view removed');
+const fp = fs.readFileSync('lib/frame-proxy.js', 'utf8');
+assert.ok(fp.split('\n').length <= 400, 'frame-proxy lines ' + fp.split('\n').length);
+assert.ok(!fs.readFileSync('Dockerfile', 'utf8').includes('COPY native'));
+const idx = fs.readFileSync('public/index.html', 'utf8');
+assert.ok(!idx.includes('live-view.js'));
+const runner = require('./lib/agent-runner');
+assert.strictEqual(typeof runner.runDag, 'function');
+console.log('[PASS] v10.36 complete checks');

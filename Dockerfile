@@ -1,4 +1,4 @@
-# SoloHost Browser v10.31.1 — Chromium Bridge with shared-profile tab synchronization
+# SoloHost Browser v10.35.0 — Chromium Bridge with shared-profile tab synchronization
 FROM mcr.microsoft.com/playwright:v1.51.1-jammy
 
 WORKDIR /app
@@ -25,8 +25,6 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     HOME=/tmp/solohost-browser \
     SOLOHOST_PLAYWRIGHT=1 \
-    SOLOHOST_WEBKIT=0 \
-    SOLOHOST_WEBKIT_BRIDGE=0 \
     SOLOHOST_DATA_DIR=/app/data \
     SOLOHOST_NOVNC_ENABLED=1 \
     SOLOHOST_NOVNC_PORT=6080 \
@@ -52,7 +50,6 @@ COPY server.js server-app.js start.sh ./
 COPY lib ./lib
 COPY public ./public
 COPY config_options.yml ./
-COPY native ./native
 
 RUN chmod +x start.sh \
  && mkdir -p /app/data/pw-profiles /tmp/solohost-browser \

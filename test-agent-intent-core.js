@@ -1,0 +1,14 @@
+'use strict';
+const assert = require('assert');
+const intent = require('./lib/agent-intent');
+const planner = require('./lib/agent-planner');
+assert.strictEqual(intent.classifyIntent('Xin chào').kind, 'CHAT');
+assert.strictEqual(intent.classifyIntent('https://example.com').kind, 'QUICK_LOOKUP');
+assert.strictEqual(intent.classifyIntent('Giá iPhone 18 và nơi nào bán rẻ?').kind, 'TASK');
+const plan = planner.planFromRules('Giá iPhone 18 và nơi nào bán rẻ?', 'vi');
+assert.strictEqual(plan.intent, 'TASK');
+assert.ok(plan.jobs.length >= 3, 'expected parallel retail jobs');
+assert.ok(plan.jobs.some((j) => j.kind === 'synthesize'));
+const state = planner.applyPlan(planner.createTaskState('test'), plan);
+assert.ok(Object.keys(state.jobStates).length >= 3);
+console.log('[PASS] agent-intent-core + planner');

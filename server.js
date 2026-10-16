@@ -155,12 +155,12 @@ process.on('SIGINT', () => server.close(() => process.exit(0)));
 
 // Live streaming WebSocket (CDP screencast) — optional, fails soft
 try {
-  const liveStream = require('./lib/engine/live-stream');
+//   const liveStream = require('./lib/engine/live-stream'); // removed v10.36
   const domBridge = require('./lib/engine/dom-bridge');
   const pe = require('./lib/engine/playwright-engine');
   if (typeof global.__SOLOHOST_HTTP_SERVER__ !== 'undefined') {
-    liveStream.attachToServer(global.__SOLOHOST_HTTP_SERVER__, { domBridge, playwrightEngine: pe });
+//     liveStream.attachToServer(global.__SOLOHOST_HTTP_SERVER__, { domBridge, playwrightEngine: pe }); // removed v10.36
   }
 } catch (e) {
-  console.error('[warn] live-stream:', e && e.message);
+//   console.error('[warn] live-stream:', e && e.message); // removed v10.36
 }
