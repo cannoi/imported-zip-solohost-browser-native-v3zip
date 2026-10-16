@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.26.0",
-  "description": "SoloHost Browser \u2014 Agent v10.26 live observe + multi-action + safe tools",
+  "version": "10.26.1",
+  "description": "SoloHost Browser \u2014 agent status() fix + observe value fields",
   "main": "server.js",
   "engines": {
     "node": ">=18"

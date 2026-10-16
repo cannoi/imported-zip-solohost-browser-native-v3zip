@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const backend = require('./lib/backend-agent');
 const html = `<!doctype html><html><head><style>body{color:red}</style></head><body><h1>News &amp; Updates</h1><a data-sh-id="e2" href="https://example.com/news">Read story</a><input data-sh-id="e3" type="text" placeholder="Search" value="news"><input data-sh-id="e4" type="password" placeholder="Password"><button data-sh-id="e5">Search</button><script>document.body.innerHTML='pwned'</script></body></html>`;
-const obs = backend.observeSession({ html, url: 'https://example.com/', title: 'Example', audit: { textLength: 15, controls: 3 } });
+const obs = backend.observeHtmlFallback({ html, url: 'https://example.com/', title: 'Example', audit: { textLength: 15, controls: 3 } });
 assert.match(obs.text, /News & Updates/);
 assert.ok(obs.elements.some(e => e.tag === 'a' && e.href === 'https://example.com/news'));
 assert.ok(obs.elements.some(e => e.tag === 'input' && /secret field/.test(e.label)));
