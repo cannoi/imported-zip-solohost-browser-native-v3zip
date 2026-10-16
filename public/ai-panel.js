@@ -197,6 +197,10 @@ function renderAgentReportCard(out, vi) {
           return '<a class="agent-link" href="' + escapeHtml(u) + '" target="_blank" rel="noopener">' + escapeHtml(u) + '</a>';
         }).join('') + '</div>';
     }
+    if (report.limitations || (report.sources_status && Object.keys(report.sources_status).length)) {
+      const lim = report.limitations || '';
+      extra.innerHTML += '<h4 class="agent-h">' + (vi ? 'Phạm vi & hạn chế' : 'Scope & limitations') + '</h4><p>' + escapeHtml(lim || (vi ? 'Một số nguồn có thể chưa truy cập được.' : 'Some sources may be incomplete.')) + '</p>';
+    }
     if (report.steps && report.steps.length) {
       extra.innerHTML += '<details class="agent-steps"><summary>' + (vi ? 'Các bước (' + report.steps.length + ')' : 'Steps (' + report.steps.length + ')') + '</summary><ol>' +
         report.steps.map(function (s) {
