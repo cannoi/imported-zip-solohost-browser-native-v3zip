@@ -12,14 +12,14 @@ const adapter = read('lib/app-adapter.js');
 const readme = read('README.md');
 const pkg = JSON.parse(read('package.json'));
 
-assert.strictEqual(pkg.version, '10.30.1', 'version is bumped');
+assert.strictEqual(pkg.version, '10.31.0', 'version is bumped');
 assert(engine.includes("openerPage.on('popup'"), 'popup handler belongs to opener page');
 assert(!engine.includes("state.context.on('page'"), 'no per-session shared-context page listener');
 assert(engine.includes('findUnownedPage(s.context, s) || await s.context.newPage()'), 'recovery must not steal context.pages()[0]');
 assert(engine.includes('findUnownedPage(context, null)'), 'new tab reuses only an unowned page');
-assert(engine.includes('browser_page_limit_reached'), 'page cap reports a clear error');
-assert(engine.includes('Number(process.env.SOLOHOST_PW_MAX_SESSIONS) || 12'), 'Chromium session cap matches the 12-tab UI');
-assert(read('lib/engine/dom-bridge.js').includes('Number(process.env.SOLOHOST_BRIDGE_MAX_SESSIONS) || 12'), 'Bridge session cap matches Chromium and the 12-tab UI');
+assert(engine.includes('while (sessions.size >= MAX_SESSIONS)'), 'Chromium session cap is enforced with idle-session cleanup');
+assert(engine.includes('Number(process.env.SOLOHOST_PW_MAX_SESSIONS) || 50'), 'Chromium supports a bounded configurable session cap');
+assert(read('lib/engine/dom-bridge.js').includes('Number(process.env.SOLOHOST_BRIDGE_MAX_SESSIONS) || 24'), 'Bridge session cap leaves capacity for isolated Agent sessions alongside user tabs');
 assert(app.includes('state.activeTabId !== tab.id'), 'late bridge responses cannot overwrite active tab');
 assert(app.includes('frame.getAttribute(\'data-sh-tab-id\') !== String(state.activeTabId || \'\')'), 'stale iframe events are ignored');
 assert(app.includes("el.target === '_blank'"), 'legacy target=_blank handling is restored');

@@ -23,15 +23,16 @@
     let bridge = browser().getActiveBridge && browser().getActiveBridge();
     if (!bridge || !bridge.sessionId || !bridge.token) {
       try {
-        hooks.onStatus('Đang tạo phiên backend (Playwright)…');
-        // Ensure a tab session exists by navigating home or blank engine session
-        if (browser().navigate) await browser().navigate('https://example.com/');
-        await sleep(800);
-        bridge = browser().getActiveBridge && browser().getActiveBridge();
-      } catch (_) {}
+        hooks.onStatus((browser().state && browser().state.lang) === 'vi' ? 'Đang tạo phiên backend riêng cho Agent…' : 'Creating a dedicated backend session for the Agent…');
+        if (browser().ensureBridgeSession) bridge = await browser().ensureBridgeSession();
+        if (!bridge || !bridge.sessionId || !bridge.token) {
+          await sleep(250);
+          bridge = browser().getActiveBridge && browser().getActiveBridge();
+        }
+      } catch (e) { S.sessionError = String(e && e.message || e); }
     }
     if (!bridge || !bridge.sessionId || !bridge.token) {
-      return { status: 'error', message: 'Không tạo được phiên backend. Hãy mở một trang (Go) trước, rồi chạy lại Agent.' , history: [] };
+      return { status: 'error', message: 'Không tạo được phiên backend cho Agent. Thử tạo lại phiên; nếu lỗi còn tiếp diễn, kiểm tra trạng thái Playwright/Chromium. ' + (S.sessionError || ''), history: [] };
     }
     S.running = true; S.stop = false; S.pollAbort = false; S.bridge = bridge; S.taskId = null;
     let cursor = 0, history = Array.isArray(opts.history) ? opts.history.slice() : [];
@@ -45,7 +46,9 @@
       if (!bridge || !bridge.sessionId) throw new Error('browser_session_unauthorized');
       const started = opts.resumeTaskId && opts.clarification
         ? await api('/api/browser/agent/sessions/' + encodeURIComponent(bridge.sessionId) + '/tasks/' + encodeURIComponent(opts.resumeTaskId) + '/answer', { method: 'POST', body: JSON.stringify({ token: bridge.token, text: opts.clarification }) })
-        : await api('/api/browser/agent/tasks', { method: 'POST', body: JSON.stringify({ sessionId: bridge.sessionId, token: bridge.token, task, resumeTaskId: opts.resumeTaskId || null, lang: (browser().state && browser().state.lang) || 'en', history, maxSteps: opts.maxSteps || 200, maxMs: opts.maxMs || (Number(localStorage.getItem('solo_agent_time_min')||60)*60000), workMemory: opts.workMemory || null }) });
+        : opts.resumeTaskId
+          ? await api('/api/browser/agent/sessions/' + encodeURIComponent(bridge.sessionId) + '/tasks/' + encodeURIComponent(opts.resumeTaskId) + '/continue', { method: 'POST', body: JSON.stringify({ token: bridge.token }) })
+          : await api('/api/browser/agent/tasks', { method: 'POST', body: JSON.stringify({ sessionId: bridge.sessionId, token: bridge.token, task, lang: (browser().state && browser().state.lang) || 'en', history: [], maxSteps: opts.maxSteps || 200, maxMs: opts.maxMs || (Number(localStorage.getItem('solo_agent_time_min')||60)*60000) }) });
       S.taskId = started.taskId;
       while (!S.pollAbort && !S.stop) {
         const st = await api('/api/browser/agent/sessions/' + encodeURIComponent(bridge.sessionId) + '/tasks/' + encodeURIComponent(S.taskId) + '?after=' + cursor, { method: 'GET' });

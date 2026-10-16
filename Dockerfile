@@ -1,4 +1,4 @@
-# SoloHost Browser v10.30.1 — Chromium Bridge with shared-profile tab synchronization
+# SoloHost Browser v10.31.0 — Chromium Bridge with shared-profile tab synchronization
 FROM mcr.microsoft.com/playwright:v1.51.1-jammy
 
 WORKDIR /app

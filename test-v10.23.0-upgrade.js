@@ -6,7 +6,7 @@ const app = fs.readFileSync('public/app.js', 'utf8');
 const server = fs.readFileSync('server-app.js', 'utf8');
 const panel = fs.readFileSync('public/ai-panel.js', 'utf8');
 const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-assert.strictEqual(pkg.version, '10.30.1');
+assert.strictEqual(pkg.version, '10.31.0');
 assert.ok(!/PERSONAL_AI_HUB_URL|SOLOHOST_AI_HUB_URL/.test(ai), 'legacy external AI provider environment variables are absent');
 assert.ok(ai.includes('You are SoloHost Browser AI') && ai.includes('APP KNOWLEDGE'), 'AI has authoritative browser-specific knowledge');
 assert.ok(ai.includes('identify_app') && ai.includes('SoloHost Browser'), 'app identity answer works without provider');
@@ -15,9 +15,9 @@ assert.ok(app.includes('privBtn.dataset.privateBound') && app.includes('b.datase
 assert.ok(server.includes('return v;') && !server.includes("DEFAULT_ACCESS_PASSWORD || 'solohost'"), 'empty password is not silently replaced with a default');
 assert.ok(server.includes('if (!configured) return next();'), 'empty password disables the gate for protected routes too');
 assert.ok(server.includes("/(?:^|;\\s*)solo_access=1(?:;|$)/"), 'access cookie matched exactly');
-assert.ok(panel.includes("version: '10.30.1'"), 'AI panel version updated');
+assert.ok(panel.includes("version: '10.31.0'"), 'AI panel version updated');
 const adapter = require('./lib/app-adapter');
-assert.ok(adapter.knowledge.includes('RUNTIME VERSION: 10.30.1'), 'AI kernel knowledge reports current runtime version');
+assert.ok(adapter.knowledge.includes('RUNTIME VERSION: 10.31.0'), 'AI kernel knowledge reports current runtime version');
 assert.ok(adapter.knowledge.includes('Backend Chromium/system audio capture and streaming to the UI') && adapter.knowledge.includes('client-native playback'), 'AI kernel documents the native audio path and backend-stream limitation honestly');
 (async () => {
   const result = await require('./lib/ai-agent').chat({ message: 'App này là app gì vậy', acceptLanguage: 'vi-VN' });

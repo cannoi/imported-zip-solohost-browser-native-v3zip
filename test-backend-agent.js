@@ -16,6 +16,10 @@ assert.ok(!client.includes('contentDocument'), 'UI agent must not inspect iframe
 assert.ok(!client.includes('el.click()'), 'UI agent must not execute page clicks');
 const server = fs.readFileSync(path.join(__dirname, 'server.js'), 'utf8') + '\n' + fs.readFileSync(path.join(__dirname, 'server-app.js'), 'utf8');
 assert.ok(server.includes('/api/browser/agent/sessions/:sessionId/tasks/:taskId/confirm'));
+assert.ok(server.includes('/api/browser/agent/sessions/:sessionId/tasks/:taskId/continue'), 'same-task continuation endpoint is wired');
+assert.ok(client.includes('/continue'), 'client uses the same-task continuation endpoint');
+const app = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+assert.ok(!app.includes("await navigate('https://example.com/', { force: true, skipHistory: true })"), 'agent session creation never navigates to a placeholder URL');
 const panel = fs.readFileSync(path.join(__dirname, 'public/ai-panel.js'), 'utf8');
 assert.ok(!panel.includes('onActions: executeActions') && !panel.includes('function executeActions('), 'AI actions must not be dispatched twice');
 console.log('Backend Browser Agent tests PASS');

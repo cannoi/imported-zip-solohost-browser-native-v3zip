@@ -12,4 +12,4 @@ assert.ok(agent.includes("status: 'failed', reason: clip((r && r.error) || 'navi
 assert.ok(agent.includes('task.noProgressDoneAttempts < 2'), 'done gate has bounded retry attempts');
 assert.ok(agent.includes('Finalizing a partial report with explicit limitations.'), 'source failure ends in partial report instead of infinite pending status');
 assert.ok(agent.includes('sourcesStatus: task.sourcesStatus || {}'), 'source state is persisted for resume');
-console.log('v10.30.1 session recovery + bounded source gate regression tests passed');
+console.log('v10.31.0 session recovery + bounded source gate regression tests passed');

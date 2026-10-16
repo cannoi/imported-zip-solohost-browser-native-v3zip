@@ -1,8 +1,12 @@
 'use strict';
 const assert = require('assert');
 const { buildAgentReport, finalizeDoneMessage, extractUrls } = require('./lib/agent-report');
+const evidence = require('./lib/agent-evidence');
+const taskId = 'report-test-' + Date.now();
+evidence.addEvidence(taskId, { kind: 'page', url: 'https://docs.example.com/guide', title: 'Guide', snippet: 'Grounded documentation text', text: 'Grounded documentation text' });
 
 const task = {
+  id: taskId,
   lang: 'vi',
   task: 'Collect example sources',
   message: 'Done.',
@@ -23,4 +27,5 @@ assert.ok(short.report.links.length >= 1);
 const full = finalizeDoneMessage(task, '## Summary\nFull answer with https://ref.example/page and details...');
 assert.ok(full.message.includes('Full answer'));
 assert.ok(extractUrls('see https://a.com/x and https://b.com/y.png').length === 2);
+evidence.clearTaskEvidence(taskId);
 console.log('test-agent-report PASS');

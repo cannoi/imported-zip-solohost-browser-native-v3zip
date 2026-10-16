@@ -11,7 +11,7 @@ for (const action of ['new-tab', 'private-tab', 'copy-link', 'share-link', 'down
 assert(app.includes("addEventListener('contextmenu'"), 'right-click supported');
 assert(app.includes("addEventListener('pointerdown'"), 'long press supported');
 assert(app.includes('520'), 'long press threshold defined');
-assert(app.includes('state.tabs.length >= 12'), 'tab limit enforced');
+assert(app.includes('const MAX_TABS = Math.max(8, Math.min(50, Number(window.SOLOHOST_MAX_TABS) || 50))') && app.includes('state.tabs.length >= MAX_TABS'), 'configurable bounded tab limit enforced');
 assert(app.includes('tab.private'));
 assert(app.includes('Restore cached Bridge view only — never re-navigate Chromium for a tab switch'), 'tab switching restores existing session view');
 assert(app.includes('private tabs do not write browsing history'), 'private history suppressed');

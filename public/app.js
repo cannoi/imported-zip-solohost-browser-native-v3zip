@@ -14,7 +14,7 @@
     url: '',
     lang: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_lang')) || 'en',
     theme: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_theme')) || 'rainbow',
-    searchEngine: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_engine')) || 'google',
+    searchEngine: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_engine')) || 'bing',
     customSearchUrl: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_custom_url')) || '',
     timeZone: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_timezone')) || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     localeReady: false,
@@ -1166,7 +1166,8 @@
 
   function buildSearchUrl(query) {
     const encoded = encodeURIComponent(String(query || '').trim());
-    const engine = String(state.searchEngine || 'google').toLowerCase();
+    const engine = String(state.searchEngine || 'bing').toLowerCase();
+    if (engine === 'bing') return 'https://www.bing.com/search?q=' + encoded;
     if (engine === 'google') return 'https://www.google.com/search?q=' + encoded;
     if (engine === 'duckduckgo') return 'https://html.duckduckgo.com/html/?q=' + encoded;
     if (engine === 'brave') return 'https://search.brave.com/search?q=' + encoded;
@@ -1175,7 +1176,7 @@
       if (/^https?:\/\//i.test(template) && /(?:\{query\}|%s)/i.test(template))
         return template.replace(/\{query\}/gi, encoded).replace(/%s/gi, encoded);
     }
-    return 'https://www.google.com/search?q=' + encoded;
+    return 'https://www.bing.com/search?q=' + encoded;
   }
 
   function normalizeUrl(raw) {
@@ -2577,8 +2578,9 @@
       } else if (typeof createBridgeSession === 'function') {
         await createBridgeSession(getActiveTab());
       } else {
-        // Soft navigate to open a backend session
-        await navigate('https://example.com/', { force: true, skipHistory: true });
+        // Do not navigate to a placeholder URL just to initialize the Agent.
+        // Return null so the UI can offer a retry without changing the user's page.
+        return null;
       }
     } catch (_) {}
     return getBridgeSession();

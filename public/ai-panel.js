@@ -124,44 +124,59 @@ function browserContext() {
     lang: st.lang || (document.documentElement.lang || 'en'),
     theme: st.theme || document.documentElement.getAttribute('data-theme') || 'rainbow',
     app: 'SoloHost Browser',
-    version: '10.30.1'
+    version: '10.31.0'
   };
 }
 const aiChat = document.getElementById('chatLog') || document.getElementById('aiChat');
 const aiInput = document.getElementById('chatInput') || document.getElementById('aiInput');
 function formatAgentHtml(raw) {
-  let s = String(raw || '');
-  if (/<[a-z][\s\S]*>/i.test(s) && !/^[\s\S]*#{1,3}\s/m.test(s.slice(0, 80))) return s;
-  s = escapeHtml(s);
-  // Fenced code blocks
-  s = s.replace(/```([\s\S]*?)```/g, function (_, code) {
-    return '<pre class="agent-code-block"><code>' + code.replace(/^\n+|\n+$/g, '') + '</code></pre>';
+  const esc = (v) => escapeHtml(String(v == null ? '' : v));
+  const safeHref = (v) => {
+    try { const u = new URL(String(v || '').trim()); return /^https?:$/.test(u.protocol) ? u.href : ''; }
+    catch (_) { return ''; }
+  };
+  let text = String(raw || '').replace(/\r\n?/g, '\n');
+  const codeBlocks = [];
+  text = text.replace(/```(?:[\w+-]+)?\n?([\s\S]*?)```/g, (_, code) => {
+    const i = codeBlocks.push('<pre class="agent-code-block"><code>' + esc(code.replace(/^\n+|\n+$/g, '')) + '</code></pre>') - 1;
+    return '\u0000CODE' + i + '\u0000';
   });
-  // Headings
-  s = s.replace(/^### (.+)$/gm, '<h4 class="agent-h">$1</h4>');
-  s = s.replace(/^## (.+)$/gm, '<h3 class="agent-h">$1</h3>');
-  s = s.replace(/^# (.+)$/gm, '<h2 class="agent-h">$1</h2>');
-  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-  // Tables
-  if (/\|.+\|/.test(s) && /\|[-: ]+\|/.test(s)) {
-    s = s.replace(/(^|\n)((?:\|.+\|\n)+)/g, function (m, p, block) {
-      return p + '<div class="agent-md-table"><pre>' + block.trim() + '</pre></div>';
+  const lines = text.split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (/^\s*\|.*\|\s*$/.test(line) && i + 1 < lines.length && /^\s*\|?\s*:?-{3,}/.test(lines[i + 1])) {
+      const rows = [line]; i += 2;
+      while (i < lines.length && /^\s*\|.*\|\s*$/.test(lines[i])) rows.push(lines[i++]);
+      i--;
+      const cells = (r) => r.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map(c => c.trim());
+      const head = cells(rows[0]);
+      let html = '<div class="agent-md-table-wrap" style="overflow-x:auto"><table class="agent-md-table"><thead><tr>' + head.map(c => '<th>' + esc(c) + '</th>').join('') + '</tr></thead><tbody>';
+      rows.slice(1).forEach(r => { html += '<tr>' + cells(r).map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>'; });
+      out.push(html + '</tbody></table></div>'); continue;
+    }
+    let v = esc(line);
+    v = v.replace(/^###\s+(.+)$/, '<h4 class="agent-h">$1</h4>').replace(/^##\s+(.+)$/, '<h3 class="agent-h">$1</h3>').replace(/^#\s+(.+)$/, '<h2 class="agent-h">$1</h2>');
+    v = v.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`([^`\n]+)`/g, '<code>$1</code>');
+    // Markdown links are parsed before bare URLs; only HTTP(S) destinations survive.
+    v = v.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+(?:\([^\s)]*\)[^\s)]*)?)\)/g, (_, label, href) => {
+      const clean = safeHref(href); return clean ? '<a class="agent-link" href="' + esc(clean) + '" target="_blank" rel="noopener noreferrer">' + label + '</a>' : label;
     });
+    v = v.replace(/https?:\/\/[^\s<]+/g, (token) => {
+      let url = token;
+      while (/[.,;:!?]$/.test(url)) url = url.slice(0, -1);
+      while (url.endsWith(')') && (url.match(/\(/g) || []).length < (url.match(/\)/g) || []).length) url = url.slice(0, -1);
+      const clean = safeHref(url); if (!clean) return token;
+      const tail = token.slice(url.length);
+      return '<a class="agent-link" href="' + esc(clean) + '" target="_blank" rel="noopener noreferrer">' + esc(url) + '</a>' + esc(tail);
+    });
+    if (/^\s*[-*]\s+/.test(line)) v = '• ' + v.replace(/^\s*[-*]\s+/, '');
+    else if (/^\s*\d+[.)]\s+/.test(line)) v = v.replace(/^\s*(\d+[.)])\s+/, '$1 ');
+    out.push(v || '<br>');
   }
-  // Images
-  s = s.replace(/(https?:\/\/[^\s<]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s<]*)?)/gi,
-    '<a class="agent-link" href="$1" target="_blank" rel="noopener"><img class="agent-embed-img" src="$1" alt="" loading="lazy"></a>');
-  // YouTube
-  s = s.replace(/(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,})[^\s<]*)/gi,
-    '<div class="agent-embed-yt">▶ <a class="agent-link" href="$1" target="_blank" rel="noopener">YouTube video</a></div>');
-  // Generic links (after media)
-  s = s.replace(/(https?:\/\/[^\s<]+)/g, function (url) {
-    if (url.indexOf('class="agent') >= 0) return url;
-    return '<a class="agent-link" href="' + url + '" target="_blank" rel="noopener">' + url + '</a>';
-  });
-  s = s.replace(/\n/g, '<br>');
-  return s;
+  let html = out.join('<br>');
+  html = html.replace(/\u0000CODE(\d+)\u0000/g, (_, n) => codeBlocks[Number(n)] || '');
+  return html;
 }
 
 /** Static professional report card for completed agent tasks. */
@@ -777,11 +792,13 @@ try { agentCtx = JSON.parse(localStorage.getItem('solo_agent_context') || 'null'
 function agentLang() { return ((window.SoloBrowser && window.SoloBrowser.state && window.SoloBrowser.state.lang) || 'en') === 'vi' ? 'vi' : 'en'; }
 
 function loadWorkMemory() {
-  try { return JSON.parse(localStorage.getItem('solo_agent_work_memory') || 'null') || { notes: [], findings: [], lastUrl: '', progress: '', task: '', history: [] }; }
-  catch (_) { return { notes: [], findings: [], lastUrl: '', progress: '', task: '', history: [] }; }
+  try { return JSON.parse(localStorage.getItem('solo_agent_work_memory') || 'null') || { taskId: null, task: '', status: '' }; }
+  catch (_) { return { taskId: null, task: '', status: '' }; }
 }
 function saveWorkMemory(wm) {
-  try { localStorage.setItem('solo_agent_work_memory', JSON.stringify(wm || {})); } catch (_) {}
+  // Client stores only UI metadata. Findings, history, notes, errors and ledger are server-owned per task.
+  const safe = { taskId: wm && wm.taskId || null, task: String(wm && wm.task || '').slice(0, 120), status: String(wm && wm.status || '').slice(0, 40), updatedAt: new Date().toISOString() };
+  try { localStorage.setItem('solo_agent_work_memory', JSON.stringify(safe)); } catch (_) {}
 }
 function agentTimeLimitMs() {
   try {
@@ -899,15 +916,9 @@ async function runAgentTask(text) {
     task = agentCtx.task || text;
     history = agentCtx.history || [];
   }
-  const workMemory = loadWorkMemory();
-  const sameTask = workMemory.task && String(workMemory.task).slice(0, 100) === String(task).slice(0, 100);
-  if (sameTask && (!history || !history.length)) history = workMemory.history || [];
-  if (!sameTask) {
-    workMemory.task = task;
-    workMemory.history = history || [];
-    workMemory.findings = [];
-    workMemory.progress = '';
-  }
+  let workMemory = loadWorkMemory();
+  const sameTask = !!(agentCtx && agentCtx.taskId && workMemory.taskId === agentCtx.taskId);
+  if (!sameTask) { history = []; workMemory = { taskId: null, task, status: 'new' }; }
 
   const statusEl = document.getElementById('agentStatus');
   const confirmBox = document.getElementById('agentConfirm');
@@ -939,7 +950,7 @@ async function runAgentTask(text) {
     onLoginForm(ev) {
       appendMsg('ai', '🔐 ' + escapeHtml((ev && ev.message) || (vi ? 'Điền form trên khung trình duyệt' : 'Fill form in browser frame')));
     }
-  }, { history, maxSteps: 200, maxMs: agentTimeLimitMs(), workMemory, resumeTaskId: (agentCtx && agentCtx.taskId && !/^\/new\s+/i.test(text)) ? agentCtx.taskId : null, clarification: (agentCtx && agentCtx.taskId && !/^\/new\s+/i.test(text)) ? text : null });
+  }, { history, maxSteps: 200, maxMs: agentTimeLimitMs(), workMemory, resumeTaskId: (agentCtx && agentCtx.taskId && !/^\/new\s+/i.test(text)) ? agentCtx.taskId : null, clarification: (agentCtx && agentCtx.taskId && !agentCtx.continueOnly && !/^\/new\s+/i.test(text)) ? text : null });
 
   yes?.removeEventListener('click', onYes);
   no?.removeEventListener('click', onNo);
@@ -947,15 +958,7 @@ async function runAgentTask(text) {
   agentUi(false);
 
   // Save work memory for Continue
-  saveWorkMemory({
-    task,
-    history: out.history || history,
-    findings: (workMemory.findings || []).slice(-20),
-    notes: (workMemory.notes || []).concat([String(out.message || out.status || '').slice(0, 400)]).slice(-20),
-    lastUrl: (out.workMemory && out.workMemory.lastUrl) || workMemory.lastUrl || '',
-    progress: out.status || '',
-    updatedAt: new Date().toISOString()
-  });
+  saveWorkMemory({ taskId: out.taskId || (agentCtx && agentCtx.taskId) || null, task, status: out.status || '' });
 
   const msg = out.message ? formatAgentHtml(out.message) : '';
   if (out.status === 'done') {
@@ -1005,6 +1008,7 @@ function showContinueBar(show) {
       const mem = loadWorkMemory();
       const t = (agentCtx && agentCtx.task) || mem.task || '';
       if (!t) return;
+      if (agentCtx) agentCtx.continueOnly = true;
       showContinueBar(false);
       await runAgentTask(t);
     });

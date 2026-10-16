@@ -12,4 +12,4 @@ assert.ok(ask.ok, 'ask_user action should validate');
 assert.strictEqual(ask.action.question || ask.action.message, 'Please provide a repository URL');
 const checklist = analyzer.buildChecklist({ kind: 'news', sources: ['a.test'], output_format: '## Executive Summary' });
 assert.ok(checklist.citation_required && checklist.sources.includes('a.test'));
-console.log('v10.30.1 task analyzer tests passed');
+console.log('v10.31.0 task analyzer tests passed');

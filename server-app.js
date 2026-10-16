@@ -88,7 +88,7 @@ let aiCompat = softRequire('ai-compat', './lib/ai-compat', {
 try { installShutdownHooks(); } catch (_) {}
 try { appLog.configure(DATA_DIR); } catch (_) {}
 const PKG = (() => {
-  try { return require('./package.json'); } catch { return { version: '10.30.1' }; }
+  try { return require('./package.json'); } catch { return { version: '10.31.0' }; }
 })();
 
 try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch { /* ignore */ }
@@ -266,7 +266,7 @@ function healthPayload() {
     status: 'ok',
     ok: true,
     service: 'solohost-browser',
-    version: PKG.version || '10.30.1',
+    version: PKG.version || '10.31.0',
     mode: 'hybrid-proxy',
     engine: engineCaps.detect(),
     port: PORT,
@@ -277,7 +277,7 @@ function healthPayload() {
 // Quick search redirect (no JS required) — Google/YouTube shell forms
 app.get('/api/browser/go', (req, res) => {
   try {
-    const engine = String(req.query.engine || 'google').toLowerCase();
+    const engine = String(req.query.engine || 'bing').toLowerCase();
     const q = String(req.query.q || '').trim();
     if (!q) return res.status(400).type('html').send('<p>Missing q</p>');
     let target;
@@ -626,6 +626,15 @@ app.get('/api/browser/agent/sessions/:sessionId/tasks/:taskId', (req, res) => {
   if (!out) return res.status(404).json({ ok: false, error: 'task_not_found' });
   res.json(out);
 });
+app.post('/api/browser/agent/sessions/:sessionId/tasks/:taskId/continue', async (req, res) => {
+  const body = req.body || {};
+  const session = domBridge.authSession(req.params.sessionId, String(req.get('x-session-token') || body.token || ''));
+  if (!session) return res.status(401).json({ ok: false, error: 'browser_session_unauthorized' });
+  const out = await backendAgent.continueTask(req.params.taskId, session.id);
+  if (!out) return res.status(409).json({ ok: false, error: 'task_not_resumable' });
+  res.status(202).json(out);
+});
+
 app.post('/api/browser/agent/sessions/:sessionId/tasks/:taskId/answer', async (req, res) => {
   const body = req.body || {};
   const session = domBridge.authSession(req.params.sessionId, String(req.get('x-session-token') || body.token || ''));
@@ -674,7 +683,7 @@ try {
   const fbOpts = {
     appId: process.env.SHFH_APP_ID || 'solohost-browser',
     appName: 'SoloHost Browser',
-    version: PKG.version || '10.30.1'
+    version: PKG.version || '10.31.0'
   };
   if (process.env.SHFH_HUB_ID) fbOpts.hubId = process.env.SHFH_HUB_ID;
   if (process.env.SHFH_HUB_URL) fbOpts.baseUrl = process.env.SHFH_HUB_URL;
