@@ -1,0 +1,50 @@
+{
+  "version": "10.27.2",
+  "at": "2026-10-16T02:38:32.616Z",
+  "pass": 7,
+  "fail": 0,
+  "skip": 2,
+  "results": [
+    {
+      "name": "form_inputs_visible",
+      "status": "PASS",
+      "detail": "count=2"
+    },
+    {
+      "name": "vision_message_normalize",
+      "status": "PASS"
+    },
+    {
+      "name": "vision_model_hint",
+      "status": "PASS"
+    },
+    {
+      "name": "offline_heuristic_navigate",
+      "status": "PASS",
+      "detail": "https://example.com"
+    },
+    {
+      "name": "agent_tool_defs",
+      "status": "PASS"
+    },
+    {
+      "name": "ai_complete_tools_export",
+      "status": "PASS"
+    },
+    {
+      "name": "tool_call_shape",
+      "status": "PASS"
+    },
+    {
+      "name": "live_api_complete",
+      "status": "SKIP",
+      "detail": "AI not configured in this environment"
+    },
+    {
+      "name": "live_api_tools",
+      "status": "SKIP",
+      "detail": "AI not configured"
+    }
+  ],
+  "note": "Live API rows require configured provider keys. SoloHost production not tested in this CI sandbox."
+}
