@@ -54,3 +54,24 @@
 ### Tests
 - `npm test` → `test-core.js` (~10 focused files)
 - `npm run test:all` keeps historical chain
+
+## v10.37.0
+
+### agent-web single entry
+- Implementations: `agent-tools-impl.js`, `agent-research-impl.js`
+- Public API: `agent-web.js`
+- Shims: `agent-tools.js`, `agent-research-tools.js` → re-export agent-web
+- backend-agent uses only `agent-web`
+
+### TaskState
+- `ensureTaskState` / `syncTaskState` in backend-agent
+- Called at `start` and `runTask`
+- workMemory retained as compatibility view; taskState is canonical bag for plan/status/sources
+
+### Planner
+- `planWithLLM(ai, brief, lang)` — one LLM JSON plan when not compare/news/chat
+- `start()` uses `agentPlanner.planFromRules` for initial plan/jobs
+
+### Tests
+- `npm test` = test-core.js
+- `npm run test:all` = core + security + bridge + youtube + backend-agent + agent-v1026 + evidence
