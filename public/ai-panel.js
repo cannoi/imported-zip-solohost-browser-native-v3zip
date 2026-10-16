@@ -922,10 +922,51 @@ function agentUi(show) {
 }
 document.getElementById('agentStop')?.addEventListener('click', () => window.SoloAgent && window.SoloAgent.stop());
 
+
+function setAgentBusy(on, detail) {
+  try {
+    document.body.classList.toggle('agent-busy', !!on);
+    let lock = document.getElementById('agent-browser-lock');
+    if (on) {
+      if (!lock) {
+        lock = document.createElement('div');
+        lock.id = 'agent-browser-lock';
+        lock.className = 'agent-browser-lock';
+        lock.innerHTML = '<div class="agent-browser-lock-card"><div class="agent-browser-lock-spin"></div><div class="agent-browser-lock-title" id="agent-lock-title">Agent running</div><div class="agent-browser-lock-sub" id="agent-lock-sub"></div></div>';
+        document.body.appendChild(lock);
+      }
+      lock.hidden = false;
+      lock.style.display = 'flex';
+      const title = document.getElementById('agent-lock-title');
+      const sub = document.getElementById('agent-lock-sub');
+      const vi = agentLang() === 'vi';
+      if (title) title.textContent = vi ? 'Browser Agent đang chạy' : 'Browser Agent running';
+      if (sub) sub.textContent = detail || (vi ? 'Trình duyệt tạm khóa — xem tiến trình trong panel AI.' : 'Browser locked — follow progress in the AI panel.');
+    } else if (lock) {
+      lock.hidden = true;
+      lock.style.display = 'none';
+    }
+  } catch (_) {}
+}
+
+function updateAgentLockProgress(text) {
+  try {
+    const sub = document.getElementById('agent-lock-sub');
+    if (sub && text) sub.textContent = String(text).slice(0, 180);
+  } catch (_) {}
+}
+
 async function runAgentTask(text) {
   const vi = agentLang() === 'vi';
-  if (!window.SoloAgent) { appendMsg('ai', escapeHtml(vi ? 'Module Agent chưa tải.' : 'Agent module not loaded.')); return; }
-  if (window.SoloAgent.isRunning()) { appendMsg('ai', escapeHtml(vi ? 'Agent đang chạy.' : 'Agent is already running.')); return; }
+  if (!window.SoloAgent) { setAgentBusy(false); appendMsg('ai', escapeHtml(vi ? 'Module Agent chưa tải.' : 'Agent module not loaded.')); return; }
+  if (window.SoloAgent.isRunning()) {
+    const steps = (agentCtx && agentCtx.history && agentCtx.history.length) || 0;
+    appendMsg('ai', escapeHtml(vi
+      ? ('Agent vẫn đang chạy nền (đã ghi nhận ~' + steps + ' bước). Không bắt đầu lại — mở tab Logs hoặc đợi báo cáo. Bấm Dừng nếu cần hủy.')
+      : ('Agent is still running in the background (~' + steps + ' steps so far). Not restarting — check Logs or wait for the report. Tap Stop to cancel.')));
+    setAgentBusy(true, vi ? 'Tiếp tục theo dõi tiến trình…' : 'Keep watching progress…');
+    return;
+  }
   let task = text;
   let history = [];
   if (/^\/new\s+/i.test(text)) {
@@ -956,12 +997,17 @@ async function runAgentTask(text) {
     ? ('Bắt đầu · tối đa ' + Math.round(agentTimeLimitMs() / 60000) + ' phút' + (history.length ? ' · resume' : ''))
     : ('Starting · max ' + Math.round(agentTimeLimitMs() / 60000) + ' min' + (history.length ? ' · resume' : ''));
 
-  const out = await window.SoloAgent.run(task, {
-    onStatus(t) { if (statusEl) statusEl.textContent = t; },
+  setAgentBusy(true, vi ? 'Đang khởi chạy nhiệm vụ…' : 'Starting task…');
+  let out;
+  try {
+  out = await window.SoloAgent.run(task, {
+    onStatus(t) { if (statusEl) statusEl.textContent = t; updateAgentLockProgress(t); },
     onPlan(plan) { if (plan && Array.isArray(plan.steps) && plan.steps.length) { const titles = plan.steps.map((x, i) => (i + 1) + '. ' + (x.title || x)).join('\n'); appendMsg('agent-step ai', '🗺️ <b>' + escapeHtml(vi ? 'Kế hoạch' : 'Plan') + '</b><small>' + escapeHtml(titles) + '</small>'); } },
     onStep(s) {
       const icon = (s.action && s.action.type === 'navigate') ? '🌐' : (s.action && s.action.type === 'click') ? '👆' : (s.action && s.action.type === 'type') ? '⌨️' : (s.action && s.action.type === 'read') ? '📄' : '⚙️';
-      appendMsg('agent-step ai', icon + ' <b>' + (s.n || '') + '.</b> ' + escapeHtml(s.text || '') + (s.thought ? '<small>' + escapeHtml(s.thought) + '</small>' : ''));
+      const line = icon + ' <b>' + (s.n || '') + '.</b> ' + escapeHtml(s.text || '') + (s.thought ? '<small>' + escapeHtml(s.thought) + '</small>' : '');
+      appendMsg('agent-step ai', line);
+      updateAgentLockProgress((s.n ? ('#' + s.n + ' ') : '') + (s.text || ''));
     },
     onConfirm(t, answer) {
       answerFn = (v) => { answerFn = null; if (confirmBox) confirmBox.hidden = true; answer(v); };
@@ -972,12 +1018,24 @@ async function runAgentTask(text) {
       appendMsg('ai', '🔐 ' + escapeHtml((ev && ev.message) || (vi ? 'Điền form trên khung trình duyệt' : 'Fill form in browser frame')));
     }
   }, { history, maxSteps: 200, maxMs: agentTimeLimitMs(), workMemory, resumeTaskId: (agentCtx && agentCtx.taskId && !/^\/new\s+/i.test(text)) ? agentCtx.taskId : null, clarification: (agentCtx && agentCtx.taskId && !agentCtx.continueOnly && !/^\/new\s+/i.test(text)) ? text : null });
+  } catch (agentErr) {
+    setAgentBusy(false);
+    agentUi(false);
+    yes?.removeEventListener('click', onYes);
+    no?.removeEventListener('click', onNo);
+    appendMsg('ai', '⚠️ ' + escapeHtml(String(agentErr && agentErr.message || agentErr || 'agent_failed').slice(0, 300)));
+    showContinueBar(true);
+    return;
+  } finally {
+    setAgentBusy(false);
+  }
 
   yes?.removeEventListener('click', onYes);
   no?.removeEventListener('click', onNo);
   if (confirmBox) confirmBox.hidden = true;
   agentUi(false);
 
+  setAgentBusy(false);
   // Save work memory for Continue
   saveWorkMemory({ taskId: out.taskId || (agentCtx && agentCtx.taskId) || null, task, status: out.status || '' });
 
@@ -1027,11 +1085,18 @@ function showContinueBar(show) {
     else document.body.appendChild(bar);
     document.getElementById('btn-agent-continue')?.addEventListener('click', async () => {
       const mem = loadWorkMemory();
-      const t = (agentCtx && agentCtx.task) || mem.task || '';
-      if (!t) return;
+      const taskText = (agentCtx && agentCtx.task) || mem.task || '';
+      if (!taskText) return;
+      if (window.SoloAgent && window.SoloAgent.isRunning()) {
+        appendMsg('ai', escapeHtml(agentLang() === 'vi'
+          ? 'Nhiệm vụ vẫn đang chạy — không bắt đầu lại. Đợi tiến trình hoặc bấm Dừng.'
+          : 'Task still running — not restarting. Wait for progress or tap Stop.'));
+        setAgentBusy(true);
+        return;
+      }
       if (agentCtx) agentCtx.continueOnly = true;
       showContinueBar(false);
-      await runAgentTask(t);
+      await runAgentTask(taskText);
     });
     document.getElementById('btn-agent-clear-mem')?.addEventListener('click', () => {
       saveWorkMemory({ notes: [], findings: [], lastUrl: '', progress: '', task: '', history: [] });

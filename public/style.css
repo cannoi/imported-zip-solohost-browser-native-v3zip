@@ -987,3 +987,49 @@ button:disabled { opacity:.35; cursor:not-allowed; }
 }
 .ptr-indicator[hidden] { display: none !important; }
 .ptr-indicator.ready { transform: translateX(-50%) rotate(180deg); }
+
+/* Browser Agent lock — subtle overlay while agent owns navigation */
+body.agent-busy #frameHost,
+body.agent-busy .browser-frame,
+body.agent-busy #webview,
+body.agent-busy #reader-view {
+  pointer-events: none;
+  user-select: none;
+}
+.agent-browser-lock {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  top: auto;
+  height: 56px;
+  z-index: 1200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  background: linear-gradient(180deg, transparent, rgba(0,0,0,.45));
+}
+.agent-browser-lock-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 92vw;
+  padding: 8px 14px;
+  border-radius: 12px;
+  background: rgba(18, 20, 28, 0.92);
+  border: 1px solid rgba(255,255,255,.12);
+  color: #e8eaef;
+  font-size: 13px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  pointer-events: auto;
+}
+.agent-browser-lock-spin {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(255,255,255,.25);
+  border-top-color: #6ea8fe;
+  border-radius: 50%;
+  animation: agent-spin .8s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes agent-spin { to { transform: rotate(360deg); } }
+.agent-browser-lock-title { font-weight: 650; white-space: nowrap; }
+.agent-browser-lock-sub { opacity: .85; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 55vw; }

@@ -58,7 +58,11 @@
         cursor = Math.max(cursor, Number(st.cursor) || 0);
         for (const ev of (st.events || [])) {
           if (seen.has(ev.id)) continue; seen.add(ev.id);
-          if (ev.type === 'status') hooks.onStatus(ev.message || 'Backend đang xử lý…');
+          if (ev.type === 'status') {
+            const msg = String(ev.message || '');
+            if (/^no_effect$/i.test(msg)) hooks.onStatus((browser().state && browser().state.lang === 'vi') ? ('Đang xử lý nền (bước ' + (ev.n || '') + ')…') : ('Working in background (step ' + (ev.n || '') + ')…'));
+            else hooks.onStatus(msg || 'Backend đang xử lý…');
+          }
           else if (ev.type === 'step') hooks.onStep({ n: ev.n, thought: ev.thought || '', action: ev.action || {}, text: describe(ev.action || {}, ev.url) });
           else if (ev.type === 'action_result') { hooks.onStatus((ev.ok ? '✓ ' : '⚠ ') + (ev.result || '')); if (browser().syncBackendState && ev.url) browser().syncBackendState(ev.url, ev.title || ''); }
           else if (ev.type === 'confirmation_required') {

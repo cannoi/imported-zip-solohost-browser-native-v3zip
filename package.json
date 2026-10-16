@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.37.0",
-  "description": "SoloHost Browser \u2014 agent-web single entry, TaskState, planner LLM, stable core tests",
+  "version": "10.38.0",
+  "description": "SoloHost Browser \u2014 agent progress UI, resume without restart, session pin, retail compare",
   "main": "server.js",
   "engines": {
     "node": ">=18"
