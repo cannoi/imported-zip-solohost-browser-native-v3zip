@@ -81,7 +81,7 @@
         if (['done', 'failed', 'error', 'stopped', 'limit', 'waiting_user'].includes(st.status)) {
           history = Array.isArray(st.history) ? st.history : history;
           const status = st.status === 'waiting_user' ? 'ask' : st.status === 'failed' ? 'fail' : st.status === 'error' ? 'error' : st.status;
-          return { status, message: st.message || st.error || '', history, workMemory: st.workMemory || null, taskId: S.taskId };
+          return { status, message: st.message || st.error || '', history, workMemory: st.workMemory || null, report: st.report || null, taskId: S.taskId };
         }
         await sleep(500);
       }

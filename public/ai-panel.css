@@ -419,3 +419,52 @@
 .agent-time-field { position: relative; z-index: 0; clear: both; width: 100%; box-sizing: border-box; }
 .agent-time-field input[type="number"] { width: 100%; box-sizing: border-box; max-width: 100%; }
 .settings-body { overflow-x: hidden; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+
+/* Agent completion report — no artificial truncation */
+.agent-report-card {
+  width: 100%;
+  max-width: 100%;
+  border: 1px solid rgba(59,130,246,.35);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(59,130,246,.08), rgba(0,0,0,.12));
+  overflow: visible;
+  margin: 4px 0 10px;
+}
+.agent-report-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(255,255,255,.08);
+}
+.agent-report-badge { font-weight: 600; font-size: 13px; flex: 1; min-width: 120px; }
+.agent-report-open, .agent-report-copy {
+  border: 0; border-radius: 8px; padding: 6px 10px; font-size: 12px; cursor: pointer;
+  background: #3b82f6; color: #fff; font-weight: 600;
+}
+.agent-report-copy { background: rgba(255,255,255,.12); color: inherit; }
+.agent-report-body {
+  padding: 12px 14px 16px;
+  max-height: none !important;
+  overflow: visible !important;
+  font-size: 13.5px;
+  line-height: 1.55;
+  word-break: break-word;
+  text-align: left;
+}
+.agent-report-body .agent-h { margin: 0.85em 0 0.35em; font-size: 1.05em; }
+.agent-report-body .agent-link { color: #93c5fd; word-break: break-all; }
+.agent-embed-img { max-width: 100%; border-radius: 8px; margin: 6px 0; display: block; }
+.agent-code-block { background: rgba(0,0,0,.35); padding: 10px; border-radius: 8px; overflow-x: auto; font-size: 12px; }
+.agent-ref-list { padding-left: 1.2em; margin: 0.4em 0; }
+.agent-ref-list li { margin: 0.25em 0; }
+.agent-media-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.agent-steps { margin-top: 10px; font-size: 12px; opacity: .9; }
+.msg.agent-report-msg { align-items: stretch; }
+.msg.agent-report-msg .msg-icon { display: none; }
+/* Allow chat log to grow with long reports */
+#chatLog, #aiChat, .chat-log {
+  max-height: min(70dvh, 640px);
+  overflow-y: auto;
+}

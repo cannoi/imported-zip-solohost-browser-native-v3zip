@@ -131,21 +131,110 @@ const aiChat = document.getElementById('chatLog') || document.getElementById('ai
 const aiInput = document.getElementById('chatInput') || document.getElementById('aiInput');
 function formatAgentHtml(raw) {
   let s = String(raw || '');
-  // Already HTML from caller — light enhance only when plain-ish
-  if (/<[a-z][\s\S]*>/i.test(s)) return s;
+  if (/<[a-z][\s\S]*>/i.test(s) && !/^[\s\S]*#{1,3}\s/m.test(s.slice(0, 80))) return s;
   s = escapeHtml(s);
-  // Markdown-ish tables kept as pre
-  if (/\|.+\|/.test(s) && /\|[-: ]+\|/.test(s)) {
-    return '<div class="agent-md-table"><pre>' + s + '</pre></div>';
-  }
+  // Fenced code blocks
+  s = s.replace(/```([\s\S]*?)```/g, function (_, code) {
+    return '<pre class="agent-code-block"><code>' + code.replace(/^\n+|\n+$/g, '') + '</code></pre>';
+  });
+  // Headings
+  s = s.replace(/^### (.+)$/gm, '<h4 class="agent-h">$1</h4>');
+  s = s.replace(/^## (.+)$/gm, '<h3 class="agent-h">$1</h3>');
+  s = s.replace(/^# (.+)$/gm, '<h2 class="agent-h">$1</h2>');
   s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/`([^`]+)`/g, '<code>$1</code>');
+  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  // Tables
+  if (/\|.+\|/.test(s) && /\|[-: ]+\|/.test(s)) {
+    s = s.replace(/(^|\n)((?:\|.+\|\n)+)/g, function (m, p, block) {
+      return p + '<div class="agent-md-table"><pre>' + block.trim() + '</pre></div>';
+    });
+  }
+  // Images
+  s = s.replace(/(https?:\/\/[^\s<]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s<]*)?)/gi,
+    '<a class="agent-link" href="$1" target="_blank" rel="noopener"><img class="agent-embed-img" src="$1" alt="" loading="lazy"></a>');
+  // YouTube
+  s = s.replace(/(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,})[^\s<]*)/gi,
+    '<div class="agent-embed-yt">▶ <a class="agent-link" href="$1" target="_blank" rel="noopener">YouTube video</a></div>');
+  // Generic links (after media)
+  s = s.replace(/(https?:\/\/[^\s<]+)/g, function (url) {
+    if (url.indexOf('class="agent') >= 0) return url;
+    return '<a class="agent-link" href="' + url + '" target="_blank" rel="noopener">' + url + '</a>';
+  });
   s = s.replace(/\n/g, '<br>');
-  // Auto-link images/videos
-  s = s.replace(/(https?:\/\/[^\s<]+\.(?:png|jpe?g|gif|webp)(?:\?[^\s<]*)?)/gi, '<a href="$1" target="_blank" rel="noopener"><img class="agent-embed-img" src="$1" alt="" loading="lazy"></a>');
-  s = s.replace(/(https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([\w-]{6,}))/gi, '<div class="agent-embed-yt">▶ <a href="$1" target="_blank" rel="noopener">YouTube</a></div>');
   return s;
 }
+
+/** Static professional report card for completed agent tasks. */
+function renderAgentReportCard(out, vi) {
+  const report = out.report || null;
+  const bodyMd = out.message || (report && report.markdown) || '';
+  const wrap = document.createElement('div');
+  wrap.className = 'agent-report-card';
+  const head = document.createElement('div');
+  head.className = 'agent-report-head';
+  head.innerHTML = '<span class="agent-report-badge">✅ ' + (vi ? 'Báo cáo hoàn thành' : 'Completion report') + '</span>' +
+    '<button type="button" class="agent-report-open" title="Open full">' + (vi ? 'Mở rộng' : 'Expand') + '</button>' +
+    '<button type="button" class="agent-report-copy" title="Copy">' + (vi ? 'Sao chép' : 'Copy') + '</button>';
+  const body = document.createElement('div');
+  body.className = 'agent-report-body msg-body';
+  body.innerHTML = formatAgentHtml(bodyMd);
+  // Extra structured sections from report object
+  if (report) {
+    const extra = document.createElement('div');
+    extra.className = 'agent-report-extra';
+    if (report.links && report.links.length) {
+      extra.innerHTML += '<h4 class="agent-h">' + (vi ? 'Liên kết tham chiếu' : 'Reference links') + '</h4><ul class="agent-ref-list">' +
+        report.links.slice(0, 40).map(function (u) {
+          return '<li><a class="agent-link" href="' + escapeHtml(u) + '" target="_blank" rel="noopener">' + escapeHtml(u) + '</a></li>';
+        }).join('') + '</ul>';
+    }
+    if (report.media && report.media.length) {
+      extra.innerHTML += '<h4 class="agent-h">' + (vi ? 'Media' : 'Media') + '</h4><div class="agent-media-grid">' +
+        report.media.slice(0, 24).map(function (u) {
+          if (/\.(png|jpe?g|gif|webp)(\?|$)/i.test(u)) {
+            return '<a href="' + escapeHtml(u) + '" target="_blank" rel="noopener"><img class="agent-embed-img" src="' + escapeHtml(u) + '" loading="lazy" alt=""></a>';
+          }
+          return '<a class="agent-link" href="' + escapeHtml(u) + '" target="_blank" rel="noopener">' + escapeHtml(u) + '</a>';
+        }).join('') + '</div>';
+    }
+    if (report.steps && report.steps.length) {
+      extra.innerHTML += '<details class="agent-steps"><summary>' + (vi ? 'Các bước (' + report.steps.length + ')' : 'Steps (' + report.steps.length + ')') + '</summary><ol>' +
+        report.steps.map(function (s) {
+          return '<li>' + escapeHtml((s.action || s.thought || '') + (s.url ? ' — ' + s.url : '')) + '</li>';
+        }).join('') + '</ol></details>';
+    }
+    body.appendChild(extra);
+  }
+  wrap.appendChild(head);
+  wrap.appendChild(body);
+  // Open full static page in new browser tab inside SoloHost
+  head.querySelector('.agent-report-open')?.addEventListener('click', function () {
+    const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>Agent Report</title><style>body{font-family:system-ui,sans-serif;max-width:820px;margin:24px auto;padding:0 16px;line-height:1.55;color:#111}' +
+      'a{color:#1d4ed8;word-break:break-all}pre{background:#f4f4f5;padding:12px;overflow:auto;border-radius:8px}' +
+      'img{max-width:100%;border-radius:8px}h2,h3,h4{margin:1.2em 0 .4em}.agent-link{word-break:break-all}</style></head><body>' +
+      body.innerHTML + '</body></html>';
+    const blob = new Blob([html], { type: 'text/html' });
+    const url = URL.createObjectURL(blob);
+    window.open(url, '_blank', 'noopener');
+    setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+  });
+  head.querySelector('.agent-report-copy')?.addEventListener('click', function () {
+    try {
+      navigator.clipboard.writeText(bodyMd);
+      appendMsg('ai', vi ? 'Đã sao chép báo cáo.' : 'Report copied.');
+    } catch (_) {}
+  });
+  if (aiChat) {
+    const div = document.createElement('div');
+    div.className = 'msg ai agent-report-msg';
+    div.appendChild(wrap);
+    aiChat.appendChild(div);
+    aiChat.scrollTop = aiChat.scrollHeight;
+  }
+  return wrap;
+}
+
 function appendMsg(role, html) {
   const div = document.createElement('div');
   div.className = 'msg ' + role;
@@ -866,7 +955,11 @@ async function runAgentTask(text) {
   const msg = out.message ? formatAgentHtml(out.message) : '';
   if (out.status === 'done') {
     agentCtx = null;
-    appendMsg('ai', '✅ ' + (msg || (vi ? 'Xong.' : 'Done.')));
+    renderAgentReportCard(out, vi);
+    // Also keep a short toast line for history continuity
+    if (!out.message || String(out.message).length < 12) {
+      appendMsg('ai', '✅ ' + (vi ? 'Đã hoàn tất — xem báo cáo đầy đủ phía trên.' : 'Finished — see full report above.'));
+    }
     showContinueBar(false);
   } else if (out.status === 'ask') {
     agentCtx = { task, history: out.history };
@@ -888,8 +981,8 @@ async function runAgentTask(text) {
   } else {
     appendMsg('ai', '⚠️ ' + (msg || escapeHtml(vi ? 'Agent lỗi.' : 'Agent error.')));
   }
-  const summary = (out.message || (out.status === 'done' ? (vi ? 'Đã hoàn tất tác vụ.' : 'Task completed.') : out.status)).slice(0, 3000);
-  await persistTurn(text, summary);
+  const summary = (out.message || (out.status === 'done' ? (vi ? 'Đã hoàn tất tác vụ.' : 'Task completed.') : out.status));
+  await persistTurn(text, String(summary).slice(0, 50000));
 }
 
 function showContinueBar(show) {
