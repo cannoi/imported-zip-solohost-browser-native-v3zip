@@ -79,7 +79,7 @@ function servePublic(req, res) {
 let expressApp = null;
 let mountError = null;
 
-const server = http.createServer((req, res) => {
+const server = global.__SOLOHOST_HTTP_SERVER__ = http.createServer((req, res) => {
   const url = (req.url || '').split('?')[0];
 
   if (url === '/api/health' || url === '/health' || url === '/ready' || url === '/api/ready') {
@@ -152,3 +152,15 @@ server.on('error', (err) => {
 
 process.on('SIGTERM', () => server.close(() => process.exit(0)));
 process.on('SIGINT', () => server.close(() => process.exit(0)));
+
+// Live streaming WebSocket (CDP screencast) — optional, fails soft
+try {
+  const liveStream = require('./lib/engine/live-stream');
+  const domBridge = require('./lib/engine/dom-bridge');
+  const pe = require('./lib/engine/playwright-engine');
+  if (typeof global.__SOLOHOST_HTTP_SERVER__ !== 'undefined') {
+    liveStream.attachToServer(global.__SOLOHOST_HTTP_SERVER__, { domBridge, playwrightEngine: pe });
+  }
+} catch (e) {
+  console.error('[warn] live-stream:', e && e.message);
+}

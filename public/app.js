@@ -426,10 +426,172 @@
     }
   }
 
-  async function softRefreshActiveBridge() {
-    // Disabled in the baseline: refreshing the viewport caused flicker and scroll jumps.
-    return false;
+  let _bridgeAbort = null;
+  let _scrollSyncTimer = null;
+  let _lastScrollSent = 0;
+
+  function setBrowseProgress(on) {
+    try {
+      let bar = document.getElementById('solo-browse-progress');
+      if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'solo-browse-progress';
+        bar.setAttribute('aria-hidden', 'true');
+        bar.style.cssText = 'position:fixed;top:0;left:0;right:0;height:2px;z-index:9999;background:linear-gradient(90deg,#3b82f6,#a855f7,#22d3ee);transform-origin:left;transform:scaleX(0);opacity:0;transition:transform .25s,opacity .2s;pointer-events:none';
+        document.body.appendChild(bar);
+      }
+      if (on) {
+        bar.style.opacity = '1';
+        bar.style.transform = 'scaleX(0.35)';
+        setTimeout(() => { try { bar.style.transform = 'scaleX(0.7)'; } catch (_) {} }, 200);
+      } else {
+        bar.style.transform = 'scaleX(1)';
+        setTimeout(() => { try { bar.style.opacity = '0'; bar.style.transform = 'scaleX(0)'; } catch (_) {} }, 250);
+      }
+    } catch (_) {}
   }
+
+  function morphBridgeDocument(html) {
+    if (!frame || !frame.contentDocument) return false;
+    try {
+      const doc = frame.contentDocument;
+      const prevY = doc.documentElement.scrollTop || doc.body.scrollTop || 0;
+      const prevX = doc.documentElement.scrollLeft || doc.body.scrollLeft || 0;
+      const active = doc.activeElement;
+      const focusId = active && active.getAttribute && active.getAttribute('data-sh-id');
+      const focusVal = active && (active.value != null) ? active.value : null;
+      // Prefer in-place body replace when structure similar
+      const parser = new DOMParser();
+      const next = parser.parseFromString(html, 'text/html');
+      if (!next || !next.body) return false;
+      // Map by data-sh-id: update text/attrs without full navigation
+      const oldMap = {};
+      doc.querySelectorAll('[data-sh-id]').forEach((el) => { oldMap[el.getAttribute('data-sh-id')] = el; });
+      let patched = 0;
+      next.querySelectorAll('[data-sh-id]').forEach((nel) => {
+        const id = nel.getAttribute('data-sh-id');
+        const oel = oldMap[id];
+        if (!oel) return;
+        try {
+          if (oel.tagName === nel.tagName) {
+            if ((oel.tagName === 'INPUT' || oel.tagName === 'TEXTAREA') && document.activeElement === oel) return;
+            if (oel.tagName === 'A' || oel.tagName === 'BUTTON' || oel.tagName === 'LABEL') {
+              if (oel.innerHTML !== nel.innerHTML) { oel.innerHTML = nel.innerHTML; patched++; }
+            }
+            // sync attributes except value on focused field
+            Array.from(nel.attributes).forEach((a) => {
+              if (a.name === 'value' && focusId === id) return;
+              if (oel.getAttribute(a.name) !== a.value) oel.setAttribute(a.name, a.value);
+            });
+          }
+        } catch (_) {}
+      });
+      // If few interactive nodes matched, replace body (still no iframe navigation)
+      if (patched < 2 && Object.keys(oldMap).length < 3) {
+        const sy = next.body.getAttribute('data-sh-scroll-y');
+        doc.body.innerHTML = next.body.innerHTML;
+        if (next.head && doc.head) {
+          // refresh stylesheets links only
+        }
+        const y = sy != null ? Number(sy) : prevY;
+        try { doc.documentElement.scrollTop = y; doc.body.scrollTop = y; } catch (_) {}
+        try { doc.documentElement.scrollLeft = prevX; } catch (_) {}
+        return true;
+      }
+      try {
+        doc.documentElement.scrollTop = prevY;
+        doc.body.scrollTop = prevY;
+      } catch (_) {}
+      if (focusId) {
+        const el = doc.querySelector('[data-sh-id="' + focusId + '"]');
+        if (el) {
+          try { el.focus(); if (focusVal != null && el.value !== focusVal) el.value = focusVal; } catch (_) {}
+        }
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function applyBridgeView(b, opts) {
+    opts = opts || {};
+    const view = bridgeViewUrl(b);
+    if (!view || !frame) return false;
+    try {
+      if (_bridgeAbort) try { _bridgeAbort.abort(); } catch (_) {}
+      _bridgeAbort = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const r = await fetch(view + (opts.bust ? ('&t=' + Date.now()) : ''), {
+        headers: bridgeHeaders(b),
+        signal: _bridgeAbort && _bridgeAbort.signal
+      });
+      if (!r.ok) return false;
+      const html = await r.text();
+      const scrollY = Number(r.headers.get('x-solohost-scroll-y') || 0);
+      if (frame.contentDocument && frame.contentDocument.body && frame.getAttribute('data-sh-view')) {
+        const ok = morphBridgeDocument(html);
+        if (ok) {
+          if (scrollY > 0) {
+            try {
+              const d = frame.contentDocument;
+              d.documentElement.scrollTop = scrollY;
+              d.body.scrollTop = scrollY;
+            } catch (_) {}
+          }
+          return true;
+        }
+      }
+      // First paint or morph failed: full load once, restore scroll on load
+      frame.setAttribute('data-sh-pending-scroll', String(scrollY || 0));
+      frame.setAttribute('data-sh-tab-id', String((getActiveTab() && getActiveTab().id) || ''));
+      frame.setAttribute('data-sh-view', view);
+      frame.src = view;
+      return true;
+    } catch (e) {
+      if (e && e.name === 'AbortError') return false;
+      return false;
+    }
+  }
+
+  async function softRefreshActiveBridge() {
+    const tab = getActiveTab();
+    const nav = ensureTabNav(tab);
+    const b = nav && nav.bridge;
+    if (!b) return false;
+    return applyBridgeView(b, { bust: true });
+  }
+
+  function bindBridgeScrollSync() {
+    if (!frame || frame._soloScrollBound) return;
+    frame._soloScrollBound = true;
+    frame.addEventListener('load', () => {
+      try {
+        const d = frame.contentDocument;
+        if (!d) return;
+        const pending = Number(frame.getAttribute('data-sh-pending-scroll') || 0);
+        const bodyY = Number((d.body && d.body.getAttribute('data-sh-scroll-y')) || 0);
+        const y = pending || bodyY;
+        if (y > 0) {
+          d.documentElement.scrollTop = y;
+          d.body.scrollTop = y;
+        }
+        frame.removeAttribute('data-sh-pending-scroll');
+        d.addEventListener('scroll', () => {
+          const now = Date.now();
+          if (now - _lastScrollSent < 100) return;
+          _lastScrollSent = now;
+          const sy = d.documentElement.scrollTop || d.body.scrollTop || 0;
+          const sx = d.documentElement.scrollLeft || d.body.scrollLeft || 0;
+          const tab = getActiveTab();
+          const nav = ensureTabNav(tab);
+          const b = nav && nav.bridge;
+          if (!b) return;
+          bridgeEvent({ type: 'scroll', scrollY: sy, scrollX: sx });
+        }, { passive: true });
+      } catch (_) {}
+    });
+  }
+  bindBridgeScrollSync();
 
   async function bridgeEvent(ev) {
     const tab = getActiveTab();
@@ -437,6 +599,8 @@
     const nav = ensureTabNav(tab);
     const b = nav && nav.bridge;
     if (!b) return null;
+    const showProg = ev.type === 'click' || ev.type === 'submit';
+    if (showProg) setBrowseProgress(true);
     try {
       const r = await fetch('/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '/events', {
         method: 'POST', headers: bridgeHeaders(b), body: JSON.stringify(Object.assign({ token: b.token }, ev))
@@ -449,17 +613,18 @@
         return j;
       }
       if (j && j.ok && frame && state.activeTabId === tabId && frame.getAttribute('data-sh-tab-id') === String(tabId || '')) {
-        // Typing must not reload the snapshot: doing so loses focus and breaks login forms.
-        // The real page receives every input event in WebKit; refresh only after actions that may navigate/update UI.
-        if (ev.type !== 'input' && ev.type !== 'change') {
-          const view = bridgeViewUrl(b);
-          if (view) { frame.setAttribute('data-sh-tab-id', String(tabId || '')); frame.src = view + '&t=' + Date.now(); }
+        // Never full-reload iframe on input/change/scroll; morph for navigations/clicks
+        if (ev.type === 'input' || ev.type === 'change' || ev.type === 'scroll') {
+          /* engine already updated */
+        } else {
+          await applyBridgeView(b, { bust: true });
         }
         if (j.url && state.activeTabId === tabId) applyUrlToUi(j.url, j.title);
         else if (tab && j.url) tab.url = j.url;
       }
       return j;
     } catch (_) { return null; }
+    finally { if (showProg) setBrowseProgress(false); }
   }
 
   function applyUrlToUi(url, title) {

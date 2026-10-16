@@ -1,0 +1,15 @@
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const app = fs.readFileSync(path.join(__dirname, 'public/app.js'), 'utf8');
+assert.ok(app.includes('morphBridgeDocument'), 'morph helper present');
+assert.ok(app.includes('setBrowseProgress'), 'progress bar present');
+assert.ok(app.includes('bridgeEvent({ type: \'scroll\''), 'scroll sync present');
+assert.ok(!/animation:none!important/.test(fs.readFileSync(path.join(__dirname, 'lib/engine/playwright-engine.js'), 'utf8')), 'global animation kill removed');
+assert.ok(fs.readFileSync(path.join(__dirname, 'lib/engine/playwright-engine.js'), 'utf8').includes('Sync live form control state'), 'form value serialize');
+assert.ok(fs.existsSync(path.join(__dirname, 'lib/engine/live-stream.js')), 'live-stream module');
+assert.ok(fs.existsSync(path.join(__dirname, 'public/live-view.js')), 'live-view client');
+const ba = require('./lib/backend-agent');
+assert.strictEqual(typeof ba.status, 'function');
+console.log('test-v10.27-bridge-ux PASS');
