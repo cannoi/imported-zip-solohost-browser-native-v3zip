@@ -593,6 +593,171 @@
   }
   bindBridgeScrollSync();
 
+  async function refreshActiveTabThumb() {
+    try {
+      const tab = getActiveTab();
+      const nav = ensureTabNav(tab);
+      const b = nav && nav.bridge;
+      if (!b || !tab) return;
+      const r = await fetch('/api/browser/sessions/' + encodeURIComponent(b.sessionId) + '/thumb?token=' + encodeURIComponent(b.token), {
+        headers: bridgeHeaders(b)
+      });
+      const j = await r.json();
+      if (j && j.ok && j.thumb) {
+        tab.thumb = j.thumb;
+        renderTabs();
+      }
+    } catch (_) {}
+  }
+
+  /* Find in page (Bridge iframe same-origin snapshot) */
+  const findBar = $('find-bar');
+  const findInput = $('find-input');
+  const findCount = $('find-count');
+  let findMatches = [];
+  let findIdx = -1;
+
+  function clearFindHighlights() {
+    try {
+      const doc = frame && frame.contentDocument;
+      if (!doc) return;
+      doc.querySelectorAll('mark.solo-find-hl').forEach((m) => {
+        const p = m.parentNode;
+        if (!p) return;
+        p.replaceChild(doc.createTextNode(m.textContent), m);
+        p.normalize();
+      });
+    } catch (_) {}
+    findMatches = [];
+    findIdx = -1;
+    if (findCount) findCount.textContent = '';
+  }
+
+  function runFind(q) {
+    clearFindHighlights();
+    q = String(q || '').trim();
+    if (!q) return;
+    try {
+      const doc = frame && frame.contentDocument;
+      if (!doc || !doc.body) return;
+      const walk = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null);
+      const nodes = [];
+      let n;
+      while ((n = walk.nextNode())) {
+        if (n.nodeValue && n.nodeValue.toLowerCase().indexOf(q.toLowerCase()) >= 0) nodes.push(n);
+      }
+      nodes.forEach((textNode) => {
+        const val = textNode.nodeValue;
+        const lower = val.toLowerCase();
+        const ql = q.toLowerCase();
+        let start = 0;
+        const frag = doc.createDocumentFragment();
+        let idx;
+        while ((idx = lower.indexOf(ql, start)) >= 0) {
+          if (idx > start) frag.appendChild(doc.createTextNode(val.slice(start, idx)));
+          const mark = doc.createElement('mark');
+          mark.className = 'solo-find-hl';
+          mark.style.background = '#fbbf24';
+          mark.style.color = '#111';
+          mark.textContent = val.slice(idx, idx + q.length);
+          frag.appendChild(mark);
+          findMatches.push(mark);
+          start = idx + q.length;
+        }
+        if (start < val.length) frag.appendChild(doc.createTextNode(val.slice(start)));
+        textNode.parentNode.replaceChild(frag, textNode);
+      });
+      if (findCount) findCount.textContent = findMatches.length ? ('1/' + findMatches.length) : '0';
+      if (findMatches.length) {
+        findIdx = 0;
+        findMatches[0].scrollIntoView({ block: 'center', behavior: 'smooth' });
+      }
+    } catch (_) {}
+  }
+
+  function findStep(dir) {
+    if (!findMatches.length) return;
+    findIdx = (findIdx + dir + findMatches.length) % findMatches.length;
+    findMatches.forEach((m, i) => { m.style.outline = i === findIdx ? '2px solid #3b82f6' : ''; });
+    findMatches[findIdx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+    if (findCount) findCount.textContent = (findIdx + 1) + '/' + findMatches.length;
+  }
+
+  function openFindBar() {
+    if (!findBar) return;
+    findBar.hidden = false;
+    if (findInput) { findInput.focus(); findInput.select(); }
+  }
+  function closeFindBar() {
+    if (findBar) findBar.hidden = true;
+    clearFindHighlights();
+  }
+
+  if ($('btn-find')) $('btn-find').addEventListener('click', openFindBar);
+  if ($('find-close')) $('find-close').addEventListener('click', closeFindBar);
+  if ($('find-next')) $('find-next').addEventListener('click', () => findStep(1));
+  if ($('find-prev')) $('find-prev').addEventListener('click', () => findStep(-1));
+  if (findInput) {
+    findInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); runFind(findInput.value); }
+      if (e.key === 'Escape') closeFindBar();
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+      e.preventDefault();
+      openFindBar();
+    }
+    if (e.key === 'Escape' && findBar && !findBar.hidden) closeFindBar();
+  });
+
+  /* Pull-to-refresh on bridge frame (touch) */
+  (function bindPullToRefresh() {
+    const ptr = $('ptr-indicator');
+    let startY = 0, pulling = false, armed = false;
+    function onTouchStart(e) {
+      try {
+        const d = frame && frame.contentDocument;
+        if (!d) return;
+        const sy = d.documentElement.scrollTop || d.body.scrollTop || 0;
+        if (sy > 2) return;
+        startY = e.touches[0].clientY;
+        pulling = true;
+        armed = false;
+      } catch (_) {}
+    }
+    function onTouchMove(e) {
+      if (!pulling) return;
+      const dy = e.touches[0].clientY - startY;
+      if (dy > 40) {
+        armed = dy > 72;
+        if (ptr) {
+          ptr.hidden = false;
+          ptr.classList.toggle('ready', armed);
+          ptr.style.opacity = String(Math.min(1, dy / 90));
+        }
+      }
+    }
+    function onTouchEnd() {
+      if (!pulling) return;
+      pulling = false;
+      if (ptr) ptr.hidden = true;
+      if (armed) {
+        softRefreshActiveBridge().then(() => refreshActiveTabThumb());
+      }
+      armed = false;
+    }
+    // Attach on frame load to contentWindow if possible; also listen on viewport container
+    const vp = $('browser-viewport') || (frame && frame.parentElement);
+    if (vp) {
+      vp.addEventListener('touchstart', onTouchStart, { passive: true });
+      vp.addEventListener('touchmove', onTouchMove, { passive: true });
+      vp.addEventListener('touchend', onTouchEnd, { passive: true });
+    }
+  })();
+
+
+
   async function bridgeEvent(ev) {
     const tab = getActiveTab();
     const tabId = tab && tab.id;
@@ -618,6 +783,7 @@
           /* engine already updated */
         } else {
           await applyBridgeView(b, { bust: true });
+          if (ev.type === 'click' || ev.type === 'submit') setTimeout(() => { try { refreshActiveTabThumb(); } catch (_) {} }, 600);
         }
         if (j.url && state.activeTabId === tabId) applyUrlToUi(j.url, j.title);
         else if (tab && j.url) tab.url = j.url;
@@ -1219,11 +1385,17 @@
     const strip = $('tab-strip'); if (!strip) return;
     strip.textContent = '';
     state.tabs.forEach(tab => {
-      const item = document.createElement('div'); item.className = 'browser-tab' + (tab.id === state.activeTabId ? ' active' : '');
+      const item = document.createElement('div'); item.className = 'browser-tab tab-chip' + (tab.id === state.activeTabId ? ' active' : '');
       const select = document.createElement('button'); select.type = 'button'; select.className = 'browser-tab-select';
       let hostLabel = ''; try { hostLabel = tab.url ? new URL(tab.url).hostname : ''; } catch (_) {}
-      select.textContent = (tab.private ? '◉ ' : '') + (tab.title || hostLabel || (state.lang === 'vi' ? 'Tab mới' : 'New tab'));
-      select.title = (tab.private ? (state.lang === 'vi' ? 'Tab riêng tư · ' : 'Private tab · ') : '') + (tab.url || select.textContent); select.addEventListener('click', () => switchTab(tab.id));
+      if (tab.thumb) {
+        const th = document.createElement('span'); th.className = 'tab-thumb'; th.style.backgroundImage = 'url(' + tab.thumb + ')';
+        select.appendChild(th);
+      }
+      const lab = document.createElement('span'); lab.className = 'tab-label';
+      lab.textContent = (tab.private ? '◉ ' : '') + (tab.title || hostLabel || (state.lang === 'vi' ? 'Tab mới' : 'New tab'));
+      select.appendChild(lab);
+      select.title = (tab.private ? (state.lang === 'vi' ? 'Tab riêng tư · ' : 'Private tab · ') : '') + (tab.url || lab.textContent); select.addEventListener('click', () => switchTab(tab.id));
       const close = document.createElement('button'); close.type = 'button'; close.className = 'browser-tab-close'; close.textContent = '×'; close.title = state.lang === 'vi' ? 'Đóng tab' : 'Close tab';
       close.addEventListener('click', e => { e.stopPropagation(); closeTab(tab.id); });
       item.append(select, close); strip.appendChild(item);

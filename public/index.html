@@ -18,11 +18,20 @@
     <div class="chrome-actions">
       <button type="button" class="icon-btn" id="btn-new-tab" title="New tab" aria-label="New tab">＋</button>
       <button type="button" class="icon-btn" id="btn-bookmark" title="Bookmark" aria-label="Bookmark">☆</button>
+      <button type="button" class="icon-btn" id="btn-find" title="Find in page" aria-label="Find in page">⌕</button>
       <button type="button" class="icon-btn" id="btn-menu" title="Settings" aria-label="Settings" aria-expanded="false" aria-controls="settings-menu">☰</button>
       <button type="button" class="icon-btn" id="btn-private-tab" title="New private tab" aria-label="New private tab">🕶️</button>
       <button type="button" class="icon-btn" id="btn-novnc" title="Interactive Chromium desktop" aria-label="Interactive Chromium desktop">🖥️</button>
     </div>
   </header>
+  <div class="find-bar" id="find-bar" hidden role="search">
+    <input type="search" id="find-input" placeholder="Find in page" enterkeyhint="search" autocomplete="off">
+    <span class="find-count" id="find-count"></span>
+    <button type="button" class="icon-btn" id="find-prev" title="Previous" aria-label="Previous match">↑</button>
+    <button type="button" class="icon-btn" id="find-next" title="Next" aria-label="Next match">↓</button>
+    <button type="button" class="icon-btn" id="find-close" title="Close" aria-label="Close find">×</button>
+  </div>
+  <div class="ptr-indicator" id="ptr-indicator" hidden aria-hidden="true">↓</div>
 
   <nav class="tab-strip" id="tab-strip" aria-label="Browser tabs"></nav>
 
@@ -82,6 +91,14 @@
             <strong id="panel-pl-h">♪ Music library</strong>
             <button type="button" class="icon-btn tiny home-panel-close" data-close title="Close">×</button>
           </header>
+  <div class="find-bar" id="find-bar" hidden role="search">
+    <input type="search" id="find-input" placeholder="Find in page" enterkeyhint="search" autocomplete="off">
+    <span class="find-count" id="find-count"></span>
+    <button type="button" class="icon-btn" id="find-prev" title="Previous" aria-label="Previous match">↑</button>
+    <button type="button" class="icon-btn" id="find-next" title="Next" aria-label="Next match">↓</button>
+    <button type="button" class="icon-btn" id="find-close" title="Close" aria-label="Close find">×</button>
+  </div>
+  <div class="ptr-indicator" id="ptr-indicator" hidden aria-hidden="true">↓</div>
           <section class="playlist-player" aria-label="Playlist player">
             <div class="playlist-player-head"><span id="playlist-now-label">Now playing</span><span id="playlist-now-title">Choose a video</span></div>
             <iframe id="playlist-player-frame" title="Playlist player" src="about:blank" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>
@@ -116,6 +133,14 @@
             <strong id="panel-app-h">⊞ SoloHost Apps</strong>
             <button type="button" class="icon-btn tiny home-panel-close" data-close title="Close">×</button>
           </header>
+  <div class="find-bar" id="find-bar" hidden role="search">
+    <input type="search" id="find-input" placeholder="Find in page" enterkeyhint="search" autocomplete="off">
+    <span class="find-count" id="find-count"></span>
+    <button type="button" class="icon-btn" id="find-prev" title="Previous" aria-label="Previous match">↑</button>
+    <button type="button" class="icon-btn" id="find-next" title="Next" aria-label="Next match">↓</button>
+    <button type="button" class="icon-btn" id="find-close" title="Close" aria-label="Close find">×</button>
+  </div>
+  <div class="ptr-indicator" id="ptr-indicator" hidden aria-hidden="true">↓</div>
           <div class="home-card-body" id="app-list"></div>
           <form class="home-row" id="app-add-form">
             <input type="text" id="app-name-input" placeholder="Name" autocomplete="off">

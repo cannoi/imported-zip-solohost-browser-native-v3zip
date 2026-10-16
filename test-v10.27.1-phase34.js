@@ -1,0 +1,25 @@
+
+'use strict';
+const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
+const root = __dirname;
+assert.ok(fs.existsSync(path.join(root, 'lib/engine/easylist-lite.js')));
+const el = require('./lib/engine/easylist-lite');
+assert.strictEqual(el.isBlockedHost('pagead2.googlesyndication.com'), true);
+assert.strictEqual(el.isBlockedHost('example.com'), false);
+const pe = fs.readFileSync(path.join(root, 'lib/engine/playwright-engine.js'), 'utf8');
+assert.ok(pe.includes('ensurePrewarm'));
+assert.ok(pe.includes('takePrewarm'));
+assert.ok(pe.includes('captureThumbnail'));
+assert.ok(pe.includes('easylist-lite'));
+const app = fs.readFileSync(path.join(root, 'public/app.js'), 'utf8');
+assert.ok(app.includes('runFind'));
+assert.ok(app.includes('bindPullToRefresh') || app.includes('ptr-indicator') || app.includes('Pull-to-refresh'));
+assert.ok(app.includes('refreshActiveTabThumb'));
+const html = fs.readFileSync(path.join(root, 'public/index.html'), 'utf8');
+assert.ok(html.includes('find-bar'));
+assert.ok(html.includes('btn-find'));
+const sa = fs.readFileSync(path.join(root, 'server-app.js'), 'utf8');
+assert.ok(sa.includes('/thumb'));
+console.log('test-v10.27.1-phase34 PASS');

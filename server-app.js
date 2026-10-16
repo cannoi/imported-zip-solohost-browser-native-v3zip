@@ -799,6 +799,21 @@ app.get('/api/browser/sessions/:id/view', (req, res) => {
   res.send(html);
 });
 
+app.get('/api/browser/sessions/:id/thumb', async (req, res) => {
+  try {
+    const tok = req.get('x-session-token') || req.query.token || '';
+    const session = domBridge.authSession(req.params.id, tok);
+    if (!session) return res.status(401).json({ ok: false, error: 'unauthorized' });
+    if (!session.pwSessionId) return res.json({ ok: false, error: 'no_engine' });
+    const pe = require('./lib/engine/playwright-engine');
+    const dataUrl = await pe.captureThumbnail(session.pwSessionId, { quality: 32 });
+    if (!dataUrl) return res.json({ ok: false, error: 'thumb_unavailable' });
+    res.json({ ok: true, thumb: dataUrl, at: Date.now() });
+  } catch (e) {
+    res.status(502).json({ ok: false, error: String(e.message || e).slice(0, 160) });
+  }
+});
+
 app.post('/api/browser/sessions/:id/events', async (req, res) => {
   try {
     const tok = req.get('x-session-token') || (req.body && req.body.token) || '';
