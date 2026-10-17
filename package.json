@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.43.0",
-  "description": "SoloHost Browser \u2014 links open in new tab; lean agent search cache + quota partial report",
+  "version": "10.44.0",
+  "description": "SoloHost Browser \u2014 agent search not blind: composite observe, SERP parsers, safeFetch headers, variants",
   "main": "server.js",
   "engines": {
     "node": ">=18"
