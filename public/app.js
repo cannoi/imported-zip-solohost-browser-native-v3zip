@@ -315,7 +315,14 @@
         return { ok: false, reason: 'bridge_session_stale', detail: j };
       }
       if (!j || !j.ok) return { ok: false, reason: (j && j.error) || 'bridge_navigate_failed', detail: j };
-      if (j.externalRequired && j.externalReason !== 'bing_verification_required') return loadViaExternal(googleExternalTarget(j.url || url), j.externalReason || 'site_auth_policy', tab);
+      if (j.externalRequired && j.externalReason !== 'bing_verification_required') {
+        // Prefer Bridge assist HTML (no about:blank white screen). Headful/noVNC is the real path for Google login.
+        if (j.hasContent || j.html || j.viewReady) {
+          /* fall through to applyBridgeView below */
+        } else {
+          return showAuthAssistInFrame(j.url || url, j.externalReason || 'site_auth_policy', tab);
+        }
+      }
       const activeNav = ensureTabNav(tab);
       if (activeNav) activeNav.bridgeAudit = j.audit || {};
       // Prefer showing whatever the Bridge has; only fail hard when empty AND explicit error
@@ -392,20 +399,81 @@
     return url;
   }
 
-  function loadViaExternal(url, reason, ownerTab) {
-    const tab = ownerTab || getActiveTab(); const nav = ensureTabNav(tab);
+  
+  function buildAuthAssistSrcdoc(url, reason) {
+    const vi = state.lang === 'vi';
+    const safeUrl = String(url || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+    const title = vi ? 'Đăng nhập cần Desktop (noVNC)' : 'Sign-in needs Login desktop';
+    const body = vi
+      ? 'Google thường từ chối đăng nhập trong trình duyệt tự động (rejected / trống). Hãy dùng Login desktop để nhập mật khẩu và CAPTCHA trên Chromium thật — không gửi mật khẩu cho AI.'
+      : 'Google often rejects sign-in inside automated browsers (rejected / blank). Use Login desktop to type your password and CAPTCHA on real Chromium — never send passwords to AI.';
+    const openNovnc = vi ? 'Mở Login desktop' : 'Open Login desktop';
+    const openExt = vi ? 'Mở ngoài ↗' : 'Open externally ↗';
+    const reasonLabel = String(reason || 'auth').slice(0, 48);
+    return '<!doctype html><html lang="' + (vi ? 'vi' : 'en') + '"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+      '<title>' + title + '</title><style>' +
+      '*{box-sizing:border-box}html,body{margin:0;min-height:100%;font-family:system-ui,-apple-system,sans-serif;background:#0f1115;color:#e8eaef}' +
+      '.wrap{max-width:520px;margin:0 auto;padding:28px 18px 40px}h1{font-size:1.15rem;margin:0 0 8px;font-weight:650}' +
+      '.reason{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;background:#2a2f3a;color:#9aa3b2;margin-bottom:12px}' +
+      'p{line-height:1.55;color:#c5cad3;font-size:14px}.url{word-break:break-all;font-size:12px;color:#7d8696;margin:12px 0 18px}' +
+      '.actions{display:flex;flex-wrap:wrap;gap:8px}.btn{display:inline-flex;align-items:center;padding:10px 14px;border-radius:10px;border:1px solid #3a4150;background:#1a1f29;color:#e8eaef;text-decoration:none;font-size:13px;font-weight:600;cursor:pointer}' +
+      '.btn.primary{background:#3b82f6;border-color:#3b82f6;color:#fff}</style></head><body>' +
+      '<div class="wrap" data-sh-auth-assist="1"><span class="reason">' + reasonLabel + '</span><h1>' + title + '</h1><p>' + body + '</p>' +
+      '<div class="url">' + safeUrl + '</div><div class="actions">' +
+      '<button type="button" class="btn primary" id="sh-open-novnc">' + openNovnc + '</button>' +
+      '<a class="btn" href="' + safeUrl + '" target="_blank" rel="noopener noreferrer">' + openExt + '</a></div></div>' +
+      '<script>document.getElementById("sh-open-novnc")&&document.getElementById("sh-open-novnc").addEventListener("click",function(){try{parent.postMessage({type:"solohost-open-novnc"},"*");}catch(e){}});</script></body></html>';
+  }
+
+  function showAuthAssistInFrame(url, reason, ownerTab) {
+    const tab = ownerTab || getActiveTab();
+    const target = googleExternalTarget(url) || url;
+    if (tab && state.activeTabId === tab.id && btnOpen) btnOpen.href = target;
+    if (tab) { tab.url = target; }
+    if (state.activeTabId === (tab && tab.id)) {
+      state.url = target;
+      if (input) input.value = target;
+      hideStart();
+    }
+    if (tab && state.activeTabId === tab.id && frame) {
+      try {
+        frame.removeAttribute('src');
+        frame.setAttribute('data-sh-tab-id', String(tab.id || ''));
+        frame.setAttribute('sandbox', 'allow-same-origin allow-scripts allow-popups');
+        frame.srcdoc = buildAuthAssistSrcdoc(target, reason);
+      } catch (_) {}
+    }
+    showProxyHint(
+      (state.lang === 'vi'
+        ? 'Đăng nhập Google cần Login desktop (🖥️) hoặc Open ↗. Không gửi mật khẩu cho AI.'
+        : 'Google sign-in needs Login desktop (🖥️) or Open ↗. Never send passwords to AI.')
+    );
+    // Best-effort: wake headful Chromium + noVNC
+    try { fetch('/api/novnc/start', { method: 'POST', credentials: 'same-origin' }).catch(function () {}); } catch (_) {}
+    return { ok: true, mode: MODE.EXTERNAL, url: target, reason: reason || 'auth_policy', authAssist: true };
+  }
+
+function loadViaExternal(url, reason, ownerTab) {
+    const tab = ownerTab || getActiveTab();
+    const rsn = String(reason || 'policy');
+    // Auth policies: never leave a pure white about:blank — show assist card + hint.
+    if (/auth_policy|google_auth|facebook_auth|tiktok_auth|login|signin/i.test(rsn)) {
+      return showAuthAssistInFrame(url, rsn, tab);
+    }
+    const nav = ensureTabNav(tab);
     if (nav) nav.bridge = null;
-    // Do not clear another tab's viewport when a background navigation completes.
-    if (tab && state.activeTabId === tab.id && frame) { try { frame.removeAttribute('srcdoc'); frame.setAttribute('data-sh-tab-id', String(tab.id)); frame.src = 'about:blank'; } catch (_) {} }
+    if (tab && state.activeTabId === tab.id && frame) {
+      try { frame.removeAttribute('srcdoc'); frame.setAttribute('data-sh-tab-id', String(tab.id)); frame.src = 'about:blank'; } catch (_) {}
+    }
     if (tab && state.activeTabId === tab.id && btnOpen) btnOpen.href = url;
     showProxyHint(
       (state.lang === 'vi'
         ? 'Trang này cần mở ngoài. Lý do: '
-        : 'This page needs an external browser. Reason: ') + (reason || 'policy') +
+        : 'This page needs an external browser. Reason: ') + rsn +
       (state.lang === 'vi' ? ' — bấm ↗ Open.' : ' — tap ↗ Open.')
     );
-    // Do not auto-window.open unless user clicks ↗
-    return { ok: true, mode: MODE.EXTERNAL, url, reason: reason || 'policy' };
+    if (btnOpen && url) btnOpen.href = url;
+    return { ok: true, mode: MODE.EXTERNAL, url, reason: rsn };
   }
 
   
@@ -790,7 +858,11 @@
       if (j && j.ok && j.externalRequired) {
         if (j.url && state.activeTabId === tabId) applyUrlToUi(j.url, j.title);
         else if (tab && j.url) tab.url = j.url;
-        loadViaExternal(j.url || (tab && tab.url) || state.url, j.externalReason || 'site_auth_policy', tab);
+        if (j.hasContent) {
+          try { await applyBridgeView(b, { bust: true }); } catch (_) {}
+        } else {
+          showAuthAssistInFrame(j.url || (tab && tab.url) || state.url, j.externalReason || 'site_auth_policy', tab);
+        }
         return j;
       }
       if (j && j.ok && frame && state.activeTabId === tabId && frame.getAttribute('data-sh-tab-id') === String(tabId || '')) {
