@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.38.0",
-  "description": "SoloHost Browser \u2014 agent progress UI, resume without restart, session pin, retail compare",
+  "version": "10.39.0",
+  "description": "SoloHost Browser \u2014 never blank, YouTube adapter, lighter Chromium, mobile layout",
   "main": "server.js",
   "engines": {
     "node": ">=18"

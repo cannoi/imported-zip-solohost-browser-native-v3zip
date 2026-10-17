@@ -75,3 +75,9 @@
 ### Tests
 - `npm test` = test-core.js
 - `npm run test:all` = core + security + bridge + youtube + backend-agent + agent-v1026 + evidence
+
+## v10.39.0
+- Added: lib/adapters/youtube.js, lib/render-error.js, public/layout-guard.js
+- frame-proxy YouTube special path restored via adapter
+- Chromium lighter route + debounced persist
+- Partial: full Tier A HTTP router and AI search deferred

@@ -973,6 +973,16 @@
           }
           // Ask AI only once for each weak snapshot signature. Send metrics only, never page
           // text, form values, cookies, credentials, or tokens; avoid duplicate AI work on re-renders.
+          try { if (window.SoloLayoutGuard && frame) window.SoloLayoutGuard.runOnFrame(frame); } catch (_lg) {}
+          // Never-blank client watchdog: one automatic recovery attempt for near-empty snapshots
+          if (firstAudit && audit.textLength < 40 && !dataLoss) {
+            const u = String(state.url || '');
+            if (/youtube\.com|youtu\.be/i.test(u) && !state._blankRetry) {
+              state._blankRetry = true;
+              clientLog('warn', 'blank_watchdog_youtube', { url: u });
+              try { navigate(u, { force: true, mode: MODE.PROXY }); } catch (_) {}
+            }
+          }
           if (firstAudit && (audit.textLength < 120 || dataLoss || (audit.forms > 0 && audit.controls === 0))) {
             fetch('/api/browser/ai-compat', {
               method: 'POST', headers: { 'Content-Type': 'application/json' },
