@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.39.0",
-  "description": "SoloHost Browser \u2014 never blank, YouTube adapter, lighter Chromium, mobile layout",
+  "version": "10.40.0",
+  "description": "SoloHost Browser \u2014 mobile-first Chromium (390x844, Android UA, touch), real media, agent mobile sessions",
   "main": "server.js",
   "engines": {
     "node": ">=18"
