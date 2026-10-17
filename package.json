@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.44.0",
-  "description": "SoloHost Browser \u2014 agent search not blind: composite observe, SERP parsers, safeFetch headers, variants",
+  "version": "10.44.1",
+  "description": "SoloHost Browser \u2014 Agent systemPrompt Evidence-First + composite observation in user prompt",
   "main": "server.js",
   "engines": {
     "node": ">=18"
