@@ -1134,9 +1134,13 @@ function loadViaExternal(url, reason, ownerTab) {
           const el = e.target;
           if (!el || !/^(INPUT|TEXTAREA)$/.test(el.tagName)) return;
           const form = el.closest('form');
-          if (!form) return;
           e.preventDefault();
-          const id = form.getAttribute('data-sh-id');
+          if (form && form.getAttribute('data-sh-id')) {
+            bridgeEvent({ type: 'submit', targetId: form.getAttribute('data-sh-id') });
+            return;
+          }
+          // Google SPA often has no <form> — Enter on email must still advance.
+          const id = el.getAttribute('data-sh-id');
           if (id) bridgeEvent({ type: 'submit', targetId: id });
         }, true);
         doc.addEventListener('submit', (e) => {
