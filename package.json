@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.44.2",
-  "description": "SoloHost Browser \u2014 Google sign-in rejected: assist card + noVNC (no blank viewport)",
+  "version": "10.44.3",
+  "description": "SoloHost Browser \u2014 Google login Next works in Bridge; assist only on /signin/rejected",
   "main": "server.js",
   "engines": {
     "node": ">=18"

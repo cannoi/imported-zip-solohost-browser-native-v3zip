@@ -47,9 +47,10 @@
       const u = new URL(url);
       const h = u.hostname.toLowerCase().replace(/^www\./, '');
       const p = u.pathname || '/';
-      if (h === 'accounts.google.com') return true;
+      // Only Google hard-reject pages — identifier/password must stay in Bridge for Next/Submit.
+      if (h === 'accounts.google.com' && /\/signin\/rejected(?:\/|$)/i.test(p)) return true;
       if ((h === 'youtube.com' || h.endsWith('.youtube.com')) && /\/(signin|sign_in)(?:\/|$)/i.test(p)) return true;
-      if ((h === 'facebook.com' || h.endsWith('.facebook.com')) && /\/(login|checkpoint|recover)(?:\/|$)/i.test(p)) return true;
+      if ((h === 'facebook.com' || h.endsWith('.facebook.com')) && /\/(checkpoint|recover)(?:\/|$)/i.test(p)) return true;
       if ((h === 'tiktok.com' || h.endsWith('.tiktok.com') || h === 'login.tiktok.com') && /\/(login|signup|passport)(?:\/|$)/i.test(p)) return true;
       return false;
     } catch { return false; }
@@ -1713,8 +1714,9 @@ function loadViaExternal(url, reason, ownerTab) {
       if (!result.ok) {
         const reason = result.reason || 'engine_failed';
         clientLog('warn', 'navigate_engine_fallback', { url: url, reason: reason, mustEngine: mustUseEngine(url) });
-        if (isLoginPath(url)) {
-          result = loadViaExternal(url, 'login_requires_full_browser_context:' + reason, tab);
+        // Google identifier/password: keep retrying Bridge — only /signin/rejected is external.
+        if (isExternalAuthPath(url)) {
+          result = showAuthAssistInFrame(url, 'login_requires_full_browser_context:' + reason, tab);
         } else if (mustUseEngine(url)) {
           clientLog('warn', 'navigate_engine_required_no_proxy', { url: url, reason: reason });
           result = { ok: false, mode: MODE.ENGINE, reason: 'engine_required:' + reason, url: url };
