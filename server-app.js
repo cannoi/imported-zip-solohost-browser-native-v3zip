@@ -25,6 +25,8 @@ function softRequire(label, path, fallback) {
   }
 }
 
+const geoip = require('./lib/geoip');
+try { geoip.startGeoWarm(); } catch (_) {}
 const appLog = softRequire('app-log', './lib/app-log', {
   configure() {},
   log() {},
@@ -490,6 +492,24 @@ app.post('/api/novnc/start', async (req, res) => {
     });
   }
 })();
+
+
+app.get('/api/geo', async (req, res) => {
+  try {
+    const p = await geoip.refreshGeoProfile().catch(() => geoip.getGeoProfileSync());
+    res.json({
+      ok: true,
+      timezone: p.timezone,
+      locale: p.locale,
+      countryCode: p.countryCode || '',
+      source: p.source,
+      acceptLanguage: p.acceptLanguage
+    });
+  } catch (e) {
+    const p = geoip.getGeoProfileSync();
+    res.json({ ok: true, timezone: p.timezone, locale: p.locale, countryCode: '', source: 'fallback' });
+  }
+});
 
 app.get('/api/health', (_req, res) => res.status(200).json(healthPayload()));
 app.get('/health', (_req, res) => res.status(200).json(healthPayload()));

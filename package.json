@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.44.4",
-  "description": "SoloHost Browser \u2014 Google login Next: stable selectors + Bridge refresh after step",
+  "version": "10.44.5",
+  "description": "SoloHost Browser \u2014 public-IP locale/timezone + hardened cookie profile storage",
   "main": "server.js",
   "engines": {
     "node": ">=18"

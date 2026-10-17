@@ -263,7 +263,7 @@
         const r = await fetch('/api/browser/sessions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ privateMode: !!tab.private, profileId: browserProfileId(), tabKey: String(tab.id || ''), locale: state.lang === 'vi' ? 'vi-VN' : 'en-US', timezoneId: state.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }),
+          body: JSON.stringify({ privateMode: !!tab.private, profileId: browserProfileId(), tabKey: String(tab.id || ''), locale: state.geoLocale || (state.lang === 'vi' ? 'vi-VN' : 'en-US'), timezoneId: state.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC' }),
           signal: ac ? ac.signal : undefined
         });
         const j = await r.json().catch(() => null);
@@ -1374,6 +1374,25 @@ function loadViaExternal(url, reason, ownerTab) {
 
   
 
+  
+  async function applyServerGeo() {
+    try {
+      const r = await fetch('/api/geo', { cache: 'no-store', credentials: 'same-origin' });
+      const j = await r.json();
+      if (j && j.timezone) {
+        state.timeZone = j.timezone;
+        try {
+          const el = document.getElementById('tz-label') || document.querySelector('[data-tz]');
+          if (el) el.textContent = (state.lang === 'vi' ? 'Múi giờ: ' : 'Time zone: ') + j.timezone;
+        } catch (_) {}
+      }
+      if (j && j.locale && !state.langLocked) {
+        // Do not override explicit UI language; only feed session creation
+        state.geoLocale = j.locale;
+      }
+    } catch (_) {}
+  }
+
   async function checkAccessGate() {
     const gate = $('access-gate');
     if (!gate) return true;
@@ -1467,11 +1486,11 @@ function loadViaExternal(url, reason, ownerTab) {
       const el = document.getElementById('splash-screen');
       if (!el) return;
       // Tap/click skips wait
-      el.addEventListener('click', function(){ hideSplash(); checkAccessGate(); }, { once: true });
+      el.addEventListener('click', function(){ hideSplash(); applyServerGeo(); checkAccessGate(); }, { once: true });
       // Hard timeout 5s — always dismiss
-      setTimeout(function () { hideSplash(); checkAccessGate(); }, 5000);
-      setTimeout(function () { hideSplash(); checkAccessGate(); }, 6500);
-      setTimeout(function () { checkAccessGate(); }, 8000);
+      setTimeout(function () { hideSplash(); applyServerGeo(); checkAccessGate(); }, 5000);
+      setTimeout(function () { hideSplash(); applyServerGeo(); checkAccessGate(); }, 6500);
+      setTimeout(function () { applyServerGeo(); checkAccessGate(); }, 8000);
     } catch (_) {
       try { hideSplash(); } catch (__) {}
     }
