@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.42.0",
-  "description": "SoloHost Browser \u2014 Google default search, YT player fix, fast link nav + Back history",
+  "version": "10.43.0",
+  "description": "SoloHost Browser \u2014 links open in new tab; lean agent search cache + quota partial report",
   "main": "server.js",
   "engines": {
     "node": ">=18"

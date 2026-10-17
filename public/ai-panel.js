@@ -694,11 +694,23 @@ async function loadLogs() {
       const lvl = l.level || 'info';
       const msg = l.msg || '';
       const bits = [ts, '[' + lvl + ']', msg];
+      if (l.taskId) bits.push('taskId=' + l.taskId);
+      if (l.action) bits.push('action=' + l.action);
+      if (l.query) bits.push('query=' + String(l.query).slice(0, 80));
+      if (l.engine) bits.push('engine=' + l.engine);
+      if (l.outcome) bits.push('outcome=' + l.outcome);
+      if (l.resultCount != null) bits.push('results=' + l.resultCount);
       if (l.code) bits.push('code=' + l.code);
-      if (l.error) bits.push('error=' + l.error);
-      if (l.blocked) bits.push('blocked=' + l.blocked);
+      if (l.error) bits.push('error=' + String(l.error).slice(0, 160));
+      const blocked = Array.isArray(l.blockedEngines) ? l.blockedEngines
+        : (Array.isArray(l.blocked) ? l.blocked : (l.blocked ? [l.blocked] : []));
+      if (blocked.length) bits.push('blockedEngines=' + blocked.filter(Boolean).join(','));
       if (l.status != null) bits.push('status=' + l.status);
-      if (l.ms != null) bits.push(l.ms + 'ms');
+      const dur = l.durationMs != null ? l.durationMs : l.ms;
+      if (dur != null && dur !== '') bits.push('durationMs=' + dur);
+      if (l.cached) bits.push('cached=1');
+      if (l.provider) bits.push('provider=' + l.provider);
+      if (l.model) bits.push('model=' + l.model);
       if (l.url) bits.push(String(l.url).slice(0, 120));
       if (l.snippet) bits.push('"' + String(l.snippet).slice(0, 80) + '"');
       return bits.join(' ');

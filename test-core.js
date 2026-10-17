@@ -16,6 +16,7 @@ const tests = [
   'test-v10.40-mobile-first.js',
   'test-v10.41-youtube-pipeline.js',
   'test-v10.42-nav-search-yt.js',
+  'test-v10.43-link-newtab-agent.js',
   'test-youtube.js'
 ].filter((f) => fs.existsSync(path.join(__dirname, f)));
 let failed = 0;
