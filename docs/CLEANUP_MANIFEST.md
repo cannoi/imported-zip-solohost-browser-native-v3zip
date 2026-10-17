@@ -1,83 +1,34 @@
-# CLEANUP MANIFEST v10.35.0
+# CLEANUP MANIFEST — SoloHost Browser v10.45.0
 
-## Blocking fixes
-- Removed `COPY native ./native` from Dockerfile (native/ deleted in 10.34)
-- Removed SOLOHOST_WEBKIT* ENV from Dockerfile/start/compose
-
-## Tier A deleted
-| Item | Evidence | Bytes |
+## Removed
+| Path | Reason | Evidence |
 |---|---|---|
-| public/made-by.png | no references | ~99 KB |
-| lib/ai-agent.js | no runtime require | ~12 KB |
-| lib/engine/content-router.js | inlined mustUseEngine into dom-bridge | ~3 KB |
-| duplicate case press_key | second case unreachable | ~7 lines |
-| webkit-manager | reduced to disabled stub | kept API |
+| lib/ai-compat.js + route + test | Log-only LLM finding | No browse behavior |
+| lib/agent-tools.js, agent-research-tools.js | 2-line facades | require → agent-web |
+| lib/agent-tools-impl.js, agent-research-impl.js | Merged into agent-web.js | Single module body |
+| public helpers modeLabel / isLocalSoloHostUrl / navigateProxyFallback | Never called | grep |
+| frame-proxy trackRepeat / detectBlockedPage | Dead | grep |
+| playwright withPage / __getSessionPage | Export-only | grep |
+| docs/V10.*.REPORT (19 files) | Historical; kept V10.45.0 + ARCHITECTURE + MANIFEST | |
 
-## Tier B started
-| Item | Status |
+## Replaced / slimmed
+| Change | Notes |
 |---|---|
-| lib/net-guard.js | NEW — assertPublicHttpUrl + isPrivateIp |
-| lib/util.js | NEW — clip, sleep, escapeHtml |
-| backend assertSafeUrl | delegates to net-guard |
-| frame-proxy | re-exports net-guard |
+| lib/agent-web.js | Full tools+research body |
+| lib/agent-actions.js | executeAction extracted (~470 lines out of backend-agent) |
+| lib/challenge.js | Shared blocked-page detector |
+| lib/config.js | ≤20 documented env knobs |
+| geoip | Opt-in SOLOHOST_GEO_LOOKUP=1 |
+| idle_sweep | Log only when closed>0 |
+| agent-report.groundSummary | Less false ⚠; strip HTML leakage |
+| server-app engine routes | deprecateRoute middleware (log+count) |
+| npm test | Core suite in test/ |
 
-## Not done (Tier C/D)
-- Live mode delete vs complete
-- Full frame-proxy shrink to 400 lines
-- Merge agent-tools + research-tools
-- TaskState single schema
-- Test suite consolidation
-- Image WebP compression
+## Deferred
+- Split navigateInternal / dispatchEvent / runTask further
+- Collapse remaining 57 root test-*.js files (still on disk; not in default npm test)
+- Tier C lazy-load of public/app.js + routes/* split
+- Full agent appendix §6 (multi-source parallel search quality) beyond report grounding
 
-## v10.36.0 completion
-
-### frame-proxy
-- Rewritten lean proxy: **311 lines** (was 1221)
-- Keeps: handleProxy, rewriteHtml, YouTube player shell, login external, asset redirect, net-guard SSRF
-- Stubs kept for removed Google/DDG helpers used by old tests
-
-### agent-web
-- `lib/agent-web.js` unifies research-tools + agent-tools exports
-- research-tools SSRF → net-guard
-
-### Live mode
-- **Removed** `lib/engine/live-stream.js`, `public/live-view.js`, index script tag, server require
-- Reason: incomplete (no client init); reduces WS attack surface
-
-### Planner + DAG
-- `lib/agent-planner.js`: rules plan for compare_products / news / generic
-- `TaskState` shape + `runDag` on agent-runner
-
-### Icons
-- ai-icon.png ~37KB → ~12KB; splash-logo.jpg ~21KB → ~11KB
-
-### Tests
-- `npm test` → `test-core.js` (~10 focused files)
-- `npm run test:all` keeps historical chain
-
-## v10.37.0
-
-### agent-web single entry
-- Implementations: `agent-tools-impl.js`, `agent-research-impl.js`
-- Public API: `agent-web.js`
-- Shims: `agent-tools.js`, `agent-research-tools.js` → re-export agent-web
-- backend-agent uses only `agent-web`
-
-### TaskState
-- `ensureTaskState` / `syncTaskState` in backend-agent
-- Called at `start` and `runTask`
-- workMemory retained as compatibility view; taskState is canonical bag for plan/status/sources
-
-### Planner
-- `planWithLLM(ai, brief, lang)` — one LLM JSON plan when not compare/news/chat
-- `start()` uses `agentPlanner.planFromRules` for initial plan/jobs
-
-### Tests
-- `npm test` = test-core.js
-- `npm run test:all` = core + security + bridge + youtube + backend-agent + agent-v1026 + evidence
-
-## v10.39.0
-- Added: lib/adapters/youtube.js, lib/render-error.js, public/layout-guard.js
-- frame-proxy YouTube special path restored via adapter
-- Chromium lighter route + debounced persist
-- Partial: full Tier A HTTP router and AI search deferred
+## NOT TESTED ON SOLOHOST
+Docker image build, live Chromium, real Google login, network AI keys.

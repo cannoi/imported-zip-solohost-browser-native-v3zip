@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const search = require('./lib/agent-search');
 const ba = require('./lib/backend-agent');
-const research = require('./lib/agent-research-impl');
+const research = require('./lib/agent-web');
 
 // --- safeFetch headers (behavioral with mock fetch) ---
 {
@@ -93,7 +93,7 @@ const research = require('./lib/agent-research-impl');
 
   // slice top ranks in summarizeWorkMemory
   const src = fs.readFileSync(path.join(__dirname, 'lib/backend-agent.js'), 'utf8');
-  assert.ok(src.includes('searchCandidates.slice(0, 8)') || require('fs').readFileSync('lib/agent-research-impl.js','utf8').includes('searchCandidates.slice(0, 8)'), 'top ranks not tail');
+  assert.ok(src.includes('searchCandidates.slice(0, 8)') || require('fs').readFileSync('lib/agent-web.js','utf8').includes('searchCandidates.slice(0, 8)'), 'top ranks not tail');
 
   console.log('[PASS] v10.44 agent search observe behavioral');
 })().catch((e) => { console.error(e); process.exit(1); });

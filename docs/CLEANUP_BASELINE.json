@@ -1,0 +1,23 @@
+{
+  "files": 149,
+  "total_kb": 1073.6,
+  "lib_js_count": 42,
+  "lib_js_kb": 479.1,
+  "public_kb": 311.2,
+  "test_count": 59,
+  "test_kb": 154.9,
+  "docs_count": 21,
+  "docs_kb": 63.8,
+  "by_ext": {
+    ".js": 110,
+    "": 2,
+    ".sh": 1,
+    ".yml": 5,
+    ".md": 21,
+    ".json": 2,
+    ".png": 1,
+    ".css": 2,
+    ".html": 4,
+    ".jpg": 1
+  }
+}

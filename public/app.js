@@ -136,21 +136,6 @@
   }
 
 
-  function modeLabel(mode, lang) {
-    const vi = {
-      ENGINE: 'Engine/Bridge',
-      PROXY: 'Proxy HTML',
-      DIRECT: 'Direct iframe',
-      EXTERNAL: 'Mở ngoài (↗)'
-    };
-    const en = {
-      ENGINE: 'Engine/Bridge',
-      PROXY: 'HTML proxy',
-      DIRECT: 'Direct iframe',
-      EXTERNAL: 'Open externally (↗)'
-    };
-    return (lang === 'vi' ? vi : en)[mode] || mode;
-  }
 
   function ensureTabNav(tab) {
     if (!tab) return null;
@@ -1066,18 +1051,10 @@ function loadViaExternal(url, reason, ownerTab) {
             }
           }
           if (firstAudit && (audit.textLength < 120 || dataLoss || (audit.forms > 0 && audit.controls === 0))) {
-            fetch('/api/browser/ai-compat', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                url: state.url, mode: nav.mode || 'ENGINE', reason: 'empty_content', lang: state.lang,
-                textSnippet: 'Bridge source/render metrics only: ' + JSON.stringify({ source: sourceAudit, rendered: audit, suspectedLoss: lost }), structureHtml: ''
-              })
-            }).then(r => r.json()).then(j => {
-              clientLog('warn', 'bridge_ai_compat_finding', {
-                url: state.url,
-                detail: JSON.stringify({ category: j.category, confidence: j.confidence, recommendedMode: j.recommendedMode, summary: j.summary, suggestions: j.suggestions, source: j.source, suspectedLoss: lost })
-              });
-            }).catch(() => {});
+            clientLog('warn', 'bridge_thin_content', {
+              url: state.url,
+              detail: JSON.stringify({ source: sourceAudit, rendered: audit, suspectedLoss: lost })
+            });
           }
         }
         doc.addEventListener('click', (e) => {
@@ -1333,33 +1310,10 @@ function loadViaExternal(url, reason, ownerTab) {
     aiBtn.type = 'button';
     aiBtn.textContent = state.lang === 'vi' ? 'AI gợi ý' : 'Ask AI';
     aiBtn.style.marginLeft = '8px';
-    aiBtn.addEventListener('click', async () => {
-      aiBtn.disabled = true;
-      aiBtn.textContent = '…';
-      try {
-        const tab = getActiveTab();
-        const nav = ensureTabNav(tab);
-        const r = await fetch('/api/browser/ai-compat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            url: state.url || '',
-            mode: (nav && nav.mode) || '',
-            reason: (nav && nav.reason) || msg,
-            lang: state.lang,
-            textSnippet: msg,
-            structureHtml: ''
-          })
-        });
-        const j = await r.json();
-        const lines = [j.summary || ''].concat(j.suggestions || []).filter(Boolean);
-        span.textContent = lines.join(' · ').slice(0, 400);
-        if (j.recommendedMode === 'EXTERNAL' && btnOpen && state.url) btnOpen.href = state.url;
-      } catch (_) {
-        span.textContent = (state.lang === 'vi' ? 'AI không khả dụng — dùng ↗ hoặc Reload.' : 'AI unavailable — use ↗ or Reload.');
-      }
-      aiBtn.disabled = false;
-      aiBtn.textContent = state.lang === 'vi' ? 'AI gợi ý' : 'Ask AI';
+    aiBtn.addEventListener('click', () => {
+      span.textContent = (state.lang === 'vi'
+        ? 'Dùng ↗ Open, Reload hoặc Login desktop (🖥️). Không gửi mật khẩu cho AI.'
+        : 'Use ↗ Open, Reload, or Login desktop (🖥️). Never send passwords to AI.');
     });
     el.append(span, a, aiBtn, x);
     el.hidden = false;
@@ -1668,13 +1622,6 @@ function loadViaExternal(url, reason, ownerTab) {
   }
 
 
-  function isLocalSoloHostUrl(url) {
-    try {
-      const u = new URL(url);
-      const h = u.hostname.toLowerCase();
-      return h === '127.0.0.1' || h === 'localhost' || h === '::1';
-    } catch { return false; }
-  }
 
   async function navigate(raw, opts) {
     // mark: loopback SoloHost apps use same-origin proxy (runs on Pi host)
@@ -1790,10 +1737,6 @@ function loadViaExternal(url, reason, ownerTab) {
     });
   }
 
-  function navigateProxyFallback(raw) {
-    // retained for any legacy callers
-    navigate(raw, { mode: MODE.PROXY });
-  }
 
   // Legacy proxy/Bridge navigation message contract.
   window.addEventListener('message', (ev) => {

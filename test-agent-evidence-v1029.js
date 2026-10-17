@@ -5,9 +5,9 @@ const fs = require('fs');
 const agent = require('./lib/browser-agent');
 const evidence = require('./lib/agent-evidence');
 const report = require('./lib/agent-report');
-const research = require('./lib/agent-research-tools');
+const research = require('./lib/agent-web');
 const newsDigest = require('./lib/agent-playbooks/news_digest');
-const agentTools = require('./lib/agent-tools');
+const agentTools = require('./lib/agent-web');
 
 // 1. sanitizeHistory keeps step/thought/params
 {

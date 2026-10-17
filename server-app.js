@@ -65,6 +65,22 @@ try {
   try { playwrightEngine.installShutdownHooks(); } catch (_) {}
 } catch (e) { console.error('[warn] playwright-engine:', e && e.message); }
 
+
+const _deprecatedHits = new Map();
+function deprecateRoute(name) {
+  return function(req, res, next) {
+    try {
+      const n = (_deprecatedHits.get(name) || 0) + 1;
+      _deprecatedHits.set(name, n);
+      if (n === 1 || n % 50 === 0) {
+        console.warn('[deprecated] ' + name + ' hit=' + n + ' — will be removed in a future release; use /api/browser/sessions*');
+      }
+      try { appLog.log('warn', 'api.deprecated', { route: name, hits: n }); } catch (_) {}
+    } catch (_) {}
+    next();
+  };
+}
+
 const agentProgress = softRequire('agent-progress', './lib/agent-progress', {
   list() { return []; },
   bus: { on() {}, off() {}, emit() {} }
@@ -82,10 +98,6 @@ if (!domBridge) {
     getState: async () => ({ url: '', title: '' })
   };
 }
-
-let aiCompat = softRequire('ai-compat', './lib/ai-compat', {
-  analyze: async () => ({ summary: 'offline', category: 'unknown', suggestions: [], recommendedMode: 'UNCHANGED', confidence: 0 })
-});
 
 try { installShutdownHooks(); } catch (_) {}
 try { appLog.configure(DATA_DIR); } catch (_) {}
@@ -302,7 +314,7 @@ app.get('/api/browser/go', (req, res) => {
 });
 
 
-app.get('/api/browser/diagnose', (_req, res) => {
+app.get('/api/browser/diagnose', deprecateRoute('GET /api/browser/diagnose'), (_req, res) => {
   try {
     const appLog = require('./lib/app-log');
     const { analyzeLogs } = require('./lib/app-adapter');
@@ -326,7 +338,7 @@ function requireEngineEnabled(req, res, next) {
   next();
 }
 
-app.get('/api/engine/status', async (_req, res) => {
+app.get('/api/engine/status', deprecateRoute('GET /api/engine/status'), async (_req, res) => {
   try {
     const base = engineCaps.detect();
     const wk = await webkitManager.status();
@@ -344,7 +356,7 @@ app.get('/api/engine/status', async (_req, res) => {
   }
 });
 
-app.post('/api/engine/session', requireEngineEnabled, async (req, res) => {
+app.post('/api/engine/session', deprecateRoute('POST /api/engine/session'), requireEngineEnabled, async (req, res) => {
   try {
     const out = await webkitManager.createSession();
     res.json({ ok: true, ...out });
@@ -353,13 +365,13 @@ app.post('/api/engine/session', requireEngineEnabled, async (req, res) => {
   }
 });
 
-app.post('/api/engine/session/:id/navigate', requireEngineEnabled, async (req, res) => {
+app.post('/api/engine/session/:id/navigate', deprecateRoute('POST /api/engine/session/:id/navigate'), requireEngineEnabled, async (req, res) => {
   try {
     const url = String((req.body && req.body.url) || req.query.url || '').trim();
     if (!url) return res.status(400).json({ ok: false, error: 'url required' });
     // SSRF guard: reuse proxy assert when possible
     try {
-      const { assertPublicHttpUrl } = require('./lib/frame-proxy');
+      const { assertPublicHttpUrl } = require('./lib/net-guard');
       if (url !== 'about:blank') await assertPublicHttpUrl(url);
     } catch (se) {
       return res.status(403).json({ ok: false, error: se.message || 'blocked', code: se.code });
@@ -371,7 +383,7 @@ app.post('/api/engine/session/:id/navigate', requireEngineEnabled, async (req, r
   }
 });
 
-app.get('/api/engine/session/:id', requireEngineEnabled, async (req, res) => {
+app.get('/api/engine/session/:id', deprecateRoute('GET /api/engine/session/:id'), requireEngineEnabled, async (req, res) => {
   try {
     const out = await webkitManager.getState(req.params.id);
     res.json({ ok: true, ...out });
@@ -380,7 +392,7 @@ app.get('/api/engine/session/:id', requireEngineEnabled, async (req, res) => {
   }
 });
 
-app.delete('/api/engine/session/:id', requireEngineEnabled, async (req, res) => {
+app.delete('/api/engine/session/:id', deprecateRoute('DELETE /api/engine/session/:id'), requireEngineEnabled, async (req, res) => {
   try {
     const out = await webkitManager.closeSession(req.params.id);
     res.json({ ok: true, ...out });
@@ -389,7 +401,7 @@ app.delete('/api/engine/session/:id', requireEngineEnabled, async (req, res) => 
   }
 });
 
-app.post('/api/browser/engine/release', async (req, res) => {
+app.post('/api/browser/engine/release', deprecateRoute('POST /api/browser/engine/release'), async (req, res) => {
   try {
     const pw = require('./lib/engine/playwright-engine');
     if (typeof pw.sweepIdleSessions === 'function') await pw.sweepIdleSessions(true);
@@ -579,29 +591,12 @@ try {
   });
   app.delete('/api/logs', (_req, res) => { try { appLog.clearLogs && appLog.clearLogs(); } catch (_) {} res.json({ ok: true }); });
 }
-app.get('/api/agent/progress', (req, res) => {
+app.get('/api/agent/progress', deprecateRoute('GET /api/agent/progress'), (req, res) => {
   res.json({ ok: true, events: agentProgress.list(Number(req.query.limit) || 40) });
 });
 
 
 // Optional AI compatibility assist (never required for browsing)
-app.post('/api/browser/ai-compat', async (req, res) => {
-  try {
-    const body = req.body || {};
-    const out = await aiCompat.analyze(ai, body);
-    res.json({ ok: true, ...out });
-  } catch (e) {
-    res.status(200).json({
-      ok: true,
-      summary: 'AI assist unavailable',
-      category: 'unknown',
-      suggestions: ['Try Reload or Open ↗'],
-      recommendedMode: 'UNCHANGED',
-      confidence: 0,
-      source: 'error_fallback'
-    });
-  }
-});
 
 
 // Browser Agent planner: observation + task -> next validated action (executed by public/browser-agent.js)
@@ -778,7 +773,7 @@ app.post('/api/browser/sessions/:id/navigate', async (req, res) => {
       }
     } catch (_) { /* normal URL validation below returns the precise error */ }
     try {
-      const { assertPublicHttpUrl } = require('./lib/frame-proxy');
+      const { assertPublicHttpUrl } = require('./lib/net-guard');
       if (!url.startsWith('about:')) await assertPublicHttpUrl(url);
     } catch (se) {
       return res.status(403).json({ ok: false, error: se.message || 'blocked', code: se.code });
@@ -891,7 +886,7 @@ app.post('/api/browser/sessions/:id/persist', async (req, res) => {
     res.status(400).json({ ok: false, error: String(e.message || e).slice(0, 160) });
   }
 });
-app.get('/api/browser/profiles', (req, res) => {
+app.get('/api/browser/profiles', deprecateRoute('GET /api/browser/profiles'), (req, res) => {
   try {
     const profiles = playwrightEngine.listPersistedProfiles ? playwrightEngine.listPersistedProfiles() : [];
     res.json({ ok: true, profiles });
@@ -899,7 +894,7 @@ app.get('/api/browser/profiles', (req, res) => {
     res.status(500).json({ ok: false, error: String(e.message || e).slice(0, 120) });
   }
 });
-app.delete('/api/browser/profiles/:key', (req, res) => {
+app.delete('/api/browser/profiles/:key', deprecateRoute('DELETE /api/browser/profiles/:key'), (req, res) => {
   try {
     const out = playwrightEngine.clearPersistedProfile
       ? playwrightEngine.clearPersistedProfile(req.params.key)
@@ -1067,7 +1062,7 @@ try {
 }
 
 // Legacy parse stub
-app.get('/api/browser/parse', (req, res) => {
+app.get('/api/browser/parse', deprecateRoute('GET /api/browser/parse'), (req, res) => {
   const url = String((req.query && req.query.url) || '').trim();
   res.json({
     success: true,
