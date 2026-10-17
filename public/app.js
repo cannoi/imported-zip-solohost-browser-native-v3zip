@@ -14,7 +14,7 @@
     url: '',
     lang: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_lang')) || 'en',
     theme: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_theme')) || 'rainbow',
-    searchEngine: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_engine')) || 'bing',
+    searchEngine: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_engine')) || 'google',
     customSearchUrl: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_custom_url')) || '',
     timeZone: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_timezone')) || Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC',
     localeReady: false,
@@ -195,6 +195,7 @@
     const tab = getActiveTab();
     const nav = ensureTabNav(tab);
     if (!nav || !nav.stack.length) {
+      // No history → Home once
       showStart();
       state.url = '';
       if (input) input.value = '';
@@ -210,7 +211,8 @@
       syncNavButtons();
       return;
     }
-    // First entry in stack → return to Home without wiping history (Forward can restore)
+    // index === 0: stay on first page (standard browser). Only Home via explicit Home button.
+    // Allow one more Back from first entry to Home without wiping stack (Forward restores).
     if (nav.index === 0) {
       nav.index = -1;
       clientLog('info', 'nav.back_home', { stack: nav.stack.length });
@@ -221,8 +223,7 @@
       syncNavButtons();
       return;
     }
-    // index already -1
-    showStart();
+    // already at home (index -1)
     syncNavButtons();
   }
 
@@ -799,8 +800,15 @@
           await applyBridgeView(b, { bust: true });
           if (ev.type === 'click' || ev.type === 'submit') setTimeout(() => { try { refreshActiveTabThumb(); } catch (_) {} }, 600);
         }
-        if (j.url && state.activeTabId === tabId) applyUrlToUi(j.url, j.title);
-        else if (tab && j.url) tab.url = j.url;
+        if (j.url) {
+          const prev = normalizeNavUrl((tab && tab.url) || state.url || '');
+          const next = normalizeNavUrl(j.url);
+          if (next && next !== prev && (ev.type === 'click' || ev.type === 'submit' || ev.type === 'navigate')) {
+            pushNav(tab, next);
+          }
+          if (state.activeTabId === tabId) applyUrlToUi(j.url, j.title);
+          else if (tab) tab.url = j.url;
+        }
       }
       return j;
     } catch (_) { return null; }
@@ -1190,17 +1198,18 @@
 
   function buildSearchUrl(query) {
     const encoded = encodeURIComponent(String(query || '').trim());
-    const engine = String(state.searchEngine || 'bing').toLowerCase();
-    if (engine === 'bing') return 'https://www.bing.com/search?q=' + encoded;
+    const engine = String(state.searchEngine || 'google').toLowerCase();
     if (engine === 'google') return 'https://www.google.com/search?q=' + encoded;
     if (engine === 'duckduckgo') return 'https://html.duckduckgo.com/html/?q=' + encoded;
+    if (engine === 'bing') return 'https://www.bing.com/search?q=' + encoded;
     if (engine === 'brave') return 'https://search.brave.com/search?q=' + encoded;
     if (engine === 'custom') {
       const template = String(state.customSearchUrl || '').trim();
       if (/^https?:\/\//i.test(template) && /(?:\{query\}|%s)/i.test(template))
         return template.replace(/\{query\}/gi, encoded).replace(/%s/gi, encoded);
     }
-    return 'https://www.bing.com/search?q=' + encoded;
+    // Default + soft fallback chain preference: Google → DuckDuckGo
+    return 'https://www.google.com/search?q=' + encoded;
   }
 
   function normalizeUrl(raw) {
@@ -1542,11 +1551,11 @@
       if (safeUrl && !isInternalBridgeViewUrl(safeUrl)) applyUrlToUi(safeUrl);
       return;
     }
-    // Keep explicit URLs untouched; bare search text uses Bing as the default engine.
+    // Keep explicit URLs untouched; bare search text uses Google (fallback DuckDuckGo/Bing in settings).
     url = toPlayableUrl(url);
 
     const now = Date.now();
-    if (!opts.force && state.url === url && now - (state.lastNavAt || 0) < 4000) {
+    if (!opts.force && state.url === url && now - (state.lastNavAt || 0) < 600) {
       clientLog('warn', 'navigate_deduped', { url: url });
       return;
     }
@@ -1651,8 +1660,18 @@
   window.addEventListener('message', (ev) => {
     try {
       const d = ev && ev.data;
-      if (!d || d.type !== 'solohost-navigate' || !d.url || !frame || ev.source !== frame.contentWindow) return;
-      navigate(d.url);
+      if (!d || d.type !== 'solohost-navigate' || !d.url || !frame) return;
+      // Accept messages from our frame (source may be null on some WebViews)
+      if (ev.source && frame.contentWindow && ev.source !== frame.contentWindow) return;
+      let next = String(d.url || '').trim();
+      // Decode accidental nested proxy links
+      try {
+        const u = new URL(next, location.href);
+        if (u.pathname.indexOf('/api/proxy') === 0 && u.searchParams.get('url')) next = u.searchParams.get('url');
+      } catch (_) {}
+      if (!next) return;
+      // force: skip 4s dedupe so successive link clicks are responsive
+      navigate(next, { force: true });
     } catch (_) {}
   });
 

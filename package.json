@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.41.0",
-  "description": "SoloHost Browser \u2014 YouTube search fixed (redirect+gzip+mobile ytInitialData), never empty",
+  "version": "10.42.0",
+  "description": "SoloHost Browser \u2014 Google default search, YT player fix, fast link nav + Back history",
   "main": "server.js",
   "engines": {
     "node": ">=18"
