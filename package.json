@@ -1,7 +1,7 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.45.2",
-  "description": "SoloHost Browser \u2014 Vietnamese IME/chat encoding fix",
+  "version": "10.45.3",
+  "description": "SoloHost Browser \u2014 AI Panel knowledge sync + Universal module modes restore",
   "main": "server.js",
   "engines": {
     "node": ">=18"

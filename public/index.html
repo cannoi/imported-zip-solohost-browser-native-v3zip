@@ -223,10 +223,12 @@
         <div class="tab-pane active" id="pane-chat">
           <div class="chat-log" id="chatLog"></div>
           <p class="agent-hint" id="agentHint" hidden></p>
+          <div class="chat-log" id="aiChat" hidden aria-hidden="true"></div>
           <form class="chat-form" id="chatForm">
             <input type="text" id="chatInput" class="chat-input" placeholder="Ask anything or tell me what to do…" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="true" lang="vi" inputmode="text" enterkeyhint="send" maxlength="12000" aria-label="Chat message">
             <button type="submit" id="chatSend">Send</button>
           </form>
+          <div class="ai-status-bar" id="aiStatusBar">AI: …</div>
         </div>
         <div class="tab-pane" id="pane-feedback" hidden>
           <div class="fb-body" style="padding:10px;overflow:auto;flex:1;min-height:0">
@@ -238,9 +240,17 @@
               <option value="question">Question</option>
               <option value="praise">Praise</option>
             </select>
+            <label style="display:block;font-size:12px;opacity:.75">Rating</label>
+            <div class="fb-stars" id="fbStars" style="display:flex;gap:4px;margin:4px 0 10px">
+              <button type="button" data-r="1" aria-label="1 star">★</button>
+              <button type="button" data-r="2" aria-label="2 stars">★</button>
+              <button type="button" data-r="3" aria-label="3 stars">★</button>
+              <button type="button" data-r="4" aria-label="4 stars">★</button>
+              <button type="button" data-r="5" aria-label="5 stars">★</button>
+            </div>
             <label style="display:block;font-size:12px;opacity:.75">Message</label>
             <textarea id="fbMessage" rows="4" style="width:100%;margin:4px 0 8px;padding:8px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445;resize:vertical"></textarea>
-            <button type="button" id="fbSend" style="min-height:40px;padding:0 16px;border-radius:10px;border:0;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer">Send feedback</button>
+            <button type="button" id="fbSubmit" class="fb-submit" style="min-height:40px;padding:0 16px;border-radius:10px;border:0;background:#3b82f6;color:#fff;font-weight:600;cursor:pointer">Send feedback</button>
             <p id="fbStatus" style="font-size:13px;opacity:.85;margin-top:8px"></p>
             <div id="fbDonate" class="fb-donate" hidden></div>
             <div id="fbNotices" class="fb-notes"></div>
@@ -260,7 +270,10 @@
             <label style="display:block;font-size:12px;opacity:.75">Mode</label>
             <select id="setMode" style="width:100%;min-height:40px;margin:4px 0 8px;padding:8px;border-radius:8px;background:#120f22;color:#fff;border:1px solid #445">
               <option value="cloud_enabled">Cloud enabled</option>
+              <option value="prefer_local">Prefer local</option>
               <option value="local_only">Local only</option>
+              <option value="balanced">Balanced</option>
+              <option value="custom">Custom</option>
             </select>
             <div class="settings-field agent-time-field" style="display:block;margin:12px 0 8px;clear:both">
               <label for="agent-time-limit" style="display:block;font-size:12px;opacity:.75;margin:0 0 4px">Agent time limit (minutes)</label>
@@ -284,10 +297,10 @@
   </div>
 
   <script src="/ai-module/ai-module.js"></script>
-  <script src="/feedback-module/feedback-module.js" defer></script>
-  <script src="/reader-injector.js" defer></script>
-  <script src="/browser-agent.js" defer></script>
+  <script src="/feedback-module/feedback-module.js"></script>
+  <script src="/browser-agent.js"></script>
   <script src="/ai-panel.js"></script>
+  <script src="/reader-injector.js" defer></script>
     <script src="/layout-guard.js"></script>
     <script src="/app.js"></script>
 

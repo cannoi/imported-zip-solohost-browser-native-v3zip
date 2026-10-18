@@ -1193,3 +1193,23 @@ loadAIMemory().catch(() => {});
     if (input) input.setAttribute('lang', vi ? 'vi' : (document.documentElement.lang || 'en'));
   } catch (_) {}
 })();
+
+
+/* Feedback star rating (Universal module parity) */
+(function bindFbStars() {
+  let rating = 0;
+  const box = document.getElementById('fbStars');
+  if (!box || box.dataset.bound === '1') return;
+  box.dataset.bound = '1';
+  box.querySelectorAll('button[data-r]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      rating = Number(btn.getAttribute('data-r')) || 0;
+      box.querySelectorAll('button[data-r]').forEach((b) => {
+        const on = Number(b.getAttribute('data-r')) <= rating;
+        b.style.color = on ? '#fbbf24' : '#6b7280';
+      });
+      box.dataset.rating = String(rating);
+    });
+  });
+  window.__soloFbRating = () => Number(box.dataset.rating || 0);
+})();
