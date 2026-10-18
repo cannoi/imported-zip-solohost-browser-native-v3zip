@@ -53,7 +53,7 @@ html, body {
   overflow: hidden;
   background: var(--chrome-bg);
   color: var(--chrome-fg);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Noto Sans Vietnamese", "Helvetica Neue", Arial, sans-serif;
   -webkit-text-size-adjust: 100%;
   -webkit-font-smoothing: antialiased;
 }
@@ -844,7 +844,15 @@ button:disabled { opacity:.35; cursor:not-allowed; }
 #panel-playlists .playlist-track .label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #panel-playlists .playlist-track.is-current { background: color-mix(in srgb, var(--accent, #66e3ff) 15%, transparent); border-radius: 8px; }
 #panel-playlists .active-playlist { color: var(--accent, #66e3ff); }
-#chatInput { min-width: 0; }
+#chatInput, .chat-input {
+  min-width: 0;
+  font-family: inherit;
+  font-size: 16px; /* Android: avoid auto-zoom + IME glitches under 16px */
+  line-height: 1.35;
+  unicode-bidi: plaintext;
+  text-rendering: optimizeLegibility;
+}
+#chatInput::placeholder { opacity: 0.55; }
 
 /* Background music — stays visible while browsing other pages */
 .bg-music-dock {

@@ -8,6 +8,22 @@
   const S = { running: false, stop: false, taskId: null, bridge: null, pollAbort: false, pendingAnswer: null };
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
   const browser = () => window.SoloBrowser || {};
+  function resolveLang(taskText) {
+    try {
+      const st = browser().state || {};
+      if (st.lang === 'vi') return 'vi';
+      if (document.documentElement.lang === 'vi') return 'vi';
+      const nav = String(navigator.language || '').toLowerCase();
+      if (nav.startsWith('vi')) return 'vi';
+      if (/[ăâêôơưđĂÂÊÔƠƯĐáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/.test(String(taskText || ''))) return 'vi';
+    } catch (_) {}
+    return 'en';
+  }
+  function normalizeTaskText(s) {
+    let t = String(s == null ? '' : s);
+    try { t = t.normalize('NFC'); } catch (_) {}
+    return t.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g, '').trim();
+  }
   async function api(url, options = {}) {
     const headers = Object.assign({ 'Content-Type': 'application/json' }, options.headers || {});
     if (S.bridge && S.bridge.token) headers['X-Session-Token'] = S.bridge.token;
@@ -17,13 +33,15 @@
     return data;
   }
   async function run(task, hooks, opts) {
+    task = normalizeTaskText(task);
+    const lang = resolveLang(task);
     if (S.running) return { status: 'error', message: 'Agent already running', history: [] };
     hooks = Object.assign({ onStatus() {}, onStep() {}, onConfirm(_text, answer) { answer(false); } }, hooks || {});
     opts = opts || {};
     let bridge = browser().getActiveBridge && browser().getActiveBridge();
     if (!bridge || !bridge.sessionId || !bridge.token) {
       try {
-        hooks.onStatus((browser().state && browser().state.lang) === 'vi' ? 'Đang tạo phiên backend riêng cho Agent…' : 'Creating a dedicated backend session for the Agent…');
+        hooks.onStatus(lang === 'vi' ? 'Đang tạo phiên backend riêng cho Agent…' : 'Creating a dedicated backend session for the Agent…');
         if (browser().ensureBridgeSession) bridge = await browser().ensureBridgeSession();
         if (!bridge || !bridge.sessionId || !bridge.token) {
           await sleep(250);
@@ -34,7 +52,7 @@
     }
     if (!bridge || !bridge.sessionId || !bridge.token) {
       const detail = S.sessionError ? ' (' + S.sessionError + ')' : '';
-      const vi = (browser().state && browser().state.lang) === 'vi';
+      const vi = lang === 'vi';
       return { status: 'error', message: (vi ? 'Không tạo được phiên backend cho Agent. Hãy thử lại; nếu lỗi tiếp diễn, kiểm tra trạng thái Playwright/Chromium.' : 'Could not create a backend session for the Agent. Please retry; if it persists, check Playwright/Chromium status.') + detail, history: [] };
     }
     S.running = true; S.stop = false; S.pollAbort = false; S.bridge = bridge; S.taskId = null;
@@ -51,7 +69,7 @@
         ? await api('/api/browser/agent/sessions/' + encodeURIComponent(bridge.sessionId) + '/tasks/' + encodeURIComponent(opts.resumeTaskId) + '/answer', { method: 'POST', body: JSON.stringify({ token: bridge.token, text: opts.clarification }) })
         : opts.resumeTaskId
           ? await api('/api/browser/agent/sessions/' + encodeURIComponent(bridge.sessionId) + '/tasks/' + encodeURIComponent(opts.resumeTaskId) + '/continue', { method: 'POST', body: JSON.stringify({ token: bridge.token }) })
-          : await api('/api/browser/agent/tasks', { method: 'POST', body: JSON.stringify({ sessionId: bridge.sessionId, token: bridge.token, task, lang: (browser().state && browser().state.lang) || 'en', history: [], maxSteps: opts.maxSteps || 200, maxMs: opts.maxMs || (Number(localStorage.getItem('solo_agent_time_min')||60)*60000) }) });
+          : await api('/api/browser/agent/tasks', { method: 'POST', body: JSON.stringify({ sessionId: bridge.sessionId, token: bridge.token, task, lang: lang, history: [], maxSteps: opts.maxSteps || 200, maxMs: opts.maxMs || (Number(localStorage.getItem('solo_agent_time_min')||60)*60000) }) });
       S.taskId = started.taskId;
       while (!S.pollAbort && !S.stop) {
         const st = await api('/api/browser/agent/sessions/' + encodeURIComponent(bridge.sessionId) + '/tasks/' + encodeURIComponent(S.taskId) + '?after=' + cursor, { method: 'GET' });
@@ -60,7 +78,7 @@
           if (seen.has(ev.id)) continue; seen.add(ev.id);
           if (ev.type === 'status') {
             const msg = String(ev.message || '');
-            if (/^no_effect$/i.test(msg)) hooks.onStatus((browser().state && browser().state.lang === 'vi') ? ('Đang xử lý nền (bước ' + (ev.n || '') + ')…') : ('Working in background (step ' + (ev.n || '') + ')…'));
+            if (/^no_effect$/i.test(msg)) hooks.onStatus((browser().state && lang === 'vi') ? ('Đang xử lý nền (bước ' + (ev.n || '') + ')…') : ('Working in background (step ' + (ev.n || '') + ')…'));
             else hooks.onStatus(msg || 'Backend đang xử lý…');
           }
           else if (ev.type === 'step') hooks.onStep({ n: ev.n, thought: ev.thought || '', action: ev.action || {}, text: describe(ev.action || {}, ev.url) });

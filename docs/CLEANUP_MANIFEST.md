@@ -32,3 +32,10 @@
 
 ## NOT TESTED ON SOLOHOST
 Docker image build, live Chromium, real Google login, network AI keys.
+
+## 10.45.1 additions
+- test/archive/: 29 source-style tests
+- app-adapter buildKnowledge ~700 chars
+- agent-retail-parallel.js
+- isBingVerification → challenge.js
+- browser-agent evidence-before-deny rule

@@ -1,14 +1,14 @@
 {
   "name": "solohost-browser-hub",
-  "version": "10.45.0",
-  "description": "SoloHost Browser \u2014 cleanup wave 3 (leaner core, challenge detector, geo opt-in)",
+  "version": "10.45.2",
+  "description": "SoloHost Browser \u2014 Vietnamese IME/chat encoding fix",
   "main": "server.js",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "start": "node server.js",
-    "test": "node test/security.js && node test/agent-web.js && node test/challenge.js && node test/agent-actions.js && node test/agent-report.js && node test/config.js && node test-v10.37-unify.js && node test-v10.44.5-geo-storage.js",
+    "test": "node test/security.js && node test/agent-web.js && node test/challenge.js && node test/agent-actions.js && node test/agent-report.js && node test/config.js && node test-v10.44.5-geo-storage.js && node test/agent-unify.js && node test/vietnamese-input.js",
     "test:e2e": "node test-agent-e2e.js",
     "test:agent": "node test-agent-v1026.js",
     "test:all": "node test-core.js && node test-security.js && node test-bridge.js && node test-youtube.js && node test-backend-agent.js && node test-agent-v1026.js && node test-agent-evidence-v1029.js",

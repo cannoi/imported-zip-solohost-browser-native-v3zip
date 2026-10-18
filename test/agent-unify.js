@@ -1,0 +1,14 @@
+'use strict';
+const assert = require('assert');
+const web = require('../lib/agent-web');
+assert.strictEqual(typeof web.safeFetch, 'function');
+assert.strictEqual(typeof web.fetchDocumentText, 'function');
+assert.strictEqual(typeof web.extractArticleMeta, 'function');
+const planner = require('../lib/agent-planner');
+assert.strictEqual(typeof planner.planWithLLM, 'function');
+const plan = planner.planFromRules('Giá iPhone 18 nơi bán rẻ', 'vi');
+assert.ok(plan.jobs.length >= 3);
+const be = require('fs').readFileSync('lib/backend-agent.js', 'utf8');
+assert.ok(be.includes("require('./agent-web')"));
+assert.ok(be.includes('createExecuteAction') || be.includes('executeAction'));
+console.log('[PASS] agent-unify');

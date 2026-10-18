@@ -64,6 +64,18 @@ function ensureAgentTimeSetting() {
 function escapeHtml(s) {
   return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+/** NFC + strip bidi/control junk so Vietnamese diacritics stay intact through IME → fetch → AI. */
+function normalizeChatText(s) {
+  let t = String(s == null ? '' : s);
+  try { t = t.normalize('NFC'); } catch (_) {}
+  // Remove bidi marks and most C0 controls except tab/newline
+  t = t.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2060\uFEFF]/g, '');
+  return t.trim();
+}
+function looksVietnamese(s) {
+  return /[ăâêôơưđĂÂÊÔƠƯĐáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]/i.test(String(s || ''));
+}
+let _imeComposing = false;
 function flatten(src, prefix, out) {
   if (src == null) return;
   if (typeof src === 'string' || typeof src === 'number') {
@@ -462,9 +474,18 @@ async function modifyRecentTask(text) {
 }
 
 async function sendAI() {
-  const text = (aiInput.value || '').trim();
+  if (_imeComposing) return; // never commit mid-IME composition (Android VN keyboards)
+  const text = normalizeChatText(aiInput && aiInput.value);
   if (!text) return;
   aiInput.value = '';
+  // Keep app language aligned with the message the user actually typed
+  try {
+    if (looksVietnamese(text)) {
+      if (window.SoloBrowser && window.SoloBrowser.state) window.SoloBrowser.state.lang = 'vi';
+      document.documentElement.lang = 'vi';
+      try { localStorage.setItem('solo_lang', 'vi'); } catch (_) {}
+    }
+  } catch (_) {}
   appendMsg('user', escapeHtml(text));
   await loadAIMemory();
   const intent = memoryIntent(text);
@@ -562,7 +583,31 @@ async function sendAI() {
 document.getElementById('aiSend')?.addEventListener('click', sendAI);
 document.getElementById('chatSend')?.addEventListener('click', (e) => { e.preventDefault(); sendAI(); });
 document.getElementById('chatForm')?.addEventListener('submit', (e) => { e.preventDefault(); sendAI(); });
-document.getElementById('chatInput')?.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAI(); } });
+(function bindChatInputIme() {
+  const el = document.getElementById('chatInput') || document.getElementById('aiInput');
+  if (!el || el.dataset.imeBound === '1') return;
+  el.dataset.imeBound = '1';
+  el.addEventListener('compositionstart', () => { _imeComposing = true; });
+  el.addEventListener('compositionend', (e) => {
+    _imeComposing = false;
+    // Some Android IMEs leave decomposed marks — normalize in-place
+    try {
+      const v = normalizeChatText(el.value);
+      if (v !== el.value) {
+        const pos = el.selectionStart;
+        el.value = v;
+        try { el.setSelectionRange(pos, pos); } catch (_) {}
+      }
+    } catch (_) {}
+  });
+  el.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    // During IME composition Enter often means "confirm candidate", not "send"
+    if (_imeComposing || e.isComposing || e.keyCode === 229) return;
+    e.preventDefault();
+    sendAI();
+  });
+})();
 aiInput?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sendAI(); } });
 
 function fillModelSelect(models, current) {
@@ -801,7 +846,16 @@ document.getElementById('fbSend')?.addEventListener('click', async () => {
 // ---------------------------------------------------------------------------
 let agentCtx = null;
 try { agentCtx = JSON.parse(localStorage.getItem('solo_agent_context') || 'null'); } catch (_) { agentCtx = null; }
-function agentLang() { return ((window.SoloBrowser && window.SoloBrowser.state && window.SoloBrowser.state.lang) || 'en') === 'vi' ? 'vi' : 'en'; }
+function agentLang() {
+  try {
+    const st = window.SoloBrowser && window.SoloBrowser.state;
+    if (st && st.lang === 'vi') return 'vi';
+    if (document.documentElement.lang === 'vi') return 'vi';
+    const nav = String(navigator.language || navigator.userLanguage || '').toLowerCase();
+    if (nav.startsWith('vi')) return 'vi';
+  } catch (_) {}
+  return 'en';
+}
 
 function loadWorkMemory() {
   try { return JSON.parse(localStorage.getItem('solo_agent_work_memory') || 'null') || { taskId: null, task: '', status: '' }; }
@@ -1127,3 +1181,15 @@ function showContinueBar(show) {
 }
 
 loadAIMemory().catch(() => {});
+
+
+(function soloLangBootstrap() {
+  try {
+    const saved = localStorage.getItem('solo_lang');
+    const nav = String(navigator.language || '').toLowerCase();
+    const vi = saved === 'vi' || (!saved && nav.startsWith('vi'));
+    if (vi) document.documentElement.lang = 'vi';
+    const input = document.getElementById('chatInput');
+    if (input) input.setAttribute('lang', vi ? 'vi' : (document.documentElement.lang || 'en'));
+  } catch (_) {}
+})();

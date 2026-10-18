@@ -224,7 +224,7 @@
           <div class="chat-log" id="chatLog"></div>
           <p class="agent-hint" id="agentHint" hidden></p>
           <form class="chat-form" id="chatForm">
-            <input type="text" id="chatInput" placeholder="Ask anything or tell me what to do…" autocomplete="off" maxlength="12000">
+            <input type="text" id="chatInput" class="chat-input" placeholder="Ask anything or tell me what to do…" autocomplete="off" autocorrect="off" autocapitalize="sentences" spellcheck="true" lang="vi" inputmode="text" enterkeyhint="send" maxlength="12000" aria-label="Chat message">
             <button type="submit" id="chatSend">Send</button>
           </form>
         </div>
@@ -284,9 +284,9 @@
   </div>
 
   <script src="/ai-module/ai-module.js"></script>
-  <script src="/feedback-module/feedback-module.js"></script>
-  <script src="/reader-injector.js"></script>
-  <script src="/browser-agent.js"></script>
+  <script src="/feedback-module/feedback-module.js" defer></script>
+  <script src="/reader-injector.js" defer></script>
+  <script src="/browser-agent.js" defer></script>
   <script src="/ai-panel.js"></script>
     <script src="/layout-guard.js"></script>
     <script src="/app.js"></script>

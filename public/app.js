@@ -12,7 +12,15 @@
   const bridgeAuditSeen = new Set();
   const state = {
     url: '',
-    lang: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_lang')) || 'en',
+    lang: (function () {
+      try {
+        const saved = typeof localStorage !== 'undefined' && localStorage.getItem('solo_lang');
+        if (saved === 'vi' || saved === 'en') return saved;
+        const nav = String((typeof navigator !== 'undefined' && (navigator.language || navigator.userLanguage)) || '').toLowerCase();
+        if (nav.startsWith('vi')) return 'vi';
+      } catch (_) {}
+      return 'en';
+    })(),
     theme: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_theme')) || 'rainbow',
     searchEngine: (typeof localStorage !== 'undefined' && localStorage.getItem('solo_search_engine')) || 'google',
     linksNewTab: (typeof localStorage === 'undefined' || localStorage.getItem('solo_links_new_tab') !== '0'),
